@@ -52,11 +52,11 @@ import { DriveFailedError, DriveStalledError } from "../runtime-types";
 /** The options of the Promise engine's `run`. */
 export type PromiseRunOptions<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
-  E extends { type: string },
+  E extends { _tag: string },
 > = CtxArg<Ctx> &
   NoInfer<RunHandlers<M, C, U, Ctx>> &
   StoreAndOnError<S> & {
@@ -139,8 +139,8 @@ export type PromiseRunOptions<
  */
 export interface BootingRun<
   S,
-  M extends { type: string },
-  E extends { type: string } = never,
+  M extends { _tag: string },
+  E extends { _tag: string } = never,
 > extends BootingRuntime<S, M, E> {
   ready: Promise<Run<S, M, E>>;
 }
@@ -154,8 +154,8 @@ export interface BootingRun<
  */
 export interface Run<
   S,
-  M extends { type: string },
-  E extends { type: string } = never,
+  M extends { _tag: string },
+  E extends { _tag: string } = never,
 > extends Runtime<S, M, E>,
     Postable<S, M> {
   ready: Promise<Run<S, M, E>>;
@@ -187,11 +187,11 @@ export interface Run<
  */
 export function run<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
-  E extends { type: string } = never,
+  E extends { _tag: string } = never,
 >(
   machine: Machine<S, M, C, U, Ctx>,
   opts: PromiseRunOptions<S, M, C, U, Ctx, E>,
@@ -309,7 +309,7 @@ type DriveCancellation<S, M> =
 /** Options for `driveToDone`. */
 export type DriveToDoneOptions<
   S,
-  M extends { type: string } = never,
+  M extends { _tag: string } = never,
 > = DriveCancellation<S, M> & {
   /**
    * Marks a terminal State as a FAILURE. A State this holds for ends the drive
@@ -390,8 +390,8 @@ export type DriveToDoneOptions<
  */
 export async function driveToDone<
   S,
-  M extends { type: string },
-  E extends { type: string } = never,
+  M extends { _tag: string },
+  E extends { _tag: string } = never,
 >(
   handle: BootingRuntime<S, M, E>,
   start: M | ((booted: S) => M),

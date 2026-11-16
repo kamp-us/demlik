@@ -18,8 +18,8 @@ import {
 // === counter: pure folds, no effects ===
 
 type CounterMsg =
-  | { readonly type: "inc" }
-  | { readonly type: "add"; readonly by: number };
+  | { readonly _tag: "inc" }
+  | { readonly _tag: "add"; readonly by: number };
 
 const counter = defineMachine({
   types: { model: {} as { readonly n: number }, msg: {} as CounterMsg },
@@ -39,11 +39,11 @@ export const fetchUser = Cmd.define("fetch_user", {
 });
 
 /** A hand-written Cmd: its handler answers with a follow-up Msg. */
-export type AuditCmd = { readonly type: "audit"; readonly note: string };
+export type AuditCmd = { readonly _tag: "audit"; readonly note: string };
 
 type LookupMsg =
-  | { readonly type: "look"; readonly id: string }
-  | { readonly type: "audited"; readonly note: string }
+  | { readonly _tag: "look"; readonly id: string }
+  | { readonly _tag: "audited"; readonly note: string }
   | Settled<typeof fetchUser>;
 
 type LookupModel = {
@@ -63,7 +63,7 @@ const lookup = defineMachine({
   update: {
     look: (m, msg) => [
       m,
-      [fetchUser({ id: msg.id }), { type: "audit", note: `look ${msg.id}` }],
+      [fetchUser({ id: msg.id }), { _tag: "audit", note: `look ${msg.id}` }],
     ],
     audited: (m, msg) => [{ ...m, audits: [...m.audits, msg.note] }, []],
     fetch_user_ok: (m, msg) => [
@@ -97,9 +97,9 @@ export function lookupAnswer(
 export type FeedSub = Sub<"feed", { readonly count: number }>;
 
 type ClockMsg =
-  | { readonly type: "arm" }
-  | { readonly type: "rang" }
-  | { readonly type: "fed"; readonly i: number };
+  | { readonly _tag: "arm" }
+  | { readonly _tag: "rang" }
+  | { readonly _tag: "fed"; readonly i: number };
 
 type ClockModel = {
   readonly phase: "idle" | "armed" | "rung";
@@ -116,17 +116,17 @@ const clock = defineMachine({
   },
   subs: [
     {
-      type: "timer",
+      _tag: "timer",
       deps: (m) =>
-        m.phase === "armed" ? { ms: 5, msg: { type: "rang" } } : null,
+        m.phase === "armed" ? { ms: 5, msg: { _tag: "rang" } } : null,
     },
-    { type: "feed", deps: (m) => (m.phase === "rung" ? { count: 3 } : null) },
+    { _tag: "feed", deps: (m) => (m.phase === "rung" ? { count: 3 } : null) },
   ],
 });
 
 // === owned: the identity filter drops a Msg addressed to another instance ===
 
-type OwnedMsg = { readonly type: "poke"; readonly to: string };
+type OwnedMsg = { readonly _tag: "poke"; readonly to: string };
 
 const owned = defineMachine({
   types: {
@@ -140,18 +140,18 @@ const owned = defineMachine({
 
 // === latch: a Msg the current State has no cell for is refused, and the run goes on ===
 
-type LatchState = { readonly type: "closed" } | { readonly type: "open" };
-type LatchMsg = { readonly type: "open" } | { readonly type: "close" };
+type LatchState = { readonly _tag: "closed" } | { readonly _tag: "open" };
+type LatchMsg = { readonly _tag: "open" } | { readonly _tag: "close" };
 
 // Each phase has a cell for one Msg only, so the other one is refused there.
 const latchUpdate: Transitions<LatchState, LatchMsg, never> = {
-  closed: { open: () => [{ type: "open" }, []] },
-  open: { close: () => [{ type: "closed" }, []] },
+  closed: { open: () => [{ _tag: "open" }, []] },
+  open: { close: () => [{ _tag: "closed" }, []] },
 };
 
 const latch = defineMachine({
   types: { model: {} as LatchState, msg: {} as LatchMsg },
-  init: (loaded) => [loaded ?? { type: "closed" }, []],
+  init: (loaded) => [loaded ?? { _tag: "closed" }, []],
   update: latchUpdate,
 });
 
@@ -163,14 +163,14 @@ const latch = defineMachine({
  * burst's Msgs in list order, then `last`'s.
  */
 export type BurstCmd =
-  | { readonly type: "burst"; readonly count: number }
-  | { readonly type: "hush" }
-  | { readonly type: "last" };
+  | { readonly _tag: "burst"; readonly count: number }
+  | { readonly _tag: "hush" }
+  | { readonly _tag: "last" };
 
 type BurstMsg =
-  | { readonly type: "fire" }
-  | { readonly type: "got"; readonly i: number }
-  | { readonly type: "done" };
+  | { readonly _tag: "fire" }
+  | { readonly _tag: "got"; readonly i: number }
+  | { readonly _tag: "done" };
 
 const burst = defineMachine({
   types: {
@@ -182,7 +182,7 @@ const burst = defineMachine({
   update: {
     fire: (m) => [
       m,
-      [{ type: "burst", count: 3 }, { type: "hush" }, { type: "last" }],
+      [{ _tag: "burst", count: 3 }, { _tag: "hush" }, { _tag: "last" }],
     ],
     got: (m, msg) => [{ log: [...m.log, `got ${msg.i}`] }, []],
     done: (m) => [{ log: [...m.log, "done"] }, []],
@@ -191,7 +191,7 @@ const burst = defineMachine({
 
 /** The Msgs a `burst` handler answers with, the same on both engines. */
 export function burstAnswer(count: number): readonly BurstMsg[] {
-  return Array.from({ length: count }, (_, i) => ({ type: "got", i }));
+  return Array.from({ length: count }, (_, i) => ({ _tag: "got", i }));
 }
 
 /** One shared machine and the run it gets on each engine. */
@@ -211,37 +211,37 @@ export interface ConformanceCase<S, M> {
 export const conformanceMachines = {
   counter: {
     machine: counter,
-    script: [{ type: "inc" }, { type: "add", by: 4 }, { type: "inc" }],
+    script: [{ _tag: "inc" }, { _tag: "add", by: 4 }, { _tag: "inc" }],
   } satisfies ConformanceCase<{ n: number }, CounterMsg>,
   lookup: {
     machine: lookup,
     script: [
-      { type: "look", id: "u1" },
-      { type: "look", id: "u2" },
-      { type: "look", id: "u3" },
+      { _tag: "look", id: "u1" },
+      { _tag: "look", id: "u2" },
+      { _tag: "look", id: "u3" },
     ],
   } satisfies ConformanceCase<LookupModel, LookupMsg>,
   clock: {
     machine: clock,
-    script: [{ type: "arm" }],
+    script: [{ _tag: "arm" }],
     terminal: (s: ClockModel) => s.fed.length === 3,
   } satisfies ConformanceCase<ClockModel, ClockMsg>,
   owned: {
     machine: owned,
     script: [
-      { type: "poke", to: "a" },
-      { type: "poke", to: "b" },
-      { type: "poke", to: "a" },
+      { _tag: "poke", to: "a" },
+      { _tag: "poke", to: "b" },
+      { _tag: "poke", to: "a" },
     ],
   } satisfies ConformanceCase<{ owner: string; pokes: number }, OwnedMsg>,
   burst: {
     machine: burst,
-    script: [{ type: "fire" }],
+    script: [{ _tag: "fire" }],
   } satisfies ConformanceCase<{ log: readonly string[] }, BurstMsg>,
   latch: {
     machine: latch,
     // `close` while closed has no cell: refused, and the `open` after it lands.
-    script: [{ type: "close" }, { type: "open" }, { type: "close" }],
+    script: [{ _tag: "close" }, { _tag: "open" }, { _tag: "close" }],
     refusals: 1,
   } satisfies ConformanceCase<LatchState, LatchMsg>,
 } as const;

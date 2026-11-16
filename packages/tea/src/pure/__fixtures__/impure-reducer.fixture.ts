@@ -14,7 +14,7 @@ type State = {
   readonly roll: number;
 };
 
-type Msg = { readonly type: "spawn" } | { readonly type: "roll" };
+type Msg = { readonly _tag: "spawn" } | { readonly _tag: "roll" };
 
 export const impureUpdate: Reducer<State, Msg, never> = {
   spawn: (s) => [{ ...s, id: crypto.randomUUID(), at: Date.now() }, []],

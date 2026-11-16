@@ -11,13 +11,13 @@ export const DeskModel = Schema.Struct({
   log: Schema.Array(Schema.String),
 });
 export const DeskMsg = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("UserRequestedTickets") }),
+  Schema.Struct({ _tag: Schema.Literal("UserRequestedTickets") }),
   Schema.Struct({
-    type: Schema.Literal("UserSelectedTicket"),
+    _tag: Schema.Literal("UserSelectedTicket"),
     id: Schema.String,
   }),
   Schema.Struct({
-    type: Schema.Literal("UserRequestedClose"),
+    _tag: Schema.Literal("UserRequestedClose"),
     id: Schema.String,
   }),
 ]);

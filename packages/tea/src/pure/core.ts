@@ -90,12 +90,12 @@ export function assertPureResult(result: unknown, msgType: string): void {
         `Expected [State, Cmd[]], got ${typeof result}.`,
     );
   }
-  const cmds = result[1] as readonly { type: string }[];
+  const cmds = result[1] as readonly { _tag: string }[];
   for (const cmd of cmds) {
     const fnField = hasFunctionValues(cmd);
     if (fnField !== null) {
       throw new Error(
-        `@demlik/tea: Cmd "${cmd.type}" has function field "${fnField}". ` +
+        `@demlik/tea: Cmd "${cmd._tag}" has function field "${fnField}". ` +
           `Cmds must be plain data, not closures.`,
       );
     }
@@ -146,7 +146,7 @@ export function without<V>(
  * services from the plain `ctx` handed to `run`.
  */
 export type Cmd<T extends string = string, Ok = unknown, E = unknown> = {
-  readonly type: T;
+  readonly _tag: T;
   /** Phantom — the value this Cmd settles with. Never assigned. */
   readonly __ok?: Ok;
   /** Phantom — the `_tag` union this Cmd can settle with. Never assigned. */
@@ -389,7 +389,7 @@ export function assertDistinctCmdNames(
  * The payload a constructor accepts: a plain record spread beside `type`. A
  * `type` key is refused at the type level — it would overwrite the discriminant.
  */
-export type CmdInput = { readonly type?: never } & Record<string, unknown>;
+export type CmdInput = { readonly _tag?: never } & Record<string, unknown>;
 
 /** The value `Cmd.define("fetch", …)` builds: `{ type: "fetch", ...input }`. */
 export type CmdValue<
@@ -405,7 +405,7 @@ export type CmdValue<
  * the result into state.
  */
 export type SettledOk<Name extends string, C, Ok> = {
-  readonly type: `${Name}_ok`;
+  readonly _tag: `${Name}_ok`;
   readonly cmd: C;
   readonly value: Ok;
   /** Stamped by the runtime at the interpret edge (`run`'s `clock`). */
@@ -418,7 +418,7 @@ export type SettledOk<Name extends string, C, Ok> = {
  * decide what a failure means.
  */
 export type SettledErr<Name extends string, C, E extends Tagged> = {
-  readonly type: `${Name}_err`;
+  readonly _tag: `${Name}_err`;
   readonly cmd: C;
   readonly error: E | MalformedResult;
   /** Stamped by the runtime at the interpret edge (`run`'s `clock`). */
@@ -494,7 +494,7 @@ export type AnyCmdDef = {
  * Msg, or pass a hand-written Cmd's return through. Throws on a contract breach.
  */
 export type CmdEdge = (
-  cmd: { readonly type: string },
+  cmd: { readonly _tag: string },
   returned: unknown,
 ) => unknown;
 
@@ -530,8 +530,8 @@ export function cmdEdgeOver(
  * contract breach; returns when the Msg may be delivered.
  */
 export type DispatchCheck = (
-  cmd: { readonly type: string },
-  msg: { readonly type: string },
+  cmd: { readonly _tag: string },
+  msg: { readonly _tag: string },
 ) => void;
 
 /** Both halves of ADR 0021 over one def list: the return edge and the dispatch check. */
@@ -565,7 +565,7 @@ export function cmdContractOver(
   const minted = new WeakSet<object>();
   return {
     settle: (cmd, returned) => {
-      const def = byType.get(cmd.type);
+      const def = byType.get(cmd._tag);
       if (def === undefined) return returned;
       if (returned === undefined || returned === null) return undefined;
       if (!isOutcome(returned)) {
@@ -579,13 +579,13 @@ export function cmdContractOver(
       return msg;
     },
     checkDispatch: (cmd, msg) => {
-      const def = byType.get(cmd.type);
+      const def = byType.get(cmd._tag);
       if (def === undefined) return;
-      if (msg.type !== def.okType && msg.type !== def.errType) return;
+      if (msg._tag !== def.okType && msg._tag !== def.errType) return;
       if (minted.has(msg)) return;
       throw new OutcomeContractError(
         def.cmdType,
-        `dispatched its own "${msg.type}" Msg`,
+        `dispatched its own "${msg._tag}" Msg`,
       );
     },
   };
@@ -594,7 +594,7 @@ export function cmdContractOver(
 function describeReturn(def: AnyCmdDef, returned: unknown): string {
   const type =
     typeof returned === "object"
-      ? (returned as { type?: unknown }).type
+      ? (returned as { _tag?: unknown })._tag
       : undefined;
   if (typeof type !== "string") {
     return "returned a value that is not an outcome";
@@ -610,7 +610,7 @@ function mint(
   cmd: unknown,
   outcome: Outcome<unknown, unknown>,
   at: number,
-): { readonly type: string; readonly cmd: unknown; readonly at: number } & (
+): { readonly _tag: string; readonly cmd: unknown; readonly at: number } & (
   | { readonly value: unknown }
   | { readonly error: unknown }
 ) {
@@ -622,7 +622,7 @@ function mint(
     if (typeof tag !== "string" || !def.errTags.includes(tag)) {
       throw new UndeclaredFailureError(def.cmdType, outcome.error, def.errTags);
     }
-    return { type: def.errType, cmd, error: outcome.error, at };
+    return { _tag: def.errType, cmd, error: outcome.error, at };
   }
   const parsed = validateSync(
     def.schema.ok,
@@ -631,13 +631,13 @@ function mint(
   );
   if (parsed.issues !== undefined) {
     return {
-      type: def.errType,
+      _tag: def.errType,
       cmd,
       error: malformedResult(parsed.issues),
       at,
     };
   }
-  return { type: def.okType, cmd, value: parsed.value, at };
+  return { _tag: def.okType, cmd, value: parsed.value, at };
 }
 
 /**
@@ -743,15 +743,15 @@ function defineCmd<
   type C = CmdValue<Name, Input, Ok, E>;
   const okType = `${name}_ok` as const;
   const errType = `${name}_err` as const;
-  const build = (input: Input): C => ({ ...input, type: name });
+  const build = (input: Input): C => ({ ...input, _tag: name });
   return Object.assign(build, {
     cmdType: name,
     okType,
     errType,
     ok: (cmd: C, value: Ok, at?: number) =>
-      stamp({ type: okType, cmd, value }, at),
+      stamp({ _tag: okType, cmd, value }, at),
     err: (cmd: C, error: E, at?: number) =>
-      stamp({ type: errType, cmd, error }, at),
+      stamp({ _tag: errType, cmd, error }, at),
     schema: { input: spec.input, ok: spec.ok },
     errTags: spec.err,
   });
@@ -902,7 +902,7 @@ export class NoCellError extends Error {
 function stateNameOf(state: unknown): string {
   if (state === undefined || state === null) return "(no state)";
   if (typeof state === "object" && "type" in state) {
-    const t = (state as { type: unknown }).type;
+    const t = (state as { _tag: unknown })._tag;
     if (typeof t === "string") return t;
   }
   return "(untagged state)";
@@ -954,7 +954,7 @@ export function acceptedTypes<S>(
     string,
     Record<string, unknown> | undefined
   >;
-  const row = table[(state as unknown as { type: string }).type];
+  const row = table[(state as unknown as { _tag: string })._tag];
   // A state with no row at all — a type-bypassed or absent `state.type` —
   // accepts nothing, which is true of it.
   return row === undefined || row === null ? [] : cellKeysOf(row);
@@ -1003,7 +1003,7 @@ export type CellLookup<S, M, C extends Cmd> =
       readonly acceptedTypes: readonly string[];
     };
 
-export function lookupCell<S, M extends { type: string }, C extends Cmd>(
+export function lookupCell<S, M extends { _tag: string }, C extends Cmd>(
   machine: { update: object; __form?: UpdateForm },
   state: S,
   msg: M,
@@ -1024,7 +1024,7 @@ export function lookupCell<S, M extends { type: string }, C extends Cmd>(
   }
   if (formOf(machine) === "reducer") {
     const record = machine.update as Record<string, CellFn | undefined>;
-    const cell = record[msg.type];
+    const cell = record[msg._tag];
     const stateName = stateNameOf(state);
     return typeof cell === "function"
       ? { cell, stateName }
@@ -1043,8 +1043,8 @@ export function lookupCell<S, M extends { type: string }, C extends Cmd>(
   // boundary, but that constraint is erased on the runtime-facing `object`
   // here — every former per-site copy of this double-cast collapsed into
   // this line (#275).
-  const stateKey = (state as unknown as { type: string }).type;
-  const cell = table[stateKey]?.[msg.type];
+  const stateKey = (state as unknown as { _tag: string })._tag;
+  const cell = table[stateKey]?.[msg._tag];
   const stateName = String(stateKey);
   return typeof cell === "function"
     ? { cell, stateName }
@@ -1071,14 +1071,14 @@ export function lookupCell<S, M extends { type: string }, C extends Cmd>(
  * `[nextState, cmds]`. Use it to step a machine by hand; it throws
  * `NoCellError` when no cell matches.
  */
-export function applyCell<S, M extends { type: string }, C extends Cmd>(
+export function applyCell<S, M extends { _tag: string }, C extends Cmd>(
   machine: { update: object; __form?: UpdateForm },
   state: S,
   msg: M,
 ): readonly [S, readonly C[]] {
   const found = lookupCell<S, M, C>(machine, state, msg);
   if (found.cell === undefined) {
-    throw new NoCellError(msg.type, found.stateName, found.acceptedTypes);
+    throw new NoCellError(msg._tag, found.stateName, found.acceptedTypes);
   }
   return found.cell(state, msg);
 }
@@ -1092,14 +1092,14 @@ export function applyCell<S, M extends { type: string }, C extends Cmd>(
 // production (`__DEV__`). `run`'s dev-check extension and `foldUpdates` both
 // step through THIS function so the invariant enforcement lives in exactly one
 // place and cannot drift between the runtime and the pure fold.
-export function checkedStep<S, M extends { type: string }, R>(
+export function checkedStep<S, M extends { _tag: string }, R>(
   state: S,
   msg: M,
   step: (state: S, msg: M) => R,
 ): R {
   if (__DEV__) deepFreeze(state);
   const result = step(state, msg);
-  if (__DEV__ && result !== null) assertPureResult(result, msg.type);
+  if (__DEV__ && result !== null) assertPureResult(result, msg._tag);
   return result;
 }
 
@@ -1107,7 +1107,7 @@ export function checkedStep<S, M extends { type: string }, R>(
  * `applyCell` with the development-mode checks that catch an impure cell: the
  * input state is frozen and the result is asserted to be plain data.
  */
-export function applyCellChecked<S, M extends { type: string }, C extends Cmd>(
+export function applyCellChecked<S, M extends { _tag: string }, C extends Cmd>(
   machine: { update: object; __form?: UpdateForm },
   state: S,
   msg: M,
@@ -1270,10 +1270,10 @@ export function acceptsOf(
  * The flat form of `update`: a record with one handler per Msg type, each
  * returning `[nextState, cmds]`. Leaving a Msg type out is a compile error.
  */
-export type Reducer<S, M extends { type: string }, C extends Cmd> = {
-  [K in M["type"]]: (
+export type Reducer<S, M extends { _tag: string }, C extends Cmd> = {
+  [K in M["_tag"]]: (
     state: S,
-    msg: Extract<M, { type: K }>,
+    msg: Extract<M, { _tag: K }>,
     // `SyncReturn<S, C>` (not `readonly [S, readonly C[]]`) is the reentrancy
     // guard: a non-thenable return type, so an `async`/inline-`await`ing cell —
     // which returns `Promise<...>` — fails to compile at the cell. See the
@@ -1322,11 +1322,11 @@ export type Reducer<S, M extends { type: string }, C extends Cmd> = {
  * naming `acceptedTypes`. `ExhaustiveTransitions` requires every cell instead.
  */
 export type Transitions<
-  S extends { type: string },
-  M extends { type: string },
+  S extends { _tag: string },
+  M extends { _tag: string },
   C extends Cmd,
 > = {
-  [P in S["type"]]: Partial<ExhaustiveTransitions<S, M, C>[P]>;
+  [P in S["_tag"]]: Partial<ExhaustiveTransitions<S, M, C>[P]>;
 };
 
 // === ExhaustiveTransitions: the opt-in "every cell must exist" floor ===
@@ -1355,14 +1355,14 @@ export type Transitions<
  * `defineMachine` takes the annotated table unchanged.
  */
 export type ExhaustiveTransitions<
-  S extends { type: string },
-  M extends { type: string },
+  S extends { _tag: string },
+  M extends { _tag: string },
   C extends Cmd,
 > = {
-  [P in S["type"]]: {
-    [K in M["type"]]: (
-      state: Extract<S, { type: P }>,
-      msg: Extract<M, { type: K }>,
+  [P in S["_tag"]]: {
+    [K in M["_tag"]]: (
+      state: Extract<S, { _tag: P }>,
+      msg: Extract<M, { _tag: K }>,
       // Same reentrancy guard as `Reducer`: a transition cell that returns a
       // Promise (async / inline-await) is the suspended-blocking turn the canon
       // forbids, so its return is the non-thenable `SyncReturn<S, C>`.
@@ -1547,7 +1547,7 @@ export function subId(s: string): SubId {
  */
 export type Sub<T extends string = string, D = unknown> = {
   readonly id: SubId;
-  readonly type: T;
+  readonly _tag: T;
   readonly deps: D;
 };
 
@@ -1583,7 +1583,7 @@ export type BuiltinSub<M> = TimerSub<M>;
  * value. Same type and same deps → same id → the running Sub is left alone.
  */
 export function subIdOf(type: string, deps: unknown): SubId {
-  return subId(structuralHash({ type, deps }));
+  return subId(structuralHash({ _tag: type, deps }));
 }
 
 // === depsInactive: the dep-keyed gate, defined ONCE ===
@@ -1739,7 +1739,7 @@ function stableStringify(value: unknown): string {
 export type DepKeyedSub<S, U extends Sub = Sub> =
   U extends Sub<infer T, infer D>
     ? {
-        readonly type: T;
+        readonly _tag: T;
         /**
          * The slice of state this Sub depends on. `null` or `undefined` ⇒ off in
          * this state (see `depsInactive`), so `(s) => s.optionalRunId` gates
@@ -1760,7 +1760,7 @@ export type DepKeyedSub<S, U extends Sub = Sub> =
 // and each caller decides what a throw means for it.
 /** An entry of `Machine.subs`, read structurally (its `U` erased). */
 export type SubEntry<S> = {
-  readonly type: string;
+  readonly _tag: string;
   readonly deps: (state: S) => unknown;
 };
 
@@ -1775,7 +1775,7 @@ export function subEntriesOf<S>(machine: {
 export function desiredSub<S>(entry: SubEntry<S>, state: S): Sub | null {
   const deps = entry.deps(state);
   if (depsInactive(deps)) return null;
-  return { id: subIdOf(entry.type, deps), type: entry.type, deps };
+  return { id: subIdOf(entry._tag, deps), _tag: entry._tag, deps };
 }
 
 // === Identity<S, M>: declare the instance's identity once; the kernel drops
@@ -1979,8 +1979,8 @@ export type HandlerCtx<Ctx> = (0 extends 1 & Ctx
  * The Cmd handler table an engine is handed: one async handler per Cmd type.
  * Leaving a Cmd type out is a compile error.
  */
-export type Interpret<M extends { type: string }, C extends Cmd, Ctx> = {
-  [K in C["type"]]: InterpretCell<M, Extract<C, { type: K }>, Ctx>;
+export type Interpret<M extends { _tag: string }, C extends Cmd, Ctx> = {
+  [K in C["_tag"]]: InterpretCell<M, Extract<C, { _tag: K }>, Ctx>;
 };
 
 /**
@@ -1989,7 +1989,7 @@ export type Interpret<M extends { type: string }, C extends Cmd, Ctx> = {
  * hand-written one. A Cmd is `Cmd.define`d exactly when its `E` phantom is
  * declared (not `unknown`). A returned list is dispatched in order.
  */
-export type InterpretCell<M extends { type: string }, C extends Cmd, Ctx> =
+export type InterpretCell<M extends { _tag: string }, C extends Cmd, Ctx> =
   unknown extends ErrorsOf<C>
     ? (
         cmd: C,
@@ -2024,7 +2024,7 @@ export type DeclaredErrorsOf<C> = Exclude<ErrorsOf<C>, MalformedResult>;
  */
 export type InterpretDetached<
   C extends Cmd,
-  Allowed extends { type: string },
+  Allowed extends { _tag: string },
   Ctx,
 > = (
   cmd: C,
@@ -2052,9 +2052,9 @@ export type InterpretDetached<
  * dispatches Msgs from it, and returns the `Dispose` the engine calls when the
  * Sub stops.
  */
-export type Subscribe<M extends { type: string }, U extends Sub, Ctx> = {
-  [K in U["type"]]: (
-    sub: Extract<U, { type: K }>,
+export type Subscribe<M extends { _tag: string }, U extends Sub, Ctx> = {
+  [K in U["_tag"]]: (
+    sub: Extract<U, { _tag: K }>,
     ctx: Ctx,
     dispatch: (msg: M) => void,
   ) => Dispose;
@@ -2075,7 +2075,7 @@ export type Subscribe<M extends { type: string }, U extends Sub, Ctx> = {
  * The `interpret` option of an engine's `run`: optional for a machine that
  * emits no Cmd, required — one handler per Cmd variant — for one that does.
  */
-export type InterpretArg<M extends { type: string }, C extends Cmd, Ctx> = [
+export type InterpretArg<M extends { _tag: string }, C extends Cmd, Ctx> = [
   C,
 ] extends [Cmd<never>]
   ? { interpret?: Interpret<M, C, Ctx> }
@@ -2087,8 +2087,8 @@ export type InterpretArg<M extends { type: string }, C extends Cmd, Ctx> = [
  * Optional when every declared type is a built-in. An entry named after a
  * built-in replaces it (#270 R2.1), which is how a test drives time.
  */
-export type SubscribeArg<M extends { type: string }, U extends Sub, Ctx> = [
-  Exclude<U["type"], BuiltinSubType>,
+export type SubscribeArg<M extends { _tag: string }, U extends Sub, Ctx> = [
+  Exclude<U["_tag"], BuiltinSubType>,
 ] extends [never]
   ? {
       readonly subscribe?: Partial<
@@ -2100,7 +2100,7 @@ export type SubscribeArg<M extends { type: string }, U extends Sub, Ctx> = [
   : {
       readonly subscribe: Subscribe<
         M,
-        Exclude<U, { readonly type: BuiltinSubType }>,
+        Exclude<U, { readonly _tag: BuiltinSubType }>,
         Ctx
       > &
         Partial<Subscribe<M, BuiltinSub<M>, Ctx>>;
@@ -2112,7 +2112,7 @@ export type SubscribeArg<M extends { type: string }, U extends Sub, Ctx> = [
  * neither — it is data, and one machine file runs under any engine.
  */
 export type RunHandlers<
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -2125,7 +2125,7 @@ export type RunHandlers<
  */
 export type Wired<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -2158,7 +2158,7 @@ export type Wired<
  */
 export type Machine<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -2193,7 +2193,7 @@ export type Machine<
     // desired `Transitions<A|B,...>` — the table form needs a single
     // mapping over the full union of state types, not separate tables per
     // member.
-    | ([S] extends [{ type: string }] ? Transitions<S, M, C> : never);
+    | ([S] extends [{ _tag: string }] ? Transitions<S, M, C> : never);
   /**
    * The machine's Subs, as data: each entry names a Sub `type` and the state
    * slice it depends on (`deps`). The engine derives the id
@@ -2260,7 +2260,7 @@ export type Machine<
  * `foldMsgs` cover the common cases; use this when you need both the state and
  * the Cmds from a state of your choosing.
  */
-export function foldUpdates<S, M extends { type: string }, C extends Cmd>(
+export function foldUpdates<S, M extends { _tag: string }, C extends Cmd>(
   machine: { update: object; __form?: UpdateForm },
   initialState: S,
   msgs: readonly M[],
@@ -2308,7 +2308,7 @@ export function foldUpdates<S, M extends { type: string }, C extends Cmd>(
  */
 export function foldMsgs<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,

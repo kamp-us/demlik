@@ -58,7 +58,7 @@ export interface Answerer<C extends Cmd, M> {
  */
 export function resolveGuided<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -87,12 +87,12 @@ export function resolveGuided<
     }
     const at = event.pick % waiting.length;
     const cmd = waiting[at] as C;
-    const cell = index.get(cmd.type) as number;
+    const cell = index.get(cmd._tag) as number;
     const answerer = answerers[cell] as Answerer<C, M>;
     return { msg: answerer.make(cmd, event.values[cell]), answers: at };
   };
   const answerable = (cmds: readonly C[]): readonly C[] =>
-    cmds.filter((cmd) => index.has(cmd.type));
+    cmds.filter((cmd) => index.has(cmd._tag));
 
   const msgs: M[] = [];
   const waiting: C[] = [];
@@ -109,7 +109,7 @@ export function resolveGuided<
     if (meant === null) continue;
     const { msg, answers } = meant;
     // A refused answer takes nothing off `waiting`: its Cmd still has no answer.
-    if (!acceptedTypes(machine, state).includes(msg.type)) continue;
+    if (!acceptedTypes(machine, state).includes(msg._tag)) continue;
     if (answers !== null) waiting.splice(answers, 1);
     msgs.push(msg);
     try {

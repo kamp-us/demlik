@@ -18,10 +18,10 @@ export const streamReply = (
       store: skipSaving(store, isStreaming),
     });
     const runtime = yield* handle.ready;
-    yield* runtime.dispatch({ type: "start" });
+    yield* runtime.dispatch({ _tag: "start" });
     for (const text of tokens) {
-      yield* runtime.dispatch({ type: "token", text });
+      yield* runtime.dispatch({ _tag: "token", text });
     }
-    yield* runtime.dispatch({ type: "finish" });
+    yield* runtime.dispatch({ _tag: "finish" });
     return runtime.getState();
   }).pipe(Effect.scoped);

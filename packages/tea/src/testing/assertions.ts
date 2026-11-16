@@ -62,7 +62,7 @@ export interface ReplayOpts<S, M, Ctx> {
  */
 export function expectFinalState<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -88,7 +88,7 @@ export function expectFinalState<
  */
 export function expectCmdEmitted<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -114,7 +114,7 @@ export function expectCmdEmitted<
  */
 export function expectCmdSequence<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -138,7 +138,7 @@ export function expectCmdSequence<
  */
 export function expectActiveSubs<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -167,7 +167,7 @@ export function expectActiveSubs<
  */
 export function step<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,

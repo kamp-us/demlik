@@ -252,7 +252,7 @@ export function toCompactRunCmd(
   cmd: LlmRunCmd<CompactionPurpose>,
 ): AgentCompactRunCmd {
   return {
-    type: MsgType.CompactRun,
+    _tag: MsgType.CompactRun,
     key: COMPACTION_PURPOSE,
     input: cmd.input,
   };

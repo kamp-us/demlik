@@ -21,11 +21,11 @@ import {
 import { run } from "../promise";
 
 type State = { readonly n: number };
-type Msg = { readonly type: "bump" } | { readonly type: "set"; n: number };
+type Msg = { readonly _tag: "bump" } | { readonly _tag: "set"; n: number };
 type Save = Cmd<"save"> & { readonly n: number };
 
 const update: Reducer<State, Msg, Save> = {
-  bump: (s) => [{ n: s.n + 1 }, [{ type: "save", n: s.n + 1 }]],
+  bump: (s) => [{ n: s.n + 1 }, [{ _tag: "save", n: s.n + 1 }]],
   set: (_s, m) => [{ n: m.n }, []],
 };
 
@@ -109,14 +109,14 @@ export const missingCell = run(saving, {
 export const wrongCell = run(saving, {
   interpret: {
     // @ts-expect-error — a handler resolves to a Msg of the machine's union
-    save: async () => ({ type: "not_a_msg" }),
+    save: async () => ({ _tag: "not_a_msg" }),
   },
 });
 
 // A handler's parameters are read off the machine: `cmd` is `Save` here.
 export const contextual = run(saving, {
   interpret: {
-    save: async (cmd) => ({ type: "set", n: cmd.n }),
+    save: async (cmd) => ({ _tag: "set", n: cmd.n }),
   },
 });
 

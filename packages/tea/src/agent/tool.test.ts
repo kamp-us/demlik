@@ -95,7 +95,7 @@ describe("tool() — the interpret cell returns an outcome the engine mints", ()
       },
     });
     expect(edge(cmd, outcome)).toEqual({
-      type: "search_ok",
+      _tag: "search_ok",
       cmd,
       value: { snippet: "TEA folds the loop in one reducer." },
       at: 7,
@@ -105,7 +105,7 @@ describe("tool() — the interpret cell returns an outcome the engine mints", ()
   it("err: a declared `fail` rides `<name>_err` with its `_tag` and detail", async () => {
     const cmd = search({ callId: "c2", args: { q: "nope" } });
     expect(edge(cmd, await search.interpret(cmd, ctx))).toEqual({
-      type: "search_err",
+      _tag: "search_err",
       cmd,
       error: { _tag: "not_found", q: "nope" },
       at: 7,
@@ -115,7 +115,7 @@ describe("tool() — the interpret cell returns an outcome the engine mints", ()
   it("a thrown handler settles `<name>_err` as `{ _tag: 'thrown', message }` — never a rejection", async () => {
     const cmd = search({ callId: "c3", args: { q: "boom" } });
     expect(edge(cmd, await search.interpret(cmd, ctx))).toEqual({
-      type: "search_err",
+      _tag: "search_err",
       cmd,
       error: { _tag: "thrown", message: "kb offline" },
       at: 7,
@@ -125,7 +125,7 @@ describe("tool() — the interpret cell returns an outcome the engine mints", ()
   it("a thrown value carrying a DECLARED `_tag` settles as that tag", async () => {
     const cmd = search({ callId: "c4", args: { q: "boom-tagged" } });
     expect(edge(cmd, await search.interpret(cmd, ctx))).toEqual({
-      type: "search_err",
+      _tag: "search_err",
       cmd,
       error: { _tag: "not_found", via: "throw" },
       at: 7,
@@ -151,7 +151,7 @@ describe("tool() — the interpret cell returns an outcome the engine mints", ()
       await lying.interpret(cmd, {} as PortEmitter),
     );
     expect(settled).toMatchObject({
-      type: "lying_err",
+      _tag: "lying_err",
       error: { _tag: "malformed_result" },
     });
   });
@@ -222,7 +222,7 @@ describe("tool() — a reserved name is a declaration bug, refused at constructi
 describe("toolRouter() — toolOf is total and parses args at the edge", () => {
   it("maps a call to the tool's Cmd with PARSED args", () => {
     expect(tools.toolOf(call("c1", "search", { q: "tea", junk: 1 }))).toEqual({
-      type: "search",
+      _tag: "search",
       callId: "c1",
       args: { q: "tea" },
     });
@@ -230,7 +230,7 @@ describe("toolRouter() — toolOf is total and parses args at the edge", () => {
 
   it("an unknown tool name becomes a `tool_rejected` Cmd — no throw inside the reducer", () => {
     expect(tools.toolOf(call("c9", "teleport", {}))).toEqual({
-      type: "tool_rejected",
+      _tag: "tool_rejected",
       callId: "c9",
       error: { _tag: "unknown_tool", name: "teleport" },
     });
@@ -238,8 +238,8 @@ describe("toolRouter() — toolOf is total and parses args at the edge", () => {
 
   it("args that fail the tool's `input` schema become a `tool_rejected` Cmd carrying the issues", () => {
     const cmd = tools.toolOf(call("c8", "search", { q: 42 }));
-    expect(cmd.type).toBe("tool_rejected");
-    if (cmd.type === "tool_rejected") {
+    expect(cmd._tag).toBe("tool_rejected");
+    if (cmd._tag === "tool_rejected") {
       expect(cmd.error._tag).toBe("malformed_args");
       if (cmd.error._tag === "malformed_args") {
         expect(cmd.error.name).toBe("search");
@@ -250,10 +250,10 @@ describe("toolRouter() — toolOf is total and parses args at the edge", () => {
 
   it("the `tool_rejected` cell settles the carried refusal as `tool_rejected_err`", async () => {
     const cmd = tools.toolOf(call("c9", "teleport", {}));
-    if (cmd.type !== "tool_rejected") throw new Error("expected a rejection");
+    if (cmd._tag !== "tool_rejected") throw new Error("expected a rejection");
     const settled = edge(cmd, await tools.interpret.tool_rejected(cmd, ctx));
     expect(settled).toEqual({
-      type: "tool_rejected_err",
+      _tag: "tool_rejected_err",
       cmd,
       error: { _tag: "unknown_tool", name: "teleport" },
       at: 7,
@@ -294,7 +294,7 @@ describe("toolRouter() — toolOf is total and parses args at the edge", () => {
         reason: 'not_found {"q":"x"}',
       },
     });
-    expect(tools.outcomeOf({ type: "agent_start" })).toBeNull();
+    expect(tools.outcomeOf({ _tag: "agent_start" })).toBeNull();
   });
 
   // The payload is the tool's, the discriminant and the model's channel are the
@@ -400,7 +400,7 @@ async function drive(turns: Turns) {
       records = conv.toolRecords;
     }
   });
-  await runtime.dispatch({ type: "agent_start", runId: "r", at: 0 });
+  await runtime.dispatch({ _tag: "agent_start", runId: "r", at: 0 });
   await runtime.done();
   const final = runtime.getState();
   await runtime.stop();
@@ -434,19 +434,19 @@ describe("toMachine({ tools }) — the router's settles fold into the loop", () 
 
     // `ToolSettled` projects off the router's `_ok` Msgs (#47 stays whole).
     const head = { runId: "r", at: expect.any(Number) };
-    expect(events.filter((e) => e.type === "ToolSettled")).toEqual([
+    expect(events.filter((e) => e._tag === "ToolSettled")).toEqual([
       {
         ...head,
-        type: "ToolSettled",
+        _tag: "ToolSettled",
         callId: "c1",
         result: { snippet: "TEA folds the loop in one reducer." },
       },
-      { ...head, type: "ToolSettled", callId: "c4", result: 3 },
+      { ...head, _tag: "ToolSettled", callId: "c4", result: 3 },
     ]);
     // …and every other call, whatever way it failed, is one `ToolFailed`
     // carrying the failure the model reads (#331).
     const failed = events.flatMap((e) =>
-      e.type === "ToolFailed" ? [[e.callId, e.failure.kind]] : [],
+      e._tag === "ToolFailed" ? [[e.callId, e.failure.kind]] : [],
     );
     expect(failed.sort()).toEqual([
       ["c2", "error"],
@@ -532,9 +532,9 @@ describe("toMachine({ tools }) — the router's settles fold into the loop", () 
     // the tool out, the legacy tool settle folds the record and re-fires the
     // brain. Under the router's fold both would have been no-ops.
     const brainOk: AgentLlmOkMsg<Purpose, Outputs> = {
-      type: "resilient_run_ok",
+      _tag: "resilient_run_ok",
       cmd: {
-        type: "resilient_run",
+        _tag: "resilient_run",
         key: "plan_turn",
         input: { purpose: "plan_turn", model: null, payload: null },
       },
@@ -550,10 +550,10 @@ describe("toMachine({ tools }) — the router's settles fold into the loop", () 
     };
     const { state, cmds } = bindMachine(machine, ctx).replay({
       msgs: [
-        { type: "agent_start", runId: "r", at: 0 },
+        { _tag: "agent_start", runId: "r", at: 0 },
         brainOk,
         {
-          type: "agent_tool_ok",
+          _tag: "agent_tool_ok",
           callId: "c1",
           result: { snippet: "s" },
           at: 20,
@@ -562,7 +562,7 @@ describe("toMachine({ tools }) — the router's settles fold into the loop", () 
     });
     expect(state.conversation?.turnCount).toBe(1);
     expect(state.tools.running).toEqual([]);
-    expect(cmds.map((c) => c.type)).toEqual([
+    expect(cmds.map((c) => c._tag)).toEqual([
       "resilient_run",
       "search",
       "resilient_run",

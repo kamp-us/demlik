@@ -15,7 +15,7 @@ import { useRuntime, type ViewHandle } from "./index";
 type Id = "a" | "b" | "c";
 type View = { readonly n: number };
 type State = { readonly views: Readonly<Record<Id, View>> };
-type Msg = { readonly type: "inc"; readonly id: Id };
+type Msg = { readonly _tag: "inc"; readonly id: Id };
 const machine = defineMachine({
   types: { model: {} as State, msg: {} as Msg, ctx: undefined },
   init: () => [{ views: { a: { n: 0 }, b: { n: 10 }, c: { n: 20 } } }, []],
@@ -80,7 +80,7 @@ describe.each([
       const [view, send] = useRuntime(owner.handle, (s) => s.views.a);
       drew();
       return (
-        <button type="button" onClick={() => send({ type: "inc", id: "a" })}>
+        <button type="button" onClick={() => send({ _tag: "inc", id: "a" })}>
           {view.n}
         </button>
       );
@@ -117,7 +117,7 @@ describe.each([
     );
     for (const id of ["b", "b", "b"] as const) {
       await act(async () => {
-        send({ type: "inc", id });
+        send({ _tag: "inc", id });
         await owner.idle();
       });
     }
@@ -158,7 +158,7 @@ describe.each([
     await render(<Reader id="a" />);
     const kept = send;
     await act(async () => {
-      expect(kept({ type: "inc", id: "a" })).toBeUndefined();
+      expect(kept({ _tag: "inc", id: "a" })).toBeUndefined();
       await owner.idle();
     });
     expect(container.textContent).toBe("1");
@@ -166,7 +166,7 @@ describe.each([
     await render(<Reader id="b" />);
     expect(send).toBe(kept);
     await act(async () => {
-      expect(kept({ type: "inc", id: "b" })).toBeUndefined();
+      expect(kept({ _tag: "inc", id: "b" })).toBeUndefined();
       await owner.idle();
     });
     expect(container.textContent).toBe("11");
@@ -189,7 +189,7 @@ describe.each([
       </StrictMode>,
     );
     await act(async () => {
-      send({ type: "inc", id: "a" });
+      send({ _tag: "inc", id: "a" });
       await owner.idle();
     });
     expect(container.textContent).toBe("1");
@@ -216,7 +216,7 @@ it("selects and redraws a hand-built ViewHandle", async () => {
   function Reader() {
     const [view, send] = useRuntime(handle, (s) => s.views.a);
     return (
-      <button type="button" onClick={() => send({ type: "inc", id: "a" })}>
+      <button type="button" onClick={() => send({ _tag: "inc", id: "a" })}>
         {view.n}
       </button>
     );

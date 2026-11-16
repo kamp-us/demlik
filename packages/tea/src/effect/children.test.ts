@@ -89,7 +89,7 @@ const live = (children: ReadonlyMap<string, Child>) =>
     const ids: string[] = [];
     for (const [id, child] of children) {
       const exit = yield* Effect.exit(
-        Effect.flatMap(child.run.ready, (w) => w.dispatch({ type: "job" })),
+        Effect.flatMap(child.run.ready, (w) => w.dispatch({ _tag: "job" })),
       );
       if (Exit.isSuccess(exit)) ids.push(id);
     }
@@ -114,18 +114,18 @@ const openParent = (store?: Store<ParentState>) =>
       Scope.provide(parentScope),
     )).ready;
     const seen: string[] = [];
-    parentRun.observe((msg) => void seen.push(msg.type));
+    parentRun.observe((msg) => void seen.push(msg._tag));
     return { parentScope, parentRun, reports, seen };
   });
 
-const stopped = (id: string) => ({ type: "child_stopped", id }) as const;
+const stopped = (id: string) => ({ _tag: "child_stopped", id }) as const;
 
 /** A parent whose `kill` Msg stops a child from its own Cmd handler. */
 type BossState = { readonly stopped: readonly string[] };
 type BossMsg =
-  | { readonly type: "kill"; readonly id: string }
-  | { readonly type: "child_stopped"; readonly id: string };
-type BossCmd = { readonly type: "close_child"; readonly id: string };
+  | { readonly _tag: "kill"; readonly id: string }
+  | { readonly _tag: "child_stopped"; readonly id: string };
+type BossCmd = { readonly _tag: "close_child"; readonly id: string };
 const boss = defineMachine({
   types: {
     model: {} as BossState,
@@ -134,7 +134,7 @@ const boss = defineMachine({
   },
   init: (loaded) => [loaded ?? { stopped: [] }, []],
   update: {
-    kill: (s, m) => [s, [{ type: "close_child", id: m.id }]],
+    kill: (s, m) => [s, [{ _tag: "close_child", id: m.id }]],
     child_stopped: (s, m) => [{ stopped: [...s.stopped, m.id] }, []],
   },
 });
@@ -146,13 +146,13 @@ describe("tell", () => {
     await Effect.runPromise(
       Effect.gen(function* () {
         const { parentScope, parentRun, reports, seen } = yield* openParent();
-        yield* parentRun.dispatch({ type: "close" });
+        yield* parentRun.dispatch({ _tag: "close" });
 
         const answer = yield* tell(parent, parentRun, stopped("a"));
 
         expect(answer).toBe("no_cell");
         expect(seen).toEqual(["close"]);
-        expect(parentRun.getState()).toEqual({ type: "closed", stopped: [] });
+        expect(parentRun.getState()).toEqual({ _tag: "closed", stopped: [] });
         expect(reports).toEqual([]);
         yield* Scope.close(parentScope, Exit.void);
       }),
@@ -166,7 +166,7 @@ describe("tell", () => {
         const answer = yield* tell(parent, parentRun, stopped("a"));
         expect(answer).toBe("queued");
         yield* parentRun.idle();
-        expect(parentRun.getState()).toEqual({ type: "open", stopped: ["a"] });
+        expect(parentRun.getState()).toEqual({ _tag: "open", stopped: ["a"] });
         yield* Scope.close(parentScope, Exit.void);
       }),
     );
@@ -178,13 +178,13 @@ describe("tell", () => {
         const { parentScope, parentRun, reports } = yield* openParent();
         // `close` is queued, not folded, so the check still reads `open`.
         const closing = yield* Effect.forkChild(
-          parentRun.dispatch({ type: "close" }),
+          parentRun.dispatch({ _tag: "close" }),
           { startImmediately: true },
         );
         expect(yield* tell(parent, parentRun, stopped("a"))).toBe("queued");
         yield* Fiber.await(closing);
         yield* parentRun.idle();
-        expect(parentRun.getState()).toEqual({ type: "closed", stopped: [] });
+        expect(parentRun.getState()).toEqual({ _tag: "closed", stopped: [] });
         expect(reports).toEqual([]);
         yield* Scope.close(parentScope, Exit.void);
       }),
@@ -336,7 +336,7 @@ describe("stop", () => {
         const parentScope = yield* Scope.make();
         // The notice names the boss's run, which is booted after the host.
         const host = hostOf(parentScope, (id) =>
-          tell(boss, bossRun, { type: "child_stopped", id }),
+          tell(boss, bossRun, { _tag: "child_stopped", id }),
         );
         const bossRun = yield* (yield* run(boss, {
           interpret: { close_child: (cmd) => host.stopById(cmd.id) },
@@ -351,7 +351,7 @@ describe("stop", () => {
             ["b", stop(scopeOf("b"))],
             // Folds `kill`, runs the handler, and returns once the child
             // stopped: the stop did not wait for the boss to take the notice.
-            ["e", Effect.orDie(bossRun.dispatch({ type: "kill", id: "e" }))],
+            ["e", Effect.orDie(bossRun.dispatch({ _tag: "kill", id: "e" }))],
             ["a", Effect.andThen(stop(scopeOf("a")), stop(scopeOf("a")))],
           ];
         const gone: string[] = [];
@@ -397,14 +397,14 @@ describe("stop", () => {
         expect([...table.keys()]).toEqual(["a", "b"]);
         yield* parentRun.idle();
         expect(notices).toEqual([]);
-        expect(parentRun.getState()).toEqual({ type: "open", stopped: [] });
+        expect(parentRun.getState()).toEqual({ _tag: "open", stopped: [] });
 
         yield* stop(a.scope);
 
         expect([...table.keys()]).toEqual(["b"]);
         yield* settled(() =>
           expect(parentRun.getState()).toEqual({
-            type: "open",
+            _tag: "open",
             stopped: ["a"],
           }),
         );
@@ -435,7 +435,7 @@ describe("a parent told by three children it stops", () => {
         for (const id of ids) yield* stopById(id);
 
         yield* settled(() =>
-          expect(parentRun.getState()).toEqual({ type: "open", stopped: ids }),
+          expect(parentRun.getState()).toEqual({ _tag: "open", stopped: ids }),
         );
         expect(notices.map((n) => n.id)).toEqual(ids);
         expect(notices.every((n) => Exit.isSuccess(n.exit))).toBe(true);
@@ -469,7 +469,7 @@ describe("a parent and six children on the helpers", () => {
         }
         yield* settled(() =>
           expect(parentRun.getState()).toEqual({
-            type: "open",
+            _tag: "open",
             stopped: ["b", "e", "a"],
           }),
         );
@@ -546,7 +546,7 @@ describe("a parent and six children on the helpers", () => {
           );
           yield* start("a");
           yield* start("b");
-          yield* parentRun.dispatch({ type: "close" });
+          yield* parentRun.dispatch({ _tag: "close" });
 
           yield* stopById("a");
 
@@ -554,7 +554,7 @@ describe("a parent and six children on the helpers", () => {
           yield* settled(() => expect(notices).toHaveLength(1));
           expect(notices.filter((n) => Exit.isFailure(n.exit))).toEqual([]);
           expect(seen).toEqual(["close"]);
-          expect(parentRun.getState()).toEqual({ type: "closed", stopped: [] });
+          expect(parentRun.getState()).toEqual({ _tag: "closed", stopped: [] });
           expect(reports).toEqual([]);
           yield* Scope.close(parentScope, Exit.void);
         }),

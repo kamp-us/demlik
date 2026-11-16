@@ -25,7 +25,7 @@ type Purpose = "act";
 interface Outputs extends Record<Purpose, AgentTurn> {
   readonly act: AgentTurn;
 }
-type ToolCmd = { readonly type: "run_tool" } & ToolCall;
+type ToolCmd = { readonly _tag: "run_tool" } & ToolCall;
 type M = AgentMachineMsg<Purpose, Outputs, string>;
 type S = AgentState<string, Purpose, Outputs, string>;
 
@@ -62,13 +62,13 @@ const toolInterpret: Interpret<M, ToolCmd, object> = {
   run_tool: async (cmd) =>
     cmd.name === "fetch"
       ? {
-          type: "agent_tool_err",
+          _tag: "agent_tool_err",
           callId: cmd.callId,
           reason: "404",
           at: 0,
         }
       : {
-          type: "agent_tool_ok",
+          _tag: "agent_tool_ok",
           callId: cmd.callId,
           result: `ok:${cmd.callId}`,
           at: 0,
@@ -81,7 +81,7 @@ function makeAgent(turns: readonly (AgentTurn | Error)[]) {
     model: scripted(turns),
     schemas: { act: turnSchema },
     turnOf: () => "act",
-    toolOf: (c) => ({ type: "run_tool", ...c }),
+    toolOf: (c) => ({ _tag: "run_tool", ...c }),
     modelId: "test-model",
     rng: () => 0,
   });
@@ -122,11 +122,11 @@ async function recorded(
 describe("#331 — the lifecycle event stream", () => {
   it("one brain turn, two tools (one failing): every start, settle and failure, in order", async () => {
     const { runtime, events } = await recorded(makeAgent([ASK, ANSWER]));
-    await runtime.dispatch({ type: "agent_start", runId: "run-1", at: 0 });
+    await runtime.dispatch({ _tag: "agent_start", runId: "run-1", at: 0 });
     await runtime.done();
     await runtime.stop();
 
-    expect(events.map((e) => e.type)).toEqual([
+    expect(events.map((e) => e._tag)).toEqual([
       "BrainStarted",
       "TurnSettled",
       // Serial by default: c2 is queued, and starts when c1 frees the slot.
@@ -139,7 +139,7 @@ describe("#331 — the lifecycle event stream", () => {
       "RunDone",
     ]);
     expect(events[0]).toEqual({
-      type: "BrainStarted",
+      _tag: "BrainStarted",
       runId: "run-1",
       at: 0,
       turn: 0,
@@ -148,21 +148,21 @@ describe("#331 — the lifecycle event stream", () => {
       payload: null,
     });
     expect(events[2]).toMatchObject({
-      type: "ToolStarted",
+      _tag: "ToolStarted",
       callId: "c1",
       name: "search",
       args: { q: "c1" },
     });
-    expect(events[4]).toMatchObject({ type: "ToolStarted", callId: "c2" });
+    expect(events[4]).toMatchObject({ _tag: "ToolStarted", callId: "c2" });
     expect(events[5]).toMatchObject({
-      type: "ToolFailed",
+      _tag: "ToolFailed",
       callId: "c2",
       name: "fetch",
       failure: { kind: "error", reason: "404" },
     });
-    expect(events[6]).toMatchObject({ type: "BrainStarted", turn: 1 });
+    expect(events[6]).toMatchObject({ _tag: "BrainStarted", turn: 1 });
     expect(events[8]).toMatchObject({
-      type: "RunDone",
+      _tag: "RunDone",
       status: { kind: "done", output: ANSWER },
     });
     // One run, one id, on every event.
@@ -173,13 +173,13 @@ describe("#331 — the lifecycle event stream", () => {
     const { runtime, events } = await recorded(
       makeAgent([new Error("model down")]),
     );
-    await runtime.dispatch({ type: "agent_start", runId: "run-1", at: 0 });
+    await runtime.dispatch({ _tag: "agent_start", runId: "run-1", at: 0 });
     await runtime.done();
     await runtime.stop();
 
-    expect(events.map((e) => e.type)).toEqual(["BrainStarted", "RunDone"]);
+    expect(events.map((e) => e._tag)).toEqual(["BrainStarted", "RunDone"]);
     expect(events[1]).toMatchObject({
-      type: "RunDone",
+      _tag: "RunDone",
       status: { kind: "failed", failure: { reason: "llm" } },
     });
   });
@@ -194,7 +194,7 @@ describe("#331 — the lifecycle event stream", () => {
       }
     });
     await first.runtime.dispatch({
-      type: "agent_start",
+      _tag: "agent_start",
       runId: "run-1",
       at: 0,
     });
@@ -210,10 +210,10 @@ describe("#331 — the lifecycle event stream", () => {
     await second.runtime.stop();
 
     expect(second.events[0]).toMatchObject({
-      type: "ToolStarted",
+      _tag: "ToolStarted",
       callId: "c1",
     });
-    expect(second.events.at(-1)?.type).toBe("RunDone");
+    expect(second.events.at(-1)?._tag).toBe("RunDone");
     const ids = new Set(
       [...first.events, ...second.events].map((e) => e.runId),
     );
@@ -222,7 +222,7 @@ describe("#331 — the lifecycle event stream", () => {
 
   it("AGENT_EVENT_TYPES lists every event type", () => {
     expectTypeOf<
-      Exclude<AgentEvent<unknown>["type"], (typeof AGENT_EVENT_TYPES)[number]>
+      Exclude<AgentEvent<unknown>["_tag"], (typeof AGENT_EVENT_TYPES)[number]>
     >().toBeNever();
   });
 });

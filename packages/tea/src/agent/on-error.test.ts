@@ -46,7 +46,7 @@ describe("a defined agent's onError", () => {
       store,
       onError,
       onEvent: (event) => {
-        if (event.type === "RunDone") lost = true;
+        if (event._tag === "RunDone") lost = true;
       },
     });
 

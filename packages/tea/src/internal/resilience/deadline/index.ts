@@ -74,7 +74,7 @@ import { subId } from "../../../index";
  */
 export type DeadlineSub<N extends string | undefined = undefined> = {
   readonly id: SubId;
-  readonly type: "deadline";
+  readonly _tag: "deadline";
   readonly atMs: number;
 } & DeadlineOpts<N>;
 
@@ -107,7 +107,7 @@ export function deadlines<N extends string | undefined = undefined>(
 export function deadlinesSub<S, N extends string | undefined = undefined>(
   select: (state: S) => readonly DeadlineSub<N>[],
 ): DepKeyedSub<S, DeadlinesSub<N>> {
-  return { type: "deadline", deps: (state) => deadlines(select(state)) };
+  return { _tag: "deadline", deps: (state) => deadlines(select(state)) };
 }
 
 /**
@@ -153,7 +153,7 @@ export type DeadlineOpts<N extends string | undefined = undefined> = {
  * consumer's local dialect.
  */
 export type DeadlineExceeded<N extends string | undefined = undefined> = {
-  readonly type: DeadlineMsgType<N>;
+  readonly _tag: DeadlineMsgType<N>;
   readonly id: string;
   readonly atMs: number;
 };
@@ -194,7 +194,7 @@ export function deadlineSub<N extends string | undefined = undefined>(
   atMs: number,
   opts?: DeadlineOpts<N>,
 ): DeadlineSub<N> {
-  return { ...opts, id: subId(id), type: "deadline", atMs };
+  return { ...opts, id: subId(id), _tag: "deadline", atMs };
 }
 
 /**
@@ -323,7 +323,7 @@ export function deadlineExceeded<N extends string | undefined = undefined>(
   atMs: number,
   name?: N,
 ): DeadlineExceeded<N> {
-  return { type: deadlineMsgType(name), id, atMs };
+  return { _tag: deadlineMsgType(name), id, atMs };
 }
 
 /**

@@ -426,14 +426,14 @@ describe("paginator properties", () => {
 // ===========================================================================
 
 type WalkMsg =
-  | { readonly type: "start" }
+  | { readonly _tag: "start" }
   | {
-      readonly type: "page";
+      readonly _tag: "page";
       readonly count: number;
       readonly next: number | null | undefined;
     }
-  | { readonly type: "drain"; readonly n: number }
-  | { readonly type: "resume" };
+  | { readonly _tag: "drain"; readonly n: number }
+  | { readonly _tag: "resume" };
 
 // The walk emits no real effects; a phantom Cmd keeps the machine well-typed.
 type WalkCmd = Cmd<"noop">;
@@ -465,10 +465,10 @@ describe("paginator — wired in a real machine (replay end-state)", () => {
     bound.expectFinalState(
       {
         msgs: [
-          { type: "start" },
-          { type: "page", count: 2, next: 20 },
-          { type: "page", count: 1, next: 40 },
-          { type: "page", count: 1, next: null },
+          { _tag: "start" },
+          { _tag: "page", count: 2, next: 20 },
+          { _tag: "page", count: 1, next: 40 },
+          { _tag: "page", count: 1, next: null },
         ],
       },
       { phase: "done", seen: 4, pages: 3 },
@@ -484,9 +484,9 @@ describe("paginator — wired in a real machine (replay end-state)", () => {
     const bound = bindMachine(makeWalkMachine(offsetPolicy), ctx);
     const { state } = bound.replay({
       msgs: [
-        { type: "start" }, // → fetching(0)
-        { type: "page", count: -100, next: 20 }, // poison: seen would go -100
-        { type: "page", count: 5, next: 40 }, // 5 items → must reach mark (hwm 5)
+        { _tag: "start" }, // → fetching(0)
+        { _tag: "page", count: -100, next: 20 }, // poison: seen would go -100
+        { _tag: "page", count: 5, next: 40 }, // 5 items → must reach mark (hwm 5)
       ],
     });
     // hwm is 5. With the floor, seen = max(0,0-100)=0, then max(0,0+5)=5 ≥ 5 →
@@ -502,9 +502,9 @@ describe("paginator — wired in a real machine (replay end-state)", () => {
     const bound = bindMachine(makeWalkMachine(offsetPolicy), ctx);
     const { state } = bound.replay({
       msgs: [
-        { type: "start" },
-        { type: "page", count: Number.NaN, next: 20 }, // poison: seen would be NaN
-        { type: "page", count: 5, next: 40 }, // must reach mark (hwm 5)
+        { _tag: "start" },
+        { _tag: "page", count: Number.NaN, next: 20 }, // poison: seen would be NaN
+        { _tag: "page", count: 5, next: 40 }, // must reach mark (hwm 5)
       ],
     });
     expect(state).toEqual({ phase: "paused", cursor: 40, seen: 5, pages: 2 });
@@ -518,9 +518,9 @@ describe("paginator — wired in a real machine (replay end-state)", () => {
     bound.expectFinalState(
       {
         msgs: [
-          { type: "start" },
-          { type: "page", count: 2, next: 20 },
-          { type: "page", count: 1, next: undefined }, // missing cursor → done
+          { _tag: "start" },
+          { _tag: "page", count: 2, next: 20 },
+          { _tag: "page", count: 1, next: undefined }, // missing cursor → done
         ],
       },
       { phase: "done", seen: 3, pages: 2 },
@@ -532,11 +532,11 @@ describe("paginator — wired in a real machine (replay end-state)", () => {
     bound.expectFinalState(
       {
         msgs: [
-          { type: "start" },
-          { type: "page", count: 5, next: 20 }, // → paused(20)
-          { type: "drain", n: 3 }, // seen 2 < mark
-          { type: "resume" }, // → fetching(20)
-          { type: "page", count: 1, next: null }, // → done
+          { _tag: "start" },
+          { _tag: "page", count: 5, next: 20 }, // → paused(20)
+          { _tag: "drain", n: 3 }, // seen 2 < mark
+          { _tag: "resume" }, // → fetching(20)
+          { _tag: "page", count: 1, next: null }, // → done
         ],
       },
       { phase: "done", seen: 3, pages: 2 },

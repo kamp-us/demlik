@@ -76,7 +76,7 @@ import { type EffectBootingRun, effectHandle } from "./handle";
  * handle (see {@link CellErrors}). `R` is whatever services it reads.
  */
 export type EffectInterpretCell<
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   R = unknown,
 > =
@@ -90,11 +90,11 @@ export type EffectInterpretCell<
  * services within `R`.
  */
 export type EffectInterpret<
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   R = unknown,
 > = {
-  readonly [K in C["type"]]: EffectInterpretCell<M, Extract<C, { type: K }>, R>;
+  readonly [K in C["_tag"]]: EffectInterpretCell<M, Extract<C, { _tag: K }>, R>;
 };
 
 /**
@@ -107,7 +107,7 @@ export type EffectInterpret<
  * `"sub"` and stops the run (#309), and `done()` fails with `SubFailed`.
  */
 export type EffectRunner<
-  M extends { type: string },
+  M extends { _tag: string },
   U extends Sub,
   R = unknown,
 > = (sub: U) => Stream.Stream<M, unknown, R>;
@@ -118,19 +118,19 @@ export type EffectRunner<
  * replaces the engine's own (#270 R2.1).
  */
 export type EffectSubscribe<
-  M extends { type: string },
+  M extends { _tag: string },
   U extends Sub,
   R = unknown,
 > = {
-  readonly [K in Exclude<U["type"], BuiltinSubType>]: EffectRunner<
+  readonly [K in Exclude<U["_tag"], BuiltinSubType>]: EffectRunner<
     M,
-    Extract<U, { type: K }>,
+    Extract<U, { _tag: K }>,
     R
   >;
 } & {
   readonly [K in BuiltinSubType]?: EffectRunner<
     M,
-    Extract<BuiltinSub<M>, { type: K }>,
+    Extract<BuiltinSub<M>, { _tag: K }>,
     R
   >;
 };
@@ -152,10 +152,10 @@ type ServicesOfCell<F> = F extends (
  * declared failure settles its `_err` Msg instead, so it adds nothing here.
  */
 export type CellErrors<C extends Cmd, I> = {
-  [K in keyof I & C["type"]]: unknown extends ErrorsOf<Extract<C, { type: K }>>
+  [K in keyof I & C["_tag"]]: unknown extends ErrorsOf<Extract<C, { _tag: K }>>
     ? ErrorOfCell<I[K]>
     : never;
-}[keyof I & C["type"]];
+}[keyof I & C["_tag"]];
 
 type ErrorOfCell<F> = F extends (
   cmd: never,
@@ -182,7 +182,7 @@ export type InterpretOption<C extends Cmd, I> = [C] extends [Cmd<never>]
   : { readonly interpret: I };
 
 export type SubscribeOption<U extends Sub, B> = [
-  Exclude<U["type"], BuiltinSubType>,
+  Exclude<U["_tag"], BuiltinSubType>,
 ] extends [never]
   ? { readonly subscribe?: B }
   : { readonly subscribe: B };
@@ -194,11 +194,11 @@ export type SubscribeOption<U extends Sub, B> = [
  */
 export type EffectRunOptions<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
-  E extends { type: string },
+  E extends { _tag: string },
   I,
   B,
 > = CtxArg<Ctx> &
@@ -334,14 +334,14 @@ export function settleCellExit(
  */
 export function run<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
   // The defaults read no services, so an omitted map adds none to `R`.
   I extends EffectInterpret<M, C> = EffectInterpret<M, C, never>,
   B extends EffectSubscribe<M, U> = EffectSubscribe<M, U, never>,
-  E extends { type: string } = never,
+  E extends { _tag: string } = never,
 >(
   machine: Machine<S, M, C, U, Ctx>,
   opts: EffectRunOptions<S, M, C, U, Ctx, E, I, B>,
@@ -403,11 +403,11 @@ type AnyRunner = (sub: Sub) => Stream.Stream<unknown, unknown>;
 
 function start<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
-  E extends { type: string },
+  E extends { _tag: string },
 >(
   machine: Machine<S, M, C, U, Ctx>,
   opts: EffectRunOptions<S, M, C, U, Ctx, E, unknown, unknown>,
@@ -433,7 +433,7 @@ function start<
   // hand-written one it rejects the dispatch. A hand-written cell's failure is
   // marked, so the handle fails the dispatch with it as a typed error.
   async function settle(cell: AnyCell, cmd: unknown): Promise<unknown> {
-    const type = (cmd as { type: string }).type;
+    const type = (cmd as { _tag: string })._tag;
     const exit = await runEffect(cellResult(cell(cmd)), {
       signal: interruption.signal,
     });

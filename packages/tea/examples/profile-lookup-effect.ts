@@ -28,6 +28,6 @@ export const lookUp = (id: string) =>
   Effect.gen(function* () {
     const handle = yield* runProfile;
     const runtime = yield* handle.ready;
-    yield* runtime.dispatch({ type: "look_up", id });
+    yield* runtime.dispatch({ _tag: "look_up", id });
     return runtime.getState();
   }).pipe(Effect.scoped);

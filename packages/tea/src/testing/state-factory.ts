@@ -45,7 +45,7 @@
 // ---------------------------------------------------------------------------
 
 /** A factory-constructed phase: `S` narrowed to the arm whose discriminator equals `K`. */
-type StateOf<S, K> = Extract<S, { type: K }>;
+type StateOf<S, K> = Extract<S, { _tag: K }>;
 
 /** A factory-constructed phase with the `type` discriminator removed — the "fields the caller cares about" half. */
 type RequiredFields<T> = Omit<T, "type">;
@@ -55,8 +55,8 @@ type RequiredFields<T> = Omit<T, "type">;
  * set: every phase MUST have an entry, and that entry MUST match the phase's
  * required fields minus the `type` discriminator.
  */
-export type StateFactoryDefaults<S extends { type: string }> = {
-  readonly [K in S["type"]]: RequiredFields<StateOf<S, K>>;
+export type StateFactoryDefaults<S extends { _tag: string }> = {
+  readonly [K in S["_tag"]]: RequiredFields<StateOf<S, K>>;
 };
 
 /**
@@ -65,8 +65,8 @@ export type StateFactoryDefaults<S extends { type: string }> = {
  * object merges those overrides in (with undefineds stripped — see
  * stripUndefined below).
  */
-export type StateFactoryAPI<S extends { type: string }> = {
-  readonly [K in S["type"]]: (
+export type StateFactoryAPI<S extends { _tag: string }> = {
+  readonly [K in S["_tag"]]: (
     overrides?: Partial<RequiredFields<StateOf<S, K>>>,
   ) => StateOf<S, K>;
 };
@@ -110,7 +110,7 @@ function stripUndefined<T extends object>(obj: T): Partial<T> {
  * f.b({ s: "hi" });   // { type: "b", s: "hi" }
  * ```
  */
-export function stateFactory<S extends { type: string }>(
+export function stateFactory<S extends { _tag: string }>(
   defaults: StateFactoryDefaults<S>,
 ): StateFactoryAPI<S> {
   // Build the API by walking the defaults' own keys. Each key corresponds
@@ -125,7 +125,7 @@ export function stateFactory<S extends { type: string }>(
       // The strip-undefined pass lives here, not at the caller. See the
       // module header for the `exactOptionalPropertyTypes` rationale.
       const cleanedOverrides = overrides ? stripUndefined(overrides) : {};
-      return { type: key, ...phaseDefaults, ...cleanedOverrides };
+      return { _tag: key, ...phaseDefaults, ...cleanedOverrides };
     };
   }
   return api as StateFactoryAPI<S>;

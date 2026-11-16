@@ -132,7 +132,7 @@ export type AgentCompactRunCmd = Cmd<typeof MsgType.CompactRun> & {
 
 /** The compaction round-trip success settle Msg — carries the parsed {@link CompactionSummary}. */
 export type AgentCompactOkMsg = {
-  readonly type: typeof MsgType.CompactOk;
+  readonly _tag: typeof MsgType.CompactOk;
   readonly key: CompactionPurpose;
   readonly result: LlmOk<CompactionPurpose, CompactionOutputs>;
   readonly at: number;
@@ -140,7 +140,7 @@ export type AgentCompactOkMsg = {
 
 /** The compaction round-trip failure settle Msg — carries the typed {@link LlmErr}. */
 export type AgentCompactErrMsg = {
-  readonly type: typeof MsgType.CompactErr;
+  readonly _tag: typeof MsgType.CompactErr;
   readonly key: CompactionPurpose;
   readonly error: LlmErr<CompactionPurpose>;
   readonly at: number;
@@ -163,7 +163,7 @@ export type AgentCompactErrMsg = {
  * EXACTLY when the Cmd can fire, never as a silent gap the agent backfills.
  */
 export type CompactInterpret<
-  M extends { type: string },
+  M extends { _tag: string },
   Compact extends boolean,
   Ctx,
 > = Compact extends true

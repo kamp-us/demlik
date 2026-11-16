@@ -18,7 +18,7 @@ import { fromPort } from "./from-port";
 // and reconciling the Sub out unsubscribes from the Port.
 
 type PubState = { readonly count: number };
-type PubMsg = { readonly type: "noop" };
+type PubMsg = { readonly _tag: "noop" };
 const pubUpdate: Reducer<PubState, PubMsg, never> = {
   noop: (s) => [s, []],
 };
@@ -34,8 +34,8 @@ type Ctx = { readonly pub: Runtime<PubState, PubMsg> };
 type LevelSub = Sub<"level", Readonly<Record<string, never>>>;
 type State = { readonly armed: boolean; readonly levels: readonly number[] };
 type Msg =
-  | { readonly type: "level"; readonly value: number }
-  | { readonly type: "disarm" };
+  | { readonly _tag: "level"; readonly value: number }
+  | { readonly _tag: "disarm" };
 
 const update: Reducer<State, Msg, never> = {
   level: (s, m) => [{ ...s, levels: [...s.levels, m.value] }, []],
@@ -51,7 +51,7 @@ const consumerMachine = defineMachine({
   },
   init: () => [{ armed: true, levels: [] }, []],
   update,
-  subs: [{ type: "level", deps: (s) => (s.armed ? {} : null) }],
+  subs: [{ _tag: "level", deps: (s) => (s.armed ? {} : null) }],
 });
 
 function consumerRunners(port: Port<number>) {
@@ -59,7 +59,7 @@ function consumerRunners(port: Port<number>) {
     level: fromPort<LevelSub, Msg, Ctx, number, PubState, PubMsg>(
       (ctx) => ctx.pub,
       port,
-      (value) => (value < 0 ? null : { type: "level", value }),
+      (value) => (value < 0 ? null : { _tag: "level", value }),
     ),
   };
 }
@@ -114,7 +114,7 @@ describe("fromPort — subscribe → deliver → cleanup across two real runtime
     await consumer.idle();
     expect(consumer.getState().levels).toEqual([1]);
 
-    await consumer.dispatch({ type: "disarm" });
+    await consumer.dispatch({ _tag: "disarm" });
     pub.emitPort(port, 99);
     await consumer.idle();
     expect(consumer.getState().levels).toEqual([1]); // cleanup unsubscribed

@@ -10,7 +10,7 @@ import { type Postable, post } from "../internal/engine/loop";
 import { DispatchDiscardedError, type OnError } from "../runtime-types";
 
 /** What a `send` can be built on: a run with a line to post to, or only its own `dispatch`. */
-export type SendTarget<S, M extends { type: string }> =
+export type SendTarget<S, M extends { _tag: string }> =
   | Postable<S, M>
   | { dispatch(msg: M): Promise<void> };
 
@@ -28,7 +28,7 @@ const everyState = (): boolean => true;
  * discard. A handle with only `dispatch` (hand-built, or an engine with no line)
  * sends `report` whatever that `dispatch` rejects with.
  */
-export function senderOf<S, M extends { type: string }>(
+export function senderOf<S, M extends { _tag: string }>(
   target: SendTarget<S, M>,
   report: OnError,
 ): (msg: M) => void {
@@ -36,7 +36,7 @@ export function senderOf<S, M extends { type: string }>(
     const line = target[post];
     return (msg) => {
       if (line(msg, everyState) === "stopped")
-        report(new DispatchDiscardedError(msg.type), { phase: "discard" });
+        report(new DispatchDiscardedError(msg._tag), { phase: "discard" });
     };
   }
   return (msg) => {

@@ -24,9 +24,9 @@ import { run } from "./promise";
 // `formOf`.
 // ───────────────────────────────────────────────────────────────────────────
 
-type LState = { readonly type: "red" } | { readonly type: "green" };
-type LMsg = { readonly type: "go" } | { readonly type: "stop" };
-type LCmd = { readonly type: "ping" };
+type LState = { readonly _tag: "red" } | { readonly _tag: "green" };
+type LMsg = { readonly _tag: "go" } | { readonly _tag: "stop" };
+type LCmd = { readonly _tag: "ping" };
 
 // A real `ping` handler key, so `run` has a cell for every Cmd variant.
 // Never invoked — no cell emits `ping`.
@@ -46,7 +46,7 @@ function disambiguatedMachine(): Machine<LState, LMsg, LCmd, never, undefined> {
     },
     {
       go: (_s: LState, _m: LMsg) =>
-        [{ type: "green" }, []] as readonly [LState, readonly LCmd[]],
+        [{ _tag: "green" }, []] as readonly [LState, readonly LCmd[]],
       stop: (s: LState, _m: LMsg) =>
         [s, []] as readonly [LState, readonly LCmd[]],
     },
@@ -57,11 +57,11 @@ function disambiguatedMachine(): Machine<LState, LMsg, LCmd, never, undefined> {
       go: (s: LState, _m: LMsg) =>
         [s, []] as readonly [LState, readonly LCmd[]],
       stop: (_s: LState, _m: LMsg) =>
-        [{ type: "red" }, []] as readonly [LState, readonly LCmd[]],
+        [{ _tag: "red" }, []] as readonly [LState, readonly LCmd[]],
     },
   } as unknown as Transitions<LState, LMsg, LCmd>;
   const def: Machine<LState, LMsg, LCmd, never, undefined> = {
-    init: () => [{ type: "red" }, []],
+    init: () => [{ _tag: "red" }, []],
     update,
   };
   // Stamp the correct form the way the typed construction boundary would.
@@ -76,7 +76,7 @@ function disambiguatedMachine(): Machine<LState, LMsg, LCmd, never, undefined> {
   return defineMachine(def);
 }
 
-const GO: LMsg = { type: "go" };
+const GO: LMsg = { _tag: "go" };
 
 describe("applyCell vertical tracer — every consumer agrees on the __form-disambiguated machine (#275)", () => {
   it("the machine IS disambiguated: __form contradicts the structural heuristic", () => {
@@ -89,21 +89,21 @@ describe("applyCell vertical tracer — every consumer agrees on the __form-disa
     const rt = await run(disambiguatedMachine(), { ctx: undefined, interpret })
       .ready;
     await rt.dispatch(GO);
-    expect(rt.getState()).toEqual({ type: "green" });
+    expect(rt.getState()).toEqual({ _tag: "green" });
   });
 
   it("the pure folds (foldMsgs, replay) agree", () => {
     const m = disambiguatedMachine();
-    expect(foldMsgs(m, { type: "red" }, [GO])).toEqual({ type: "green" });
+    expect(foldMsgs(m, { _tag: "red" }, [GO])).toEqual({ _tag: "green" });
     const { state } = replay(m, { msgs: [GO], ctx: undefined });
-    expect(state).toEqual({ type: "green" });
+    expect(state).toEqual({ _tag: "green" });
   });
 
   it("the PBT fold runner (foldEvents) agrees", () => {
     const { finalState } = foldEvents(disambiguatedMachine(), undefined, null, [
       GO,
     ]);
-    expect(finalState).toEqual({ type: "green" });
+    expect(finalState).toEqual({ _tag: "green" });
   });
 
   it("machine-viz classifies it as Transitions form", () => {

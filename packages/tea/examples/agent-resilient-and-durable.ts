@@ -26,7 +26,14 @@
  *          (Node 23 strips the types; no build step for the example itself.)
  */
 
-import { defineMachine, type Interpret, type Machine, type Reducer, type Runtime, type Store } from "@demlik/tea";
+import {
+  defineMachine,
+  type Interpret,
+  type Machine,
+  type Reducer,
+  type Runtime,
+  type Store,
+} from "@demlik/tea";
 import { run } from "@demlik/tea/promise";
 import {
   type AgentCmd,
@@ -99,7 +106,7 @@ interface ToolState {
 // `call` carries `at` — the wall time the triggering Msg supplies as data
 // (time-as-data), so the breaker and bucket compare against real wall time.
 type ToolMsg =
-  | { readonly type: "call"; readonly city: string; readonly at: number }
+  | { readonly _tag: "call"; readonly city: string; readonly at: number }
   | ResilientTimerMsg;
 
 interface ToolCtx {
@@ -140,7 +147,7 @@ const toolStep = defineMachine({
       return [{ ...s, call }, cmds];
     },
   },
-  subs: [{ type: "timer", deps: (s: ToolState) => weatherCall.timer(s.call) }],
+  subs: [{ _tag: "timer", deps: (s: ToolState) => weatherCall.timer(s.call) }],
 });
 
 // The machine is data; its handler rides beside it, and `run` takes it. It
@@ -178,7 +185,7 @@ async function act1Reliability() {
     .ready;
 
   say("the agent dispatched ONE tool call: weather('Istanbul')");
-  await runtime.dispatch({ type: "call", city: "Istanbul", at: Date.now() });
+  await runtime.dispatch({ _tag: "call", city: "Istanbul", at: Date.now() });
 
   // The first attempt throws, `settle` backs off and the retry timer fires,
   // `onTimer` re-gates, and the second attempt succeeds. The recovered result
@@ -198,7 +205,9 @@ async function act1Reliability() {
   say(
     `circuit breaker now: ${r.circuit.phase} (it absorbed the failure, then closed)`,
   );
-  say(`retry slice for the call: ${JSON.stringify(r.retry)}  ← reset on success`);
+  say(
+    `retry slice for the call: ${JSON.stringify(r.retry)}  ← reset on success`,
+  );
   say(
     "→ the machine wired four plain functions and one handler. The retry,\n" +
       "  the breaker and the backoff are data in the Model — not a loop your\n" +
@@ -246,8 +255,8 @@ const turnOf = (stage: Stage | undefined): Purpose =>
 
 // The per-tool effect Cmd, as data — a CLOSED variant so the agent's `TC` type
 // stays precise and the wired interpret merge type-checks per key.
-type RunTool = { readonly type: "run_tool" } & ToolCall;
-const toolOf = (call: ToolCall): RunTool => ({ type: "run_tool", ...call });
+type RunTool = { readonly _tag: "run_tool" } & ToolCall;
+const toolOf = (call: ToolCall): RunTool => ({ _tag: "run_tool", ...call });
 
 const tool = (callId: string, name: string): ToolCall => ({
   callId,
@@ -337,7 +346,7 @@ const TOOLS: Record<string, string> = { fetch_docs: FETCH_DOCS_RESULT };
 function toolInterpret(): Interpret<AgentMsg, RunTool, object> {
   return {
     run_tool: async (cmd): Promise<AgentMsg> => ({
-      type: "agent_tool_ok",
+      _tag: "agent_tool_ok",
       callId: cmd.callId,
       result: TOOLS[cmd.name] ?? `ran:${cmd.name}`,
       at: 0,
@@ -428,7 +437,7 @@ async function act2Durability() {
 
   // Boot reconcile re-fires the ONE outstanding effect (the in-flight brain
   // call), and the loop runs to completion — across two stages, to `done`.
-  await runtimeB.dispatch({ type: "agent_boot", at: 1000 });
+  await runtimeB.dispatch({ _tag: "agent_boot", at: 1000 });
   await driveToDone(runtimeB);
 
   const finished = runtimeB.getState();
@@ -467,7 +476,7 @@ async function act3Replay() {
   const rec = recorder<ResearchState, AgentMsg>(runtime);
 
   say("prod: recording the Msg trace of a full agent run...");
-  await runtime.dispatch({ type: "agent_start", runId: "run-99", at: 0 });
+  await runtime.dispatch({ _tag: "agent_start", runId: "run-99", at: 0 });
   await driveToDone(runtime);
   await runtime.stop();
 
@@ -475,7 +484,7 @@ async function act3Replay() {
   rec.stop();
   say(
     `recorder captured ${trace.msgs.length} msgs: ` +
-      `[${trace.msgs.map((m) => m.type).join(", ")}]`,
+      `[${trace.msgs.map((m) => m._tag).join(", ")}]`,
   );
 
   // --- DEBUG LOCALLY: replay the trace against the SAME machine — no I/O. ---

@@ -49,11 +49,11 @@ interface GameState {
   readonly pos: { readonly x: number; readonly y: number };
 }
 interface Move {
-  readonly type: "move";
+  readonly _tag: "move";
   readonly dx: number;
   readonly dy: number;
 }
-const move = (dx: number, dy: number): Move => ({ type: "move", dx, dy });
+const move = (dx: number, dy: number): Move => ({ _tag: "move", dx, dy });
 const ORIGIN: GameState = { pos: { x: 0, y: 0 } };
 
 const update: Reducer<GameState, Move, never> = {

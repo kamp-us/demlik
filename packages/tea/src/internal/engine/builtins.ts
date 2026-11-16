@@ -49,7 +49,7 @@ type AnyExtension<S, M, C> = ExtensionFactory<S, M, C>;
  * rehydrate, and `stop` does not halt. The refusal stays loud; it just is not
  * the program's failure.
  */
-export function supervision<S, M extends { type: string }, C>(
+export function supervision<S, M extends { _tag: string }, C>(
   declared: Supervision<S, M> | undefined,
   machine: CellTable,
 ): AnyExtension<S, M, C> {
@@ -90,7 +90,7 @@ type CellTable = Parameters<typeof lookupCell>[0];
  * `NoCellError` raised INSIDE a cell that does exist (a reducer stepping a
  * child machine by hand) is that reducer failing, and stays supervised.
  */
-function isRefusal<S, M extends { type: string }>(
+function isRefusal<S, M extends { _tag: string }>(
   machine: CellTable,
   error: unknown,
   state: S,
@@ -113,7 +113,7 @@ function isRefusal<S, M extends { type: string }>(
  * Sits INSIDE {@link supervision}, so a throwing `ofMsg` / `ofState` is reported
  * and supervised exactly like a reducer throw (spike #264 run 3).
  */
-export function identityFilter<S, M extends { type: string }, C>(
+export function identityFilter<S, M extends { _tag: string }, C>(
   identity: Identity<S, M> | undefined,
 ): AnyExtension<S, M, C> {
   return (loop) => {
@@ -128,7 +128,7 @@ export function identityFilter<S, M extends { type: string }, C>(
     return {
       update: (next) => (state, msg) => {
         if (!misaddressed(msg, state)) return next(state, msg);
-        loop.report(new IdentityDropNotice(msg.type), "identity-drop");
+        loop.report(new IdentityDropNotice(msg._tag), "identity-drop");
         return null;
       },
     };
@@ -141,7 +141,7 @@ export function identityFilter<S, M extends { type: string }, C>(
  * shape. Both compile out of production. Innermost, so it sees exactly what the
  * reducer saw.
  */
-export function devChecks<S, M extends { type: string }, C>(): AnyExtension<
+export function devChecks<S, M extends { _tag: string }, C>(): AnyExtension<
   S,
   M,
   C
@@ -169,7 +169,7 @@ export function devChecks<S, M extends { type: string }, C>(): AnyExtension<
  * so a handler that runs a base handler inside its own settles the base's
  * outcome through this one edge (#66).
  */
-export function cmdDefinitions<S, M extends { type: string }, C>(
+export function cmdDefinitions<S, M extends { _tag: string }, C>(
   defs: readonly AnyCmdDef[],
   clock: () => number,
 ): AnyExtension<S, M, C> {
@@ -178,11 +178,11 @@ export function cmdDefinitions<S, M extends { type: string }, C>(
     const defined = new Set(defs.map((d) => d.cmdType));
     return {
       interpret: (next) => async (cmd, dispatch) => {
-        const type = (cmd as { type: string }).type;
+        const type = (cmd as { _tag: string })._tag;
         const checked = defined.has(type)
           ? (msg: M) => {
               try {
-                check(cmd as { type: string }, msg);
+                check(cmd as { _tag: string }, msg);
               } catch (err) {
                 loop.report(err, "interpret");
                 return;
@@ -191,7 +191,7 @@ export function cmdDefinitions<S, M extends { type: string }, C>(
             }
           : dispatch;
         try {
-          return settle(cmd as { type: string }, await next(cmd, checked));
+          return settle(cmd as { _tag: string }, await next(cmd, checked));
         } catch (err) {
           if (!defined.has(type)) throw err;
           loop.report(err, "interpret");
@@ -353,7 +353,7 @@ function subscribeTo<T>(set: Set<T>): (item: T) => () => void {
  * machine's private Msg names never reach `on`. A throw in the projector or a
  * handler is isolated under `"event"`. Boot projects nothing.
  */
-export function semanticEvents<S, M, C, E extends { type: string }>(
+export function semanticEvents<S, M, C, E extends { _tag: string }>(
   project: ((msg: M, state: S) => readonly E[]) | undefined,
 ): AnyExtension<S, M, C> {
   return (loop) => {
@@ -370,7 +370,7 @@ export function semanticEvents<S, M, C, E extends { type: string }>(
           return;
         }
         for (const event of events) {
-          const bucket = handlers.get(event.type);
+          const bucket = handlers.get(event._tag);
           if (bucket === undefined) continue;
           loop.fanout(bucket, "event", (handler) => handler(event));
         }
@@ -433,7 +433,7 @@ export function terminality<S, M, C>(
         const terminal = holds(state);
         // A terminal State still waiting on its save keeps its waiters. A saved
         // one can have them too: a runner that throws skips its step's commit.
-        if (terminal && loop.saveStatus().type !== "saved") return;
+        if (terminal && loop.saveStatus()._tag !== "saved") return;
         const parked = [...waiters];
         waiters.clear();
         for (const waiter of parked) {
@@ -443,7 +443,7 @@ export function terminality<S, M, C>(
       },
       commit(_msg, state) {
         if (
-          loop.saveStatus().type !== "saved" ||
+          loop.saveStatus()._tag !== "saved" ||
           waiters.size === 0 ||
           !holds(state)
         )
@@ -461,7 +461,7 @@ export function terminality<S, M, C>(
       handle: {
         result(): S | undefined {
           const current = loop.state() as S;
-          return loop.saveStatus().type === "saved" && holds(current)
+          return loop.saveStatus()._tag === "saved" && holds(current)
             ? current
             : undefined;
         },
@@ -469,8 +469,8 @@ export function terminality<S, M, C>(
           const current = loop.state() as S;
           if (holds(current)) {
             const saved = loop.saveStatus();
-            if (saved.type === "saved") return Promise.resolve(current);
-            if (saved.type === "failed") return Promise.reject(saved.error);
+            if (saved._tag === "saved") return Promise.resolve(current);
+            if (saved._tag === "failed") return Promise.reject(saved.error);
           } else if (stoppedBy !== undefined) {
             return Promise.reject(stoppedBy.answer);
           }
@@ -490,7 +490,7 @@ export function terminality<S, M, C>(
  * on the sink, and a sink that throws or rejects reaches `onError` under
  * `"observer"` without touching the run.
  */
-export function telemetry<S, M extends { type: string }, C>(
+export function telemetry<S, M extends { _tag: string }, C>(
   sink: TelemetrySink | undefined,
   clock: () => number,
 ): AnyExtension<S, M, C> {
@@ -501,7 +501,7 @@ export function telemetry<S, M extends { type: string }, C>(
       commit(msg) {
         if (msg === undefined) return;
         seq += 1;
-        const event: TelemetryEvent = { seq, msgType: msg.type, at: clock() };
+        const event: TelemetryEvent = { seq, msgType: msg._tag, at: clock() };
         try {
           Promise.resolve(sink(event)).catch((err: unknown) =>
             loop.report(err, "observer"),
@@ -519,8 +519,8 @@ export function telemetry<S, M extends { type: string }, C>(
 /** The `run` options the built-ins read. Every engine's `run` accepts them. */
 export interface BuiltinOptions<
   S,
-  M extends { type: string },
-  E extends { type: string },
+  M extends { _tag: string },
+  E extends { _tag: string },
 > {
   readonly clock?: () => number;
   readonly events?: (msg: M, state: S) => readonly E[];
@@ -542,9 +542,9 @@ export interface BuiltinOptions<
  */
 export function builtinExtensions<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C,
-  E extends { type: string },
+  E extends { _tag: string },
 >(
   machine: CellTable & {
     readonly identity?: Identity<S, M>;

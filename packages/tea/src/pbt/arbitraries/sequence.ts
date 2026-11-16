@@ -50,7 +50,7 @@ import {
  * arbMsgSequence(msgArb, { maxLength: 60, size: "max" });
  * ```
  */
-export function arbMsgSequence<M extends { type: string }>(
+export function arbMsgSequence<M extends { _tag: string }>(
   msgArb: fc.Arbitrary<M>,
   opts?: {
     readonly minLength?: number;
@@ -92,16 +92,16 @@ export interface AnswerCell<K extends Cmd, V, M> {
  * cell is never answered. A Msg type in neither table is never drawn.
  */
 export interface GuidedCells<
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
-  A extends { readonly [K in C["type"]]?: unknown },
+  A extends { readonly [K in C["_tag"]]?: unknown },
 > {
   readonly outside?: {
-    readonly [K in M["type"]]?: fc.Arbitrary<Extract<M, { type: K }>>;
+    readonly [K in M["_tag"]]?: fc.Arbitrary<Extract<M, { _tag: K }>>;
   };
   readonly answers?: {
-    readonly [K in keyof A]: K extends C["type"]
-      ? AnswerCell<Extract<C, { type: K }>, A[K], M>
+    readonly [K in keyof A]: K extends C["_tag"]
+      ? AnswerCell<Extract<C, { _tag: K }>, A[K], M>
       : never;
   };
 }
@@ -185,11 +185,11 @@ export interface GuidedCells<
  */
 export function arbGuidedSequence<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
-  A extends { readonly [K in C["type"]]?: unknown },
+  A extends { readonly [K in C["_tag"]]?: unknown },
 >(
   machine: Machine<S, M, C, U, Ctx>,
   ctx: NoInfer<Ctx>,

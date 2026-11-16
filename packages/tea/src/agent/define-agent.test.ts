@@ -206,7 +206,7 @@ describe("defineAgent — the three-line program (ADR 0015's pass/fail test)", (
     const { machine, interpret, subscribe } = agent.machine(INPUT);
     const final = await driveToDone(
       run(machine, { ctx: { kb }, interpret, subscribe }),
-      { type: "agent_start", runId: "r", at: 0 },
+      { _tag: "agent_start", runId: "r", at: 0 },
       (s) => s.run.phase === "done",
     );
     expect(final.output).toEqual(ANSWER);
@@ -449,7 +449,7 @@ describe("instructions live in the durable Model (ADR 0004)", () => {
       model,
       schemas: { act: { parse: (v) => v as AgentTurn } },
       turnOf: () => "act",
-      toolOf: (call) => ({ type: "run_tool", callId: call.callId }),
+      toolOf: (call) => ({ _tag: "run_tool", callId: call.callId }),
       instructions: INSTRUCTIONS,
       compaction: { planCompaction: (c) => (c.turns.length >= 2 ? 2 : 0) },
     });
@@ -471,7 +471,7 @@ describe("instructions live in the durable Model (ADR 0004)", () => {
       s,
       COMPACTION_PURPOSE,
       {
-        type: "compact_ok",
+        _tag: "compact_ok",
         key: COMPACTION_PURPOSE,
         result: {
           key: COMPACTION_PURPOSE,
@@ -487,7 +487,7 @@ describe("instructions live in the durable Model (ADR 0004)", () => {
     ]);
     expect(folded.instructions).toBe(INSTRUCTIONS);
     // The brain call fired on the shrunk transcript still carries them.
-    const fired = cmds.find((c) => c.type === "resilient_run") as
+    const fired = cmds.find((c) => c._tag === "resilient_run") as
       | LlmRunCmd<"act">
       | undefined;
     expect(fired).toBeDefined();
@@ -511,7 +511,7 @@ describe("instructions live in the durable Model (ADR 0004)", () => {
     });
     await driveToDone(
       handle,
-      { type: "agent_start", runId: "run-1", at: 0 },
+      { _tag: "agent_start", runId: "run-1", at: 0 },
       (s) => s.run.phase === "done",
     );
     off();
@@ -521,7 +521,7 @@ describe("instructions live in the durable Model (ADR 0004)", () => {
     const msgs = (await journal.list("run-1")).map((e) => e.record);
     const { state, cmds } = replay(machine, { msgs, ctx: { kb } });
     const first = cmds.find(
-      (c) => c.type === "resilient_run",
+      (c) => c._tag === "resilient_run",
     ) as LlmRunCmd<"act">;
     const prompt = first.input.payload as AgentPrompt<unknown>;
     expect(prompt.instructions).toBe(INSTRUCTIONS);
@@ -560,7 +560,7 @@ describe("instructions live in the durable Model (ADR 0004)", () => {
         interpret: wired.interpret,
         subscribe: wired.subscribe,
       }),
-      { type: "agent_start", runId: "run-2", at: 0 },
+      { _tag: "agent_start", runId: "run-2", at: 0 },
       (s) => s.run.phase === "done",
     );
     // The stored Model was already `done`, so the drive resolved on the boot
@@ -579,7 +579,7 @@ describe("instructions live in the durable Model (ADR 0004)", () => {
 
 describe("AgentTurn.provider — the opaque passthrough slot (#93)", () => {
   const PROVIDER = {
-    blocks: [{ type: "thinking", thinking: "…", signature: "sig-abc" }],
+    blocks: [{ _tag: "thinking", thinking: "…", signature: "sig-abc" }],
   };
   const ASK_WITH_PROVIDER: AgentTurn = { ...ASK, provider: PROVIDER };
 
@@ -608,7 +608,7 @@ describe("AgentTurn.provider — the opaque passthrough slot (#93)", () => {
     });
     await driveToDone(
       handle,
-      { type: "agent_start", runId: "run-1", at: 0 },
+      { _tag: "agent_start", runId: "run-1", at: 0 },
       (s) => s.run.phase === "done",
     );
     off();
@@ -762,7 +762,7 @@ describe("onEvent — turn-level events off the lid (#122)", () => {
   it("delivers the lifecycle events in the order the kernel settles them", async () => {
     const { final, events } = await collect();
 
-    expect(events.map((e) => e.type)).toEqual([
+    expect(events.map((e) => e._tag)).toEqual([
       "BrainStarted",
       "TurnSettled",
       "ToolStarted",
@@ -774,26 +774,26 @@ describe("onEvent — turn-level events off the lid (#122)", () => {
     // Each event carries the settle it names, typed against this agent's
     // tools, and the run it belongs to.
     const head = { runId: "run-pinned", at: expect.any(Number) };
-    expect(events[0]).toMatchObject({ type: "BrainStarted", turn: 0 });
-    expect(events[1]).toEqual({ ...head, type: "TurnSettled", turn: ASK });
+    expect(events[0]).toMatchObject({ _tag: "BrainStarted", turn: 0 });
+    expect(events[1]).toEqual({ ...head, _tag: "TurnSettled", turn: ASK });
     expect(events[2]).toEqual({
       ...head,
-      type: "ToolStarted",
+      _tag: "ToolStarted",
       callId: "c1",
       name: "search",
       args: { q: "tea" },
     });
     expect(events[3]).toEqual({
       ...head,
-      type: "ToolSettled",
+      _tag: "ToolSettled",
       callId: "c1",
       result: { snippet: kb.lookup("tea") },
     });
-    expect(events[4]).toMatchObject({ type: "BrainStarted", turn: 1 });
-    expect(events[5]).toEqual({ ...head, type: "TurnSettled", turn: ANSWER });
+    expect(events[4]).toMatchObject({ _tag: "BrainStarted", turn: 1 });
+    expect(events[5]).toEqual({ ...head, _tag: "TurnSettled", turn: ANSWER });
     expect(events[6]).toEqual({
       ...head,
-      type: "RunDone",
+      _tag: "RunDone",
       status: {
         kind: "done",
         output: ANSWER,
@@ -828,7 +828,7 @@ describe("onEvent — turn-level events off the lid (#122)", () => {
     });
     await driveToDone(
       handle,
-      { type: "agent_start", runId: "run-1", at: 0 },
+      { _tag: "agent_start", runId: "run-1", at: 0 },
       (s) => s.run.phase === "done",
     );
     off();
@@ -853,12 +853,12 @@ describe("onEvent — turn-level events off the lid (#122)", () => {
     // The one thing the boot does is re-issue the outstanding brain call, so
     // that is the one start this process reports — a listener attached after
     // the kill needs it to have anything to settle against.
-    expect(events.map((e) => e.type)).toEqual([
+    expect(events.map((e) => e._tag)).toEqual([
       "BrainStarted",
       "TurnSettled",
       "RunDone",
     ]);
-    expect(events[1]).toMatchObject({ type: "TurnSettled", turn: ANSWER });
+    expect(events[1]).toMatchObject({ _tag: "TurnSettled", turn: ANSWER });
     // …and every event names the run the killed process started (#331).
     expect(new Set(events.map((e) => e.runId))).toEqual(new Set(["run-1"]));
   });
@@ -873,7 +873,7 @@ describe("onEvent — turn-level events off the lid (#122)", () => {
       });
 
       // Every event was still offered, and the run reached its terminal Model.
-      expect(events.map((e) => e.type)).toEqual([
+      expect(events.map((e) => e._tag)).toEqual([
         "BrainStarted",
         "TurnSettled",
         "ToolStarted",
@@ -980,7 +980,7 @@ describe("onChunk — the streaming model port (#123)", () => {
     const final = await agent.run(INPUT, {
       ...PINNED,
       onChunk: (chunk) => trace.push(`chunk:${chunk.text}`),
-      onEvent: (event) => trace.push(event.type),
+      onEvent: (event) => trace.push(event._tag),
     });
 
     // Every delta the model wrote, in the order it wrote them.
@@ -1049,7 +1049,7 @@ describe("onChunk — the streaming model port (#123)", () => {
     });
     const live = await driveToDone(
       handle,
-      { type: "agent_start", runId: "run-1", at: 0 },
+      { _tag: "agent_start", runId: "run-1", at: 0 },
       (s) => s.run.phase === "done",
     );
     off();
@@ -1088,7 +1088,7 @@ describe("onChunk — the streaming model port (#123)", () => {
     });
     await driveToDone(
       handle,
-      { type: "agent_start", runId: "run-1", at: 0 },
+      { _tag: "agent_start", runId: "run-1", at: 0 },
       (s) => s.run.phase === "done",
     );
     off();
@@ -1210,7 +1210,7 @@ async function lastConversationState(turns: readonly AgentTurn[]) {
   });
   const final = await driveToDone(
     handle,
-    { type: "agent_start", runId: "run-1", at: 0 },
+    { _tag: "agent_start", runId: "run-1", at: 0 },
     (s) => s.run.phase === "done",
   );
   off();
@@ -1388,7 +1388,7 @@ describe("onToolError — the lid's typed failure seam (#115)", () => {
     });
     await driveToDone(
       handle,
-      { type: "agent_start", runId: "run-1", at: 0 },
+      { _tag: "agent_start", runId: "run-1", at: 0 },
       (s) => s.run.phase === "done",
     );
     off();
@@ -1477,7 +1477,7 @@ describe("defineAgent(...).with — the one wrap point over the built machine", 
     });
     const live = await driveToDone(
       handle,
-      { type: "agent_start", runId: "run-1", at: 0 },
+      { _tag: "agent_start", runId: "run-1", at: 0 },
       (s) => s.run.phase === "done",
     );
     off();
@@ -1487,7 +1487,7 @@ describe("defineAgent(...).with — the one wrap point over the built machine", 
     // The wrapper returned `next`'s Msg, so the journal holds the tool's own
     // `search_ok` and re-folding it purely lands on the same Model.
     const msgs = (await journal.list("run-1")).map((e) => e.record);
-    expect(msgs.map((m) => m.type)).toContain("search_ok");
+    expect(msgs.map((m) => m._tag)).toContain("search_ok");
     const { state } = replay(machine, { msgs, ctx: { kb } });
     expect(state.conversation).toEqual(live.conversation);
     expect(state.output).toEqual(live.output);
@@ -1842,7 +1842,7 @@ async function twoSlowCalls(
     maxRunning = Math.max(maxRunning, s.tools.running.length);
     everPending ||= s.tools.pending.length > 0;
   });
-  await runtime.dispatch({ type: "agent_start", runId: "r", at: 0 });
+  await runtime.dispatch({ _tag: "agent_start", runId: "r", at: 0 });
   await vi.waitFor(() => expect(runtime.getState().run.phase).toBe("done"));
   off();
   const final = runtime.getState();
@@ -1860,7 +1860,7 @@ async function twoSlowCalls(
 /** The `callId`s the run's `slow_ok` Msgs settled, in the order they folded. */
 const settledIds = (msgs: readonly SlowMsg[]) =>
   msgs.flatMap((m) =>
-    m.type === "slow_ok" ? [(m as { cmd: { callId: string } }).cmd.callId] : [],
+    m._tag === "slow_ok" ? [(m as { cmd: { callId: string } }).cmd.callId] : [],
   );
 
 // ADR 0018's option (c), built: the kernel's `runInterpret` still interprets a

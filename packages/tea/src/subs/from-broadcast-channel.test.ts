@@ -48,8 +48,8 @@ class FakeChannel implements MinimalBroadcastChannel {
 type BusSub = Sub<"bus", { readonly channelName: string }>;
 type State = { readonly armed: boolean; readonly seen: readonly string[] };
 type Msg =
-  | { readonly type: "note"; readonly text: string }
-  | { readonly type: "disarm" };
+  | { readonly _tag: "note"; readonly text: string }
+  | { readonly _tag: "disarm" };
 
 const update: Reducer<State, Msg, never> = {
   note: (s, m) => [{ ...s, seen: [...s.seen, m.text] }, []],
@@ -66,13 +66,13 @@ function busMachine(channelName: string) {
     },
     init: () => [{ armed: true, seen: [] }, []],
     update,
-    subs: [{ type: "bus", deps: (s) => (s.armed ? { channelName } : null) }],
+    subs: [{ _tag: "bus", deps: (s) => (s.armed ? { channelName } : null) }],
   });
 }
 
 const subscribe = {
   bus: fromBroadcastChannel<BusSub, Msg>((event) =>
-    typeof event.data === "string" ? { type: "note", text: event.data } : null,
+    typeof event.data === "string" ? { _tag: "note", text: event.data } : null,
   ),
 };
 
@@ -121,7 +121,7 @@ describe("fromBroadcastChannel — subscribe → deliver → cleanup against a r
     expect(channel.listenerCount()).toBe(1);
     expect(channel.closed).toBe(false);
 
-    await rt.dispatch({ type: "disarm" });
+    await rt.dispatch({ _tag: "disarm" });
     expect(channel.listenerCount()).toBe(0);
     expect(channel.closed).toBe(true);
 

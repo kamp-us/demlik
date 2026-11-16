@@ -110,7 +110,7 @@ describe("record — cadence", () => {
     });
     expect(cmds).toEqual([
       {
-        type: "snapshot_write",
+        _tag: "snapshot_write",
         key: "run/cp",
         seq: 1,
         at: 12,
@@ -157,7 +157,7 @@ describe("force — cadence-independent checkpoint", () => {
     });
     expect(cmds).toEqual([
       {
-        type: "snapshot_write",
+        _tag: "snapshot_write",
         key: "@@snapshot",
         seq: 1,
         at: 11,
@@ -243,8 +243,8 @@ describe("boot — resume after reload", () => {
 
 type State = { readonly run: RunState; readonly snap: SnapshotState };
 type Msg =
-  | { readonly type: "progress"; readonly at: number }
-  | { readonly type: "finish"; readonly at: number }
+  | { readonly _tag: "progress"; readonly at: number }
+  | { readonly _tag: "finish"; readonly at: number }
   | SnapshotSavedMsg<RunState>
   | SnapshotFailedMsg<RunState>;
 
@@ -282,13 +282,13 @@ describe("snapshot knob spliced into a machine", () => {
     m.expectCmdSequence(
       {
         msgs: [
-          { type: "progress", at: 1 },
-          { type: "progress", at: 2 },
+          { _tag: "progress", at: 1 },
+          { _tag: "progress", at: 2 },
         ],
       },
       [
         {
-          type: "snapshot_write",
+          _tag: "snapshot_write",
           key: "run/cp",
           seq: 1,
           at: 2,
@@ -303,13 +303,13 @@ describe("snapshot knob spliced into a machine", () => {
     m.expectCmdSequence(
       {
         msgs: [
-          { type: "progress", at: 1 },
-          { type: "finish", at: 9 },
+          { _tag: "progress", at: 1 },
+          { _tag: "finish", at: 9 },
         ],
       },
       [
         {
-          type: "snapshot_write",
+          _tag: "snapshot_write",
           key: "run/cp",
           seq: 1,
           at: 9,
@@ -328,8 +328,8 @@ describe("snapshot knob spliced into a machine", () => {
     });
     const { state } = m.replay({
       msgs: [
-        { type: "progress", at: 1 },
-        { type: "progress", at: 2 }, // seq 1 write emitted
+        { _tag: "progress", at: 1 },
+        { _tag: "progress", at: 2 }, // seq 1 write emitted
         knob.write.ok(write, undefined, 5),
       ],
     });
@@ -355,7 +355,7 @@ describe("the write Cmd is Cmd.define'd — the engine mints its settle", () => 
     if (cmd === undefined) throw new Error("no write emitted");
     const saved = knob.write.ok(cmd, undefined, 2000);
     expect(saved).toEqual({
-      type: "snapshot_write_ok",
+      _tag: "snapshot_write_ok",
       cmd,
       value: undefined,
       at: 2000,
@@ -376,7 +376,7 @@ describe("the write Cmd is Cmd.define'd — the engine mints its settle", () => 
     });
     const failed = knob.write.err(cmd, { _tag: "snapshot_write_failed" }, 100);
     expect(failed).toEqual({
-      type: "snapshot_write_err",
+      _tag: "snapshot_write_err",
       cmd,
       error: { _tag: "snapshot_write_failed" },
       at: 100,
@@ -427,8 +427,8 @@ describe("the write effect — a host handler driven through `run`", () => {
       ctx: undefined,
       interpret: storeHandlers(store),
     }).ready;
-    await runtime.dispatch({ type: "progress", at: 1 });
-    await runtime.dispatch({ type: "progress", at: 2 }); // cadence hit → write
+    await runtime.dispatch({ _tag: "progress", at: 1 });
+    await runtime.dispatch({ _tag: "progress", at: 2 }); // cadence hit → write
     await runtime.stop();
 
     expect(store.puts).toEqual([{ key: "run/cp", value: { step: 2 } }]);
@@ -449,7 +449,7 @@ describe("the write effect — a host handler driven through `run`", () => {
       ctx: undefined,
       interpret: storeHandlers(store),
     }).ready;
-    await runtime.dispatch({ type: "finish", at: 9 });
+    await runtime.dispatch({ _tag: "finish", at: 9 });
     await runtime.stop();
 
     expect(runtime.getState().snap.seq).toBe(1);
@@ -621,7 +621,7 @@ describe("requestLoad — emits the read Cmd", () => {
     const [after, cmds] = snap.requestLoad(before);
     // A read decides nothing about the cadence bookkeeping.
     expect(after).toEqual(before);
-    expect(cmds).toEqual([{ type: "snapshot_load", key: "run/cp" }]);
+    expect(cmds).toEqual([{ _tag: "snapshot_load", key: "run/cp" }]);
   });
 
   it("defaults the read key to @@snapshot when omitted", () => {
@@ -637,7 +637,7 @@ describe("the read Cmd — its settled Msgs", () => {
     const cmd = load({ key: "run/cp" });
     const loaded: SnapshotLoadedMsg<RunState> = load.ok(cmd, { step: 99 }, 5);
     expect(loaded).toEqual({
-      type: "snapshot_load_ok",
+      _tag: "snapshot_load_ok",
       cmd,
       value: { step: 99 },
       at: 5,
@@ -654,7 +654,7 @@ describe("the read Cmd — its settled Msgs", () => {
       { _tag: "snapshot_load_failed" },
       5,
     );
-    expect(failed.type).toBe("snapshot_load_err");
+    expect(failed._tag).toBe("snapshot_load_err");
     expect(failed.error).toEqual({ _tag: "snapshot_load_failed" });
   });
 });
@@ -681,8 +681,8 @@ describe("WIRED: restart-from-checkpoint through a real runtime", () => {
   // the durable thing being checkpointed.
   type RecState = { readonly run: RunState; readonly snap: SnapshotState };
   type RecMsg =
-    | { readonly type: "boot" }
-    | { readonly type: "progress"; readonly at: number };
+    | { readonly _tag: "boot" }
+    | { readonly _tag: "progress"; readonly at: number };
 
   // A real R2/KV-shaped fake store backed by a Map, plus a recorder of failures.
   function makeStore(seed?: {
@@ -770,7 +770,7 @@ describe("WIRED: restart-from-checkpoint through a real runtime", () => {
     // Drive the REAL recovery loop: boot → snapshot_load Cmd → store.get →
     // the minted snapshot_load_ok re-enters → fold. `stop()` drains the tail so
     // the fire-and-forget follow-up has fully landed before we read.
-    await runtime.dispatch({ type: "boot" });
+    await runtime.dispatch({ _tag: "boot" });
     await runtime.stop();
 
     // END STATE: the run slice was restored FROM THE DURABLE CHECKPOINT, not
@@ -782,7 +782,7 @@ describe("WIRED: restart-from-checkpoint through a real runtime", () => {
     const store = makeStore(); // empty — no prior checkpoint
     const runtime = await runRecovery(store).ready;
 
-    await runtime.dispatch({ type: "boot" });
+    await runtime.dispatch({ _tag: "boot" });
     await runtime.stop();
 
     // No checkpoint → recovery is a no-op → fresh init survives.
@@ -794,15 +794,15 @@ describe("WIRED: restart-from-checkpoint through a real runtime", () => {
 
     // Phase 1: a run that checkpoints. every:2 → the 2nd progress writes step 2.
     const writer = await runRecovery(store).ready;
-    await writer.dispatch({ type: "progress", at: 1 });
-    await writer.dispatch({ type: "progress", at: 2 }); // emits snapshot_write(step 2)
+    await writer.dispatch({ _tag: "progress", at: 1 });
+    await writer.dispatch({ _tag: "progress", at: 2 }); // emits snapshot_write(step 2)
     await writer.stop(); // drains the write → store now holds { step: 2 }
 
     // Phase 2: a brand-new runtime (simulating a restart) recovers from the
     // durable checkpoint the first run left behind.
     const restarted = await runRecovery(store).ready;
     expect(restarted.getState().run.step).toBe(0); // fresh before recovery
-    await restarted.dispatch({ type: "boot" });
+    await restarted.dispatch({ _tag: "boot" });
     await restarted.stop();
 
     // The restart resumed at the checkpointed step — the whole point of the module.

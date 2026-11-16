@@ -29,7 +29,7 @@ import {
 // ───────────────────────────────────────────────────────────────────────────
 
 type CounterState = { readonly count: number };
-type CounterMsg = { readonly type: "bump" } | { readonly type: "reset" };
+type CounterMsg = { readonly _tag: "bump" } | { readonly _tag: "reset" };
 
 function counterMachine() {
   const update: Reducer<CounterState, CounterMsg, never> = {
@@ -43,18 +43,18 @@ function counterMachine() {
   });
 }
 
-type LightState = { readonly type: "red" } | { readonly type: "green" };
-type LightMsg = { readonly type: "go" } | { readonly type: "stop" };
+type LightState = { readonly _tag: "red" } | { readonly _tag: "green" };
+type LightMsg = { readonly _tag: "go" } | { readonly _tag: "stop" };
 
 function lightMachine() {
   const update: Transitions<LightState, LightMsg, never> = {
-    red: { go: () => [{ type: "green" }, []], stop: (s) => [s, []] },
+    red: { go: () => [{ _tag: "green" }, []], stop: (s) => [s, []] },
     // No `go` cell in `green` — the state-sensitive refusal.
-    green: { stop: () => [{ type: "red" }, []] },
+    green: { stop: () => [{ _tag: "red" }, []] },
   } as unknown as Transitions<LightState, LightMsg, never>;
   return defineMachine({
     types: { model: {} as LightState, msg: {} as LightMsg, ctx: undefined },
-    init: () => [{ type: "red" }, []],
+    init: () => [{ _tag: "red" }, []],
     update,
   });
 }
@@ -64,7 +64,7 @@ describe("tryApplyCell", () => {
     const r = tryApplyCell<CounterState, CounterMsg, never>(
       counterMachine(),
       { count: 4 },
-      { type: "bump" },
+      { _tag: "bump" },
     );
     expect(r._tag).toBe("Ok");
     if (r._tag !== "Ok") return;
@@ -74,7 +74,7 @@ describe("tryApplyCell", () => {
   it("Err carries the same NoCellError applyCell would have thrown", () => {
     const machine = counterMachine();
     const state: CounterState = { count: 0 };
-    const wire = { type: "unknown_wire" } as unknown as CounterMsg;
+    const wire = { _tag: "unknown_wire" } as unknown as CounterMsg;
 
     const r = tryApplyCell<CounterState, CounterMsg, never>(
       machine,
@@ -109,15 +109,15 @@ describe("tryApplyCell", () => {
     expect(
       tryApplyCell<LightState, LightMsg, never>(
         m,
-        { type: "red" },
-        { type: "go" },
+        { _tag: "red" },
+        { _tag: "go" },
       )._tag,
     ).toBe("Ok");
 
     const r = tryApplyCell<LightState, LightMsg, never>(
       m,
-      { type: "green" },
-      { type: "go" },
+      { _tag: "green" },
+      { _tag: "go" },
     );
     expect(r._tag).toBe("Err");
     if (r._tag !== "Err") return;
@@ -127,8 +127,8 @@ describe("tryApplyCell", () => {
 
   it("agrees with the throwing path on EVERY (state, msg) pair", () => {
     const m = lightMachine();
-    const states: LightState[] = [{ type: "red" }, { type: "green" }];
-    const msgs: LightMsg[] = [{ type: "go" }, { type: "stop" }];
+    const states: LightState[] = [{ _tag: "red" }, { _tag: "green" }];
+    const msgs: LightMsg[] = [{ _tag: "go" }, { _tag: "stop" }];
     for (const state of states) {
       for (const msg of msgs) {
         const viaOutcome = tryApplyCell<LightState, LightMsg, never>(
@@ -167,7 +167,7 @@ describe("tryApplyCell", () => {
       tryApplyCell<CounterState, CounterMsg, never>(
         machine,
         { count: 0 },
-        { type: "bump" },
+        { _tag: "bump" },
       ),
     ).toThrow(boom);
   });
@@ -177,10 +177,10 @@ describe("tryFoldMsgs", () => {
   it("folds a clean log to Ok(finalState), matching foldMsgs", () => {
     const m = counterMachine();
     const msgs: CounterMsg[] = [
-      { type: "bump" },
-      { type: "bump" },
-      { type: "reset" },
-      { type: "bump" },
+      { _tag: "bump" },
+      { _tag: "bump" },
+      { _tag: "reset" },
+      { _tag: "bump" },
     ];
     const r = tryFoldMsgs<CounterState, CounterMsg, never>(
       m,
@@ -208,12 +208,12 @@ describe("tryFoldMsgs", () => {
     // alone is not enough — the same msg.type usually appears many times, so
     // the INDEX is the load-bearing fact.
     const m = counterMachine();
-    const bad = { type: "unknown_wire" } as unknown as CounterMsg;
+    const bad = { _tag: "unknown_wire" } as unknown as CounterMsg;
     const msgs: CounterMsg[] = [
-      { type: "bump" },
-      { type: "bump" },
+      { _tag: "bump" },
+      { _tag: "bump" },
       bad,
-      { type: "reset" },
+      { _tag: "reset" },
     ];
     const r = tryFoldMsgs<CounterState, CounterMsg, never>(
       m,
@@ -230,10 +230,10 @@ describe("tryFoldMsgs", () => {
 
   it("stops at the FIRST refusal — a later msg is never applied", () => {
     const m = counterMachine();
-    const bad = { type: "nope" } as unknown as CounterMsg;
+    const bad = { _tag: "nope" } as unknown as CounterMsg;
     const r = tryFoldMsgs<CounterState, CounterMsg, never>(m, { count: 0 }, [
       bad,
-      { type: "bump" },
+      { _tag: "bump" },
       bad,
     ]);
     expect(r._tag === "Err" && r.error.index).toBe(0);
@@ -242,12 +242,12 @@ describe("tryFoldMsgs", () => {
   it("reports the state-sensitive refusal a transitions log hits mid-replay", () => {
     const m = lightMachine();
     const msgs: LightMsg[] = [
-      { type: "go" }, // red → green
-      { type: "go" }, // green has no `go` cell
+      { _tag: "go" }, // red → green
+      { _tag: "go" }, // green has no `go` cell
     ];
     const r = tryFoldMsgs<LightState, LightMsg, never>(
       m,
-      { type: "red" },
+      { _tag: "red" },
       msgs,
     );
     expect(r._tag).toBe("Err");
@@ -276,7 +276,7 @@ describe("tryFoldMsgs", () => {
     });
     expect(() =>
       tryFoldMsgs<CounterState, CounterMsg, never>(machine, { count: 0 }, [
-        { type: "bump" },
+        { _tag: "bump" },
       ]),
     ).toThrow();
   });

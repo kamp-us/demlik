@@ -105,7 +105,7 @@ export interface DefineManagedResourceOpts<
  */
 export interface ManagedResourceBattery<N extends string, TKey, Handle, Ctx> {
   /** The battery's Sub type — its `name`. */
-  readonly type: N;
+  readonly _tag: N;
 
   /**
    * The `subs` entry. `when(state)` returns the resource's KEY when it should
@@ -255,11 +255,11 @@ export function defineManagedResource<N extends string, TKey, Handle, Ctx>(
   };
 
   return {
-    type: opts.name,
+    _tag: opts.name,
     depKeyed: <S>(
       when: (state: S) => TKey | null,
     ): DepKeyedSub<S, ManagedResourceSub<N, TKey>> => ({
-      type: opts.name,
+      _tag: opts.name,
       deps: when,
     }),
     subscribe,

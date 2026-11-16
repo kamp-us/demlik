@@ -152,7 +152,7 @@ export interface FromTransportOpts<
  */
 export interface TransportBattery<N extends string, TKey, Outbound, M, Ctx> {
   /** The seam's Sub type — its `name`. */
-  readonly type: N;
+  readonly _tag: N;
 
   /**
    * The `subs` entry. `when(state)` returns the seam's KEY when it should be
@@ -346,12 +346,12 @@ export function fromTransport<
   };
 
   return {
-    type: opts.name,
+    _tag: opts.name,
 
     depKeyed: <S>(
       when: (state: S) => TKey | null,
     ): DepKeyedSub<S, TransportSub<N, TKey>> => ({
-      type: opts.name,
+      _tag: opts.name,
       deps: when,
     }),
 

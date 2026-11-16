@@ -55,11 +55,11 @@ const arbSteps: fc.Arbitrary<readonly WorkflowStep<Activity>[]> = fc
 
 /** A success result for the in-flight step's id. */
 function ok(id: number, result: Result): ActivityOk<Result> {
-  return { type: "activity_ok", id, result };
+  return { _tag: "activity_ok", id, result };
 }
 /** A failure for the in-flight step's id. */
 function err(id: number, failure: Failure): ActivityErr<Failure> {
-  return { type: "activity_err", id, failure };
+  return { _tag: "activity_err", id, failure };
 }
 
 /**
@@ -115,10 +115,10 @@ describe("workflow advance + next Cmd (AC2)", () => {
 
     // Owed BEFORE dispatch: one effect_owed event, one matching dispatch Cmd.
     expect(ledger).toHaveLength(1);
-    expect(ledger[0].type).toBe("effect_owed");
+    expect(ledger[0]._tag).toBe("effect_owed");
     expect(cmds).toHaveLength(1);
     expect(cmds[0]).toEqual<ActivityCmd<Activity>>({
-      type: "workflow_activity",
+      _tag: "workflow_activity",
       index: 0,
       id: state.current.id,
       activity: STEPS[0].activity,
@@ -144,7 +144,7 @@ describe("workflow advance + next Cmd (AC2)", () => {
     expect(step.cmds).toHaveLength(1);
     expect(step.cmds[0].index).toBe(1);
     expect(step.cmds[0].activity).toBe(STEPS[1].activity);
-    expect(step.ledger.map((e) => e.type)).toEqual([
+    expect(step.ledger.map((e) => e._tag)).toEqual([
       "effect_confirmed",
       "effect_owed",
     ]);
@@ -179,10 +179,10 @@ describe("owed/confirmed ledger invariant (AC3)", () => {
     // init: owed precedes dispatch — the ledger event is present and the Cmd
     // carries the same id, so a host persisting `ledger` before `cmds` records
     // the owe before performing the activity.
-    expect(started.ledger[0].type).toBe("effect_owed");
+    expect(started.ledger[0]._tag).toBe("effect_owed");
     const owedEvent = started.ledger[0] as Extract<
       EffectLedgerEvent<ActivityCmd<Activity>>,
-      { type: "effect_owed" }
+      { _tag: "effect_owed" }
     >;
     expect(owedEvent.id).toBe(started.cmds[0].id);
     expect(owedEvent.effect).toEqual(started.cmds[0]);
@@ -190,7 +190,7 @@ describe("owed/confirmed ledger invariant (AC3)", () => {
     // On result: the same id is confirmed.
     const id0 = (started.state as { current: { id: number } }).current.id;
     const step = wf.onActivityOk(started.state, ok(id0, "x"));
-    const confirms = step.ledger.filter((e) => e.type === "effect_confirmed");
+    const confirms = step.ledger.filter((e) => e._tag === "effect_confirmed");
     expect(confirms).toHaveLength(1);
     expect((confirms[0] as { id: number }).id).toBe(id0);
   });

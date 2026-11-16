@@ -80,7 +80,7 @@ describe("idempotent-intake driven through the adapter seam", () => {
     const [s1, c1] = intake.receive(intake.init(), { url: "/a" }, 0, "id-1");
     expect(c1).toEqual([
       {
-        type: "intake:process",
+        _tag: "intake:process",
         key: "/a",
         itemId: "id-1",
         payload: { url: "/a" },
@@ -98,7 +98,7 @@ describe("idempotent-intake driven through the adapter seam", () => {
     // A later duplicate now replays the cached result rather than re-enqueueing.
     const [, c4] = intake.receive(s3, { url: "/a" }, 3, "id-3");
     expect(c4).toEqual([
-      { type: "intake:replay", key: "/a", result: "RESULT" },
+      { _tag: "intake:replay", key: "/a", result: "RESULT" },
     ]);
   });
 

@@ -243,7 +243,7 @@ function cmdFault(
   cmd: unknown,
   declared: ReadonlySet<string> | null,
 ): string | null {
-  const { type } = Object(cmd) as { readonly type?: unknown };
+  const { _tag: type } = Object(cmd) as { readonly _tag?: unknown };
   if (typeof cmd !== "object" || typeof type !== "string") {
     return `${fc.stringify(cmd)} isn't a Cmd: it has no string \`type\``;
   }
@@ -409,7 +409,7 @@ function assertEveryTypeActed(run: PropertyRun, tally: MsgTally): void {
  */
 function runProperty<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -516,7 +516,7 @@ function runProperty<
  */
 export function propertyTerminates<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -581,7 +581,7 @@ export function propertyTerminates<
  */
 export function propertyInvariant<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -639,7 +639,7 @@ export function propertyInvariant<
  */
 export function propertyTrace<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,

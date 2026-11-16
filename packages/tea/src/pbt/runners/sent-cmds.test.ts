@@ -28,12 +28,12 @@ const fetch = Cmd.define("fetch", {
 });
 
 type FetchCmd = ReturnType<typeof fetch>;
-type PokeCmd = { readonly type: "poke" };
+type PokeCmd = { readonly _tag: "poke" };
 type SentCmd = FetchCmd | PokeCmd;
-type State = { readonly type: "fresh" | "resumed"; readonly sends: number };
+type State = { readonly _tag: "fresh" | "resumed"; readonly sends: number };
 type Msg =
-  | { readonly type: "send" }
-  | { readonly type: "wait" }
+  | { readonly _tag: "send" }
+  | { readonly _tag: "wait" }
   | Settled<typeof fetch>;
 
 const SEEDS = [1, 42, 20261101];
@@ -46,10 +46,10 @@ const IN_CAUSE: { readonly errorWithCause?: boolean } = {
 
 const BOOT = fetch({ url: "boot" });
 const RESUME = fetch({ url: "resume" });
-const LOADED: State = { type: "resumed", sends: 3 };
+const LOADED: State = { _tag: "resumed", sends: 3 };
 
 const STRYKER = "Stryker was here";
-const NOPE = { type: "nope" };
+const NOPE = { _tag: "nope" };
 
 /** A value the Cmd type rules out, sent the way only a cast or a mutant can. */
 const junk = (value: unknown) => value as SentCmd;
@@ -85,7 +85,7 @@ const sending = (
 
 function bootInit(initCmds: readonly SentCmd[]) {
   return (loaded: State | null) =>
-    [loaded ?? { type: "fresh" as const, sends: 0 }, initCmds] as const;
+    [loaded ?? { _tag: "fresh" as const, sends: 0 }, initCmds] as const;
 }
 
 function defineApp({
@@ -111,8 +111,8 @@ function defineApp({
 }
 
 const msgArb = arbMsg<Msg>({
-  send: fc.constant({ type: "send" as const }),
-  wait: fc.constant({ type: "wait" as const }),
+  send: fc.constant({ _tag: "send" as const }),
+  wait: fc.constant({ _tag: "wait" as const }),
   fetch_ok: fc.constant(fetch.ok(BOOT, { body: "body" }, 0)),
   fetch_err: fc.constant(fetch.err(BOOT, { _tag: "timeout" }, 0)),
 });
@@ -204,7 +204,7 @@ describe("a test author sees a junk Cmd fail", () => {
         sending(junk(null)),
         {},
         seqArb,
-        ({ cmds }) => cmds.every((cmd) => cmd.type !== "poke"),
+        ({ cmds }) => cmds.every((cmd) => cmd._tag !== "poke"),
         { seed: 1 },
       ),
     );
@@ -215,7 +215,7 @@ describe("a test author sees a junk Cmd fail", () => {
 describe("a check sees the Cmds init sent", () => {
   const app = defineApp({
     init: (loaded) => [
-      loaded ?? { type: "fresh", sends: 0 },
+      loaded ?? { _tag: "fresh", sends: 0 },
       loaded === null ? [BOOT] : [RESUME, BOOT],
     ],
   });
@@ -299,7 +299,7 @@ describe("a check sees the Cmds init sent", () => {
   });
 
   describe.each(STARTS)("foldEvents, on %s", (_start, loaded, expected) => {
-    const msgs: readonly Msg[] = [{ type: "send" }, { type: "wait" }];
+    const msgs: readonly Msg[] = [{ _tag: "send" }, { _tag: "wait" }];
 
     it("returns them, and no Step holds them", () => {
       const fold = foldEvents(app, {}, loaded, msgs);
@@ -326,7 +326,7 @@ describe("a value with no string type", () => {
     ["undefined", undefined],
     ["an array", []],
     ["an object with no type", {}],
-    ["a type that isn't a string", { type: 7 }],
+    ["a type that isn't a string", { _tag: 7 }],
   ] as const;
 
   const DECLARED = ["with cmds", "no cmds"] as const;
@@ -358,7 +358,7 @@ describe("a value with no string type", () => {
 
 describe("the strict option", () => {
   // `dispatchMachine`'s shape: `cmds: [fetch]`, and a hand-written `poke` beside it.
-  const handWritten = sending({ type: "poke" });
+  const handWritten = sending({ _tag: "poke" });
 
   it("is off by default, so a hand-written Cmd passes", () => {
     const passed = propertyInvariant(handWritten, {}, seqArb, () => true);
@@ -373,7 +373,7 @@ describe("the strict option", () => {
       }),
     );
     expect(failure.message).toContain(
-      `${JSON.stringify({ type: "poke" })} isn't in machine.cmds: [fetch]`,
+      `${JSON.stringify({ _tag: "poke" })} isn't in machine.cmds: [fetch]`,
     );
   });
 

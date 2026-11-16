@@ -32,8 +32,8 @@ interface Outputs extends Record<Purpose, AgentTurn> {
   readonly act_turn: AgentTurn;
 }
 
-type ToolCmd = { readonly type: "run_tool" } & ToolCall;
-const toolOf = (call: ToolCall): ToolCmd => ({ type: "run_tool", ...call });
+type ToolCmd = { readonly _tag: "run_tool" } & ToolCall;
+const toolOf = (call: ToolCall): ToolCmd => ({ _tag: "run_tool", ...call });
 
 const turnSchema = (): Schema<AgentTurn> => ({
   parse: (v) => {
@@ -104,7 +104,7 @@ async function wiredRuntime() {
 
   const toolInterpret: Interpret<M, ToolCmd, object> = {
     run_tool: async (cmd) => ({
-      type: "agent_tool_ok",
+      _tag: "agent_tool_ok",
       callId: cmd.callId,
       result: `done:${cmd.callId}`,
       at: 0,
@@ -135,7 +135,7 @@ describe("#47 — runtime.on delivers the semantic AgentEvent stream", () => {
       turns.push(e.turn);
     });
 
-    await runtime.dispatch({ type: "agent_start", runId: "r", at: 0 });
+    await runtime.dispatch({ _tag: "agent_start", runId: "r", at: 0 });
     await runtime.done();
     await runtime.stop();
 
@@ -154,7 +154,7 @@ describe("#47 — runtime.on delivers the semantic AgentEvent stream", () => {
       tools.push({ callId: e.callId, result: e.result });
     });
 
-    await runtime.dispatch({ type: "agent_start", runId: "r", at: 0 });
+    await runtime.dispatch({ _tag: "agent_start", runId: "r", at: 0 });
     await runtime.done();
     await runtime.stop();
 
@@ -168,7 +168,7 @@ describe("#47 — runtime.on delivers the semantic AgentEvent stream", () => {
       dones.push(e.status);
     });
 
-    await runtime.dispatch({ type: "agent_start", runId: "r", at: 0 });
+    await runtime.dispatch({ _tag: "agent_start", runId: "r", at: 0 });
     await runtime.done();
     await runtime.stop();
 
@@ -196,7 +196,7 @@ describe("#47 — runtime.on delivers the semantic AgentEvent stream", () => {
     // `e.turn` is reachable and `e.callId` / `e.output` are NOT on the type. We
     // additionally assert at runtime that no other event leaks into this bucket.
     runtime.on("TurnSettled", (e) => {
-      seenTypes.add(e.type);
+      seenTypes.add(e._tag);
       // Type-level proof the narrowing holds: `e.turn` is an AgentTurn.
       const _turn: AgentTurn = e.turn;
       void _turn;
@@ -206,7 +206,7 @@ describe("#47 — runtime.on delivers the semantic AgentEvent stream", () => {
     // @ts-expect-error — `resilient_run_ok` is a PRIVATE Msg name, not an AgentEvent type.
     runtime.on("resilient_run_ok", () => {});
 
-    await runtime.dispatch({ type: "agent_start", runId: "r", at: 0 });
+    await runtime.dispatch({ _tag: "agent_start", runId: "r", at: 0 });
     await runtime.done();
     await runtime.stop();
 
@@ -221,7 +221,7 @@ describe("#47 — runtime.on delivers the semantic AgentEvent stream", () => {
     });
     off();
 
-    await runtime.dispatch({ type: "agent_start", runId: "r", at: 0 });
+    await runtime.dispatch({ _tag: "agent_start", runId: "r", at: 0 });
     await runtime.done();
     await runtime.stop();
 
@@ -248,7 +248,7 @@ describe("#47 — observe drops the boot null arm; onBoot carries it", () => {
       if ((msg as unknown) === null) nullSeen = true;
     });
 
-    await runtime.dispatch({ type: "agent_start", runId: "r", at: 0 });
+    await runtime.dispatch({ _tag: "agent_start", runId: "r", at: 0 });
     await runtime.done();
     await runtime.stop();
 
@@ -277,7 +277,7 @@ describe("#47 — observe drops the boot null arm; onBoot carries it", () => {
     );
     const bootToolInterpret: Interpret<M, ToolCmd, object> = {
       run_tool: async (cmd) => ({
-        type: "agent_tool_ok",
+        _tag: "agent_tool_ok",
         callId: cmd.callId,
         result: "x",
         at: 0,
@@ -315,7 +315,7 @@ describe("#47 — an `on`-based consumer references no private Msg name", () => 
     // `AgentEvent["type"]`, which does not include `resilient_run_ok`).
     const summary: string[] = [];
     const fold = (e: AgentEvent<string>): void => {
-      switch (e.type) {
+      switch (e._tag) {
         case "TurnSettled":
           summary.push(`turn:${e.turn.toolCalls.length}`);
           break;
@@ -331,7 +331,7 @@ describe("#47 — an `on`-based consumer references no private Msg name", () => 
     runtime.on("ToolSettled", fold);
     runtime.on("RunDone", fold);
 
-    await runtime.dispatch({ type: "agent_start", runId: "r", at: 0 });
+    await runtime.dispatch({ _tag: "agent_start", runId: "r", at: 0 });
     await runtime.done();
     await runtime.stop();
 

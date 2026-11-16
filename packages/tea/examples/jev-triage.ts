@@ -56,7 +56,7 @@ interface State {
 
 type Msg =
   | {
-      readonly type: "classify";
+      readonly _tag: "classify";
       readonly key: string;
       readonly memo: string;
       readonly at: number;
@@ -132,7 +132,7 @@ function expenseMachine(ask: Ask) {
       deadline_exceeded: (s, m) => settle(s, ask.onTimer(s.resilience, m)),
     },
     // The retry timer. `timer` is built into the engine.
-    subs: [{ type: "timer", deps: (s: State) => ask.timer(s.resilience) }],
+    subs: [{ _tag: "timer", deps: (s: State) => ask.timer(s.resilience) }],
   });
 }
 
@@ -199,7 +199,7 @@ function scriptedJev(
         model: request.model,
         answers: {
           category: {
-            type: "choice",
+            _tag: "choice",
             choice,
             confidence,
             probabilities: {
@@ -254,7 +254,7 @@ async function main() {
 
   for (const expense of EXPENSES) {
     runtime.dispatch({
-      type: "classify",
+      _tag: "classify",
       key: expense.id,
       memo: expense.memo,
       at: Date.now(),

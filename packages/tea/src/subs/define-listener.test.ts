@@ -11,8 +11,8 @@ import { defineListener } from "./define-listener";
 type TickSub = Sub<"tick", { readonly channel: string }>;
 type State = { readonly armed: boolean; readonly seen: readonly number[] };
 type Msg =
-  | { readonly type: "tick"; readonly value: number }
-  | { readonly type: "disarm" };
+  | { readonly _tag: "tick"; readonly value: number }
+  | { readonly _tag: "disarm" };
 
 const update: Reducer<State, Msg, never> = {
   tick: (s, m) => [{ ...s, seen: [...s.seen, m.value] }, []],
@@ -53,7 +53,7 @@ const machine = defineMachine({
   },
   init: () => [{ armed: true, seen: [] }, []],
   update,
-  subs: [{ type: "tick", deps: (s) => (s.armed ? { channel: "main" } : null) }],
+  subs: [{ _tag: "tick", deps: (s) => (s.armed ? { channel: "main" } : null) }],
 });
 
 function runnersFor(
@@ -73,7 +73,7 @@ function runnersFor(
   return {
     // Drop-on-null: negatives are filtered, the listener stays armed.
     tick: fromFake<Msg>((_sub, value) =>
-      value < 0 ? null : { type: "tick", value },
+      value < 0 ? null : { _tag: "tick", value },
     ),
   };
 }
@@ -96,7 +96,7 @@ describe("defineListener — derived, reference-identical cleanup", () => {
     const target = fakeTarget();
     const rt = await run(machine, { subscribe: runnersFor(target) }).ready;
 
-    await rt.dispatch({ type: "disarm" });
+    await rt.dispatch({ _tag: "disarm" });
 
     expect(target.added).toHaveLength(1);
     expect(target.removed).toHaveLength(1);
@@ -117,7 +117,7 @@ describe("defineListener — derived, reference-identical cleanup", () => {
     await rt.idle();
     expect(rt.getState().seen).toEqual([1]);
 
-    await rt.dispatch({ type: "disarm" });
+    await rt.dispatch({ _tag: "disarm" });
     target.emit(99);
     await rt.idle();
     expect(rt.getState().seen).toEqual([1]);

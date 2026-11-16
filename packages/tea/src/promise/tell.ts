@@ -39,11 +39,11 @@ export type { TellAnswer } from "../internal/engine/loop";
  */
 export function tell<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
-  E extends { type: string } = never,
+  E extends { _tag: string } = never,
 >(
   machine: Machine<S, M, C, U, Ctx>,
   runtime: Run<S, M, E>,

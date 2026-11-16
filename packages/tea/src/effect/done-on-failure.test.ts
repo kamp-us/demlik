@@ -25,10 +25,10 @@ import { run as runOnEffect, SubFailed } from "./index";
 
 type Watch = Sub<"watch", { readonly on: true }>;
 type Msg =
-  | { readonly type: "work" }
-  | { readonly type: "finish" }
-  | { readonly type: "arm" }
-  | { readonly type: "explode" };
+  | { readonly _tag: "work" }
+  | { readonly _tag: "finish" }
+  | { readonly _tag: "arm" }
+  | { readonly _tag: "explode" };
 type Model = {
   readonly worked: number;
   readonly armed: boolean;
@@ -50,7 +50,7 @@ const job = defineMachine({
   },
   subs: [
     {
-      type: "watch",
+      _tag: "watch",
       deps: (m) => (m.armed ? { on: true as const } : null),
     },
   ],
@@ -247,10 +247,10 @@ describe.each(engines)("%s engine: a host waiting on many jobs", (_, start) => {
     ];
 
     await Promise.all([
-      first.dispatch({ type: "work" }),
-      last.dispatch({ type: "work" }),
+      first.dispatch({ _tag: "work" }),
+      last.dispatch({ _tag: "work" }),
     ]);
-    await dying.dispatch({ type: "arm" });
+    await dying.dispatch({ _tag: "arm" });
 
     expect(await within(dyingDone)).toEqual({
       kind: "sub-failed",
@@ -266,8 +266,8 @@ describe.each(engines)("%s engine: a host waiting on many jobs", (_, start) => {
     expect(await stillWaiting(lastDone)).toBe(true);
 
     for (const survivor of [first, last]) {
-      for (let i = 0; i < 25; i++) await survivor.dispatch({ type: "work" });
-      await survivor.dispatch({ type: "finish" });
+      for (let i = 0; i < 25; i++) await survivor.dispatch({ _tag: "work" });
+      await survivor.dispatch({ _tag: "finish" });
     }
 
     const expected: Answer = {
@@ -285,7 +285,7 @@ describe.each(engines)("%s engine: a host waiting on many jobs", (_, start) => {
     for (let pass = 0; pass < 5; pass++) {
       const dying = await start({ sub: { kind: "failing", error: closed } });
       const waiting = dying.done();
-      await dying.dispatch({ type: "arm" });
+      await dying.dispatch({ _tag: "arm" });
       answers.push(await within(waiting));
       await dying.stop();
     }
@@ -305,7 +305,7 @@ describe.each(engines)("%s engine: a later done()", (_, start) => {
     const closed = new Closed({ code: 2 });
     const dying = await start({ sub: { kind: "failing", error: closed } });
 
-    await dying.dispatch({ type: "arm" });
+    await dying.dispatch({ _tag: "arm" });
     await within(dying.done());
 
     expect(await within(dying.done())).toEqual({
@@ -318,7 +318,7 @@ describe.each(engines)("%s engine: a later done()", (_, start) => {
   it("fails with the reducer's error once the run has closed", async () => {
     const rt = await start();
 
-    await rt.dispatch({ type: "explode" });
+    await rt.dispatch({ _tag: "explode" });
     await within(rt.done());
 
     expect(await within(rt.done())).toEqual({ kind: "failed", error: boom });
@@ -333,7 +333,7 @@ describe.each(engines)("%s engine: a reducer throw", (_, start) => {
     const rt = await start();
     const waiting = rt.done();
 
-    const dispatched = await rt.dispatch({ type: "explode" });
+    const dispatched = await rt.dispatch({ _tag: "explode" });
 
     expect(dispatched).toBe(boom);
     expect(await within(waiting)).toEqual({ kind: "failed", error: boom });
@@ -346,7 +346,7 @@ describe.each(engines)("%s engine: a reducer throw", (_, start) => {
     const rt = await start({ supervision: "stop" });
     const waiting = rt.done();
 
-    await rt.dispatch({ type: "explode" });
+    await rt.dispatch({ _tag: "explode" });
 
     expect(await within(waiting)).toEqual({ kind: "failed", error: boom });
     await rt.stop();
@@ -356,13 +356,13 @@ describe.each(engines)("%s engine: a reducer throw", (_, start) => {
     const rt = await start({ supervision: "escalate" });
     const waiting = rt.done();
 
-    expect(await rt.dispatch({ type: "explode" })).toBe(boom);
+    expect(await rt.dispatch({ _tag: "explode" })).toBe(boom);
 
     expect(await stillWaiting(waiting)).toBe(true);
-    expect(await rt.dispatch({ type: "work" })).toBe("resolved");
+    expect(await rt.dispatch({ _tag: "work" })).toBe("resolved");
     expect(rt.getState().worked).toBe(1);
 
-    await rt.dispatch({ type: "finish" });
+    await rt.dispatch({ _tag: "finish" });
     expect(await within(waiting)).toEqual({
       kind: "state",
       state: { worked: 1, armed: false, finished: true },
@@ -375,8 +375,8 @@ describe.each(engines)("%s engine: a reducer throw", (_, start) => {
     const waiting = rt.done();
 
     const dispatches = [
-      rt.dispatch({ type: "explode" }),
-      rt.dispatch({ type: "finish" }),
+      rt.dispatch({ _tag: "explode" }),
+      rt.dispatch({ _tag: "finish" }),
     ];
     await Promise.all(dispatches);
 
@@ -395,8 +395,8 @@ describe.each(engines)("%s engine: a reducer throw", (_, start) => {
     const waiting = rt.done();
 
     await Promise.all([
-      rt.dispatch({ type: "explode" }),
-      rt.dispatch({ type: "work" }),
+      rt.dispatch({ _tag: "explode" }),
+      rt.dispatch({ _tag: "work" }),
     ]);
 
     expect(await within(waiting)).toEqual({ kind: "failed", error: boom });
@@ -410,8 +410,8 @@ describe.each(engines)("%s engine: a reducer throw", (_, start) => {
     const waiting = rt.done();
 
     await Promise.all([
-      rt.dispatch({ type: "arm" }),
-      rt.dispatch({ type: "explode" }),
+      rt.dispatch({ _tag: "arm" }),
+      rt.dispatch({ _tag: "explode" }),
     ]);
 
     expect(await within(waiting)).toEqual({
@@ -458,14 +458,14 @@ describe.each(
     const rt = await start({ sub, store });
     const waiting = rt.done();
 
-    await rt.dispatch({ type: "arm" });
+    await rt.dispatch({ _tag: "arm" });
     const savesBeforeThrow = seen.saves;
-    expect(await rt.dispatch({ type: "explode" })).toBe(boom);
+    expect(await rt.dispatch({ _tag: "explode" })).toBe(boom);
 
     expect(await within(waiting)).toEqual({ kind: "failed", error: boom });
     await until("the Sub close", () => seen.closes === 1);
     await until("the final save", () => seen.saves === savesBeforeThrow + 1);
-    expect(await rt.dispatch({ type: "work" })).toBeInstanceOf(Error);
+    expect(await rt.dispatch({ _tag: "work" })).toBeInstanceOf(Error);
     expect(await within(rt.done())).toEqual({ kind: "failed", error: boom });
   });
 
@@ -473,9 +473,9 @@ describe.each(
     const { seen, store, sub } = watched();
     const rt = await start({ sub, store });
 
-    await rt.dispatch({ type: "arm" });
+    await rt.dispatch({ _tag: "arm" });
     const savesBeforeThrow = seen.saves;
-    await rt.dispatch({ type: "explode" });
+    await rt.dispatch({ _tag: "explode" });
     await until("the final save", () => seen.saves === savesBeforeThrow + 1);
 
     await rt.stop();
@@ -500,14 +500,14 @@ describe.each(engines)("%s engine: what tears nothing down", (_, start) => {
     const { seen, store, sub } = watched();
     const rt = await start({ sub, store, supervision });
 
-    await rt.dispatch({ type: "arm" });
-    await rt.dispatch({ type: "explode" });
+    await rt.dispatch({ _tag: "arm" });
+    await rt.dispatch({ _tag: "explode" });
     const saves = seen.saves;
     await new Promise((resolve) => setTimeout(resolve, STILL_WAITING_MS));
 
     expect(seen.closes).toBe(0);
     expect(seen.saves).toBe(saves);
-    expect(await rt.dispatch({ type: "work" })).toBe("resolved");
+    expect(await rt.dispatch({ _tag: "work" })).toBe("resolved");
     await rt.stop();
     expect(seen.closes).toBe(1);
   });
@@ -543,9 +543,9 @@ describe("Effect engine: a reducer throw under stop", () => {
     );
     const rt = await Effect.runPromise(booting.ready);
 
-    await Effect.runPromiseExit(rt.dispatch({ type: "arm" }));
+    await Effect.runPromiseExit(rt.dispatch({ _tag: "arm" }));
     const savesBeforeThrow = seen.saves;
-    await Effect.runPromiseExit(rt.dispatch({ type: "explode" }));
+    await Effect.runPromiseExit(rt.dispatch({ _tag: "explode" }));
 
     await until("the run's Scope close", () => released.length === 1);
     await until("the final save", () => seen.saves === savesBeforeThrow + 1);
@@ -571,8 +571,8 @@ describe.each(engines)("%s engine: a saved terminal State", (_, start) => {
     });
     const state: Model = { worked: 0, armed: true, finished: true };
 
-    await rt.dispatch({ type: "finish" });
-    await rt.dispatch({ type: "arm" });
+    await rt.dispatch({ _tag: "finish" });
+    await rt.dispatch({ _tag: "arm" });
 
     expect(rt.reports).toContainEqual({ error: closed, phase: "sub" });
     expect(await within(rt.done())).toEqual({ kind: "state", state });
@@ -584,8 +584,8 @@ describe.each(engines)("%s engine: a saved terminal State", (_, start) => {
     const rt = await start({ store: memoryStore<Model>() });
     const state: Model = { worked: 0, armed: false, finished: true };
 
-    await rt.dispatch({ type: "finish" });
-    expect(await rt.dispatch({ type: "explode" })).toBe(boom);
+    await rt.dispatch({ _tag: "finish" });
+    expect(await rt.dispatch({ _tag: "explode" })).toBe(boom);
 
     expect(await within(rt.done())).toEqual({ kind: "state", state });
     expect(rt.result()).toEqual(state);
@@ -598,17 +598,17 @@ describe.each(engines)("%s engine: a saved terminal State", (_, start) => {
 describe.each(engines)("%s engine: what does not change", (_, start) => {
   it("a Sub that maps its failure to a Msg keeps the run going and done() waiting", async () => {
     const rt = await start({
-      sub: { kind: "mapped", to: { type: "work" } },
+      sub: { kind: "mapped", to: { _tag: "work" } },
     });
     const waiting = rt.done();
 
-    await rt.dispatch({ type: "arm" });
+    await rt.dispatch({ _tag: "arm" });
 
     expect(await stillWaiting(waiting)).toBe(true);
     expect(rt.getState().worked).toBe(1);
     expect(rt.reports).toEqual([]);
 
-    await rt.dispatch({ type: "finish" });
+    await rt.dispatch({ _tag: "finish" });
     expect(await within(waiting)).toEqual({
       kind: "state",
       state: { worked: 1, armed: true, finished: true },
@@ -650,7 +650,7 @@ describe("a failed terminal save still fails done() as it did", () => {
     }).ready;
     const waiting = rt.done().catch((error: unknown) => error);
 
-    await settled(rt.dispatch({ type: "finish" }));
+    await settled(rt.dispatch({ _tag: "finish" }));
 
     expect(await waiting).toBe(refused);
     expect(await rt.done().catch((error: unknown) => error)).toBe(refused);
@@ -673,7 +673,7 @@ describe("a failed terminal save still fails done() as it did", () => {
     const rt = await Effect.runPromise(booting.ready);
     const waiting = Effect.runPromise(Effect.flip(rt.done()));
 
-    await Effect.runPromiseExit(rt.dispatch({ type: "finish" }));
+    await Effect.runPromiseExit(rt.dispatch({ _tag: "finish" }));
 
     const failure = await waiting;
     expect(failure._tag).toBe("StoreFailed");
@@ -704,7 +704,7 @@ describe("a reducer throw reaches done() as it was thrown", () => {
       (error: unknown) => ({ rejectedWith: error }),
     );
 
-    await settled(rt.dispatch({ type: "explode" }));
+    await settled(rt.dispatch({ _tag: "explode" }));
 
     expect(await waiting).toEqual({ rejectedWith: undefined });
     await rt.stop();
@@ -719,7 +719,7 @@ describe("a reducer throw reaches done() as it was thrown", () => {
     const rt = await Effect.runPromise(booting.ready);
     const waiting = Effect.runPromiseExit(rt.done());
 
-    await Effect.runPromiseExit(rt.dispatch({ type: "explode" }));
+    await Effect.runPromiseExit(rt.dispatch({ _tag: "explode" }));
 
     const exit = await waiting;
     expect(Exit.isFailure(exit) && Cause.hasDies(exit.cause)).toBe(true);
@@ -728,18 +728,18 @@ describe("a reducer throw reaches done() as it was thrown", () => {
 });
 
 describe("a Msg with no cell is a refusal, not a failure", () => {
-  type Latch = { readonly type: "closed" } | { readonly type: "open" };
-  type LatchMsg = { readonly type: "open" } | { readonly type: "close" };
+  type Latch = { readonly _tag: "closed" } | { readonly _tag: "open" };
+  type LatchMsg = { readonly _tag: "open" } | { readonly _tag: "close" };
   const latchUpdate: Transitions<Latch, LatchMsg, never> = {
-    closed: { open: () => [{ type: "open" }, []] },
-    open: { close: () => [{ type: "closed" }, []] },
+    closed: { open: () => [{ _tag: "open" }, []] },
+    open: { close: () => [{ _tag: "closed" }, []] },
   };
   const latch = defineMachine({
     types: { model: {} as Latch, msg: {} as LatchMsg },
-    init: (loaded) => [loaded ?? { type: "closed" }, []],
+    init: (loaded) => [loaded ?? { _tag: "closed" }, []],
     update: latchUpdate,
   });
-  const isOpen = (state: Latch): boolean => state.type === "open";
+  const isOpen = (state: Latch): boolean => state._tag === "open";
 
   it("Promise engine: done() keeps waiting and the run goes on", async () => {
     const { onError } = sink();
@@ -749,12 +749,12 @@ describe("a Msg with no cell is a refusal, not a failure", () => {
     }).ready;
     const waiting = rt.done();
 
-    await expect(rt.dispatch({ type: "close" })).rejects.toBeInstanceOf(
+    await expect(rt.dispatch({ _tag: "close" })).rejects.toBeInstanceOf(
       NoCellError,
     );
 
-    await rt.dispatch({ type: "open" });
-    expect(await waiting).toEqual({ type: "open" });
+    await rt.dispatch({ _tag: "open" });
+    expect(await waiting).toEqual({ _tag: "open" });
     await rt.stop();
   });
 
@@ -767,21 +767,21 @@ describe("a Msg with no cell is a refusal, not a failure", () => {
     const rt = await Effect.runPromise(booting.ready);
     const waiting = Effect.runPromise(rt.done());
 
-    await Effect.runPromiseExit(rt.dispatch({ type: "close" }));
+    await Effect.runPromiseExit(rt.dispatch({ _tag: "close" }));
 
-    await Effect.runPromise(rt.dispatch({ type: "open" }));
-    expect(await waiting).toEqual({ type: "open" });
+    await Effect.runPromise(rt.dispatch({ _tag: "open" }));
+    expect(await waiting).toEqual({ _tag: "open" });
     await Effect.runPromise(Scope.close(scope, Exit.void));
   });
 });
 
 describe("a handler that never returns, in line behind a reducer throw", () => {
-  type Hang = { readonly type: "hang" };
+  type Hang = { readonly _tag: "hang" };
   type Stuck = { readonly hung: boolean };
   const stuck = defineMachine({
     types: {
       model: {} as Stuck,
-      msg: {} as { readonly type: "explode" } | { readonly type: "wait" },
+      msg: {} as { readonly _tag: "explode" } | { readonly _tag: "wait" },
       cmd: {} as Hang,
     },
     init: (loaded) => [loaded ?? { hung: false }, []],
@@ -789,7 +789,7 @@ describe("a handler that never returns, in line behind a reducer throw", () => {
       explode: () => {
         throw boom;
       },
-      wait: (m) => [{ ...m, hung: true }, [{ type: "hang" }]],
+      wait: (m) => [{ ...m, hung: true }, [{ _tag: "hang" }]],
     },
   });
 
@@ -802,8 +802,8 @@ describe("a handler that never returns, in line behind a reducer throw", () => {
     }).ready;
     const waiting = rt.done().catch((error: unknown) => error);
 
-    void settled(rt.dispatch({ type: "explode" }));
-    void settled(rt.dispatch({ type: "wait" }));
+    void settled(rt.dispatch({ _tag: "explode" }));
+    void settled(rt.dispatch({ _tag: "wait" }));
     await rt.stop();
 
     expect(await waiting).toBe(boom);
@@ -815,11 +815,11 @@ describe.each(
 )("%s engine: a throw from a Msg with no caller", (_, start) => {
   it("reaches done() when a Sub's Msg is the one that throws", async () => {
     const rt = await start({
-      sub: { kind: "mapped", to: { type: "explode" } },
+      sub: { kind: "mapped", to: { _tag: "explode" } },
     });
     const waiting = rt.done();
 
-    await rt.dispatch({ type: "arm" });
+    await rt.dispatch({ _tag: "arm" });
 
     expect(await within(waiting)).toEqual({ kind: "failed", error: boom });
     expect(rt.reports).toContainEqual({ error: boom, phase: "reduce" });
@@ -830,11 +830,11 @@ describe.each(
     const [dying, other] = await Promise.all([start(), start()]);
     const [dyingDone, otherDone] = [dying.done(), other.done()];
 
-    await dying.dispatch({ type: "explode" });
+    await dying.dispatch({ _tag: "explode" });
     expect(await within(dyingDone)).toEqual({ kind: "failed", error: boom });
 
-    await other.dispatch({ type: "work" });
-    await other.dispatch({ type: "finish" });
+    await other.dispatch({ _tag: "work" });
+    await other.dispatch({ _tag: "finish" });
     expect(await within(otherDone)).toEqual({
       kind: "state",
       state: { worked: 1, armed: false, finished: true },
@@ -858,7 +858,7 @@ describe("Effect engine: how a reducer throw reaches done()", () => {
     );
     const rt = await Effect.runPromise(booting.ready);
 
-    await Effect.runPromiseExit(rt.dispatch({ type: "explode" }));
+    await Effect.runPromiseExit(rt.dispatch({ _tag: "explode" }));
     const exit = await Effect.runPromiseExit(rt.done());
 
     expect(Exit.isFailure(exit)).toBe(true);

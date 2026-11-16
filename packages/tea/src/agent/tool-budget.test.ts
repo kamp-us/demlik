@@ -52,8 +52,8 @@ const LADDER: RetryPolicy = {
   maxAttempts: 3,
 };
 
-type ToolCmd = { readonly type: "run_tool" } & ToolCall;
-const toolOf = (call: ToolCall): ToolCmd => ({ type: "run_tool", ...call });
+type ToolCmd = { readonly _tag: "run_tool" } & ToolCall;
+const toolOf = (call: ToolCall): ToolCmd => ({ _tag: "run_tool", ...call });
 
 const turnSchema: Schema<AgentTurn> = { parse: (v) => v as AgentTurn };
 
@@ -87,7 +87,7 @@ function killed<S>(s: S): S {
 
 /** Every tool Cmd in a batch — one per handler call the reducer authorized. */
 function toolCmds(cmds: readonly unknown[]): ToolCmd[] {
-  return cmds.filter((c): c is ToolCmd => (c as ToolCmd).type === "run_tool");
+  return cmds.filter((c): c is ToolCmd => (c as ToolCmd)._tag === "run_tool");
 }
 
 /** The Model shape every verb below folds. */
@@ -133,7 +133,7 @@ describe("tool timeoutMs — the budget is in-process elapsed, not wall-clock po
     const [booted] = agent.boot(parked, wake);
     // The retry timer is past due, so it fires at the wake instant.
     const [after, cmds] = agent.onTimer(booted, {
-      type: "deadline_exceeded",
+      _tag: "deadline_exceeded",
       id: `resilient:retry:$tool:${CALL.name}#${CALL.callId}`,
       atMs: wake,
     });
@@ -153,7 +153,7 @@ describe("tool timeoutMs — the budget is in-process elapsed, not wall-clock po
 
     const [booted, bootCmds] = agent.boot(parked, wake);
     const [after, timerCmds] = agent.onTimer(booted, {
-      type: "deadline_exceeded",
+      _tag: "deadline_exceeded",
       id: `resilient:retry:$tool:${CALL.name}#${CALL.callId}`,
       atMs: wake,
     });
@@ -201,7 +201,7 @@ describe("tool timeoutMs — the budget is in-process elapsed, not wall-clock po
     [s] = agent.turn(s, asksForTool, 0);
     [s] = agent.toolErr(s, CALL.callId, "upstream", 900);
     [s] = agent.onTimer(s, {
-      type: "deadline_exceeded",
+      _tag: "deadline_exceeded",
       id: `resilient:retry:$tool:${CALL.name}#${CALL.callId}`,
       atMs: 1_400,
     });

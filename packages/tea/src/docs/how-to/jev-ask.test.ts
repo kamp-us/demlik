@@ -76,7 +76,7 @@ export interface ExpenseState {
 
 /** The Msg that starts one call. */
 export interface Classify {
-  readonly type: "classify";
+  readonly _tag: "classify";
   readonly key: string;
   readonly memo: string;
   readonly at: number;
@@ -161,7 +161,7 @@ export function expenseMachine(ask: Ask) {
     },
     // The retry timer. `timer` is built into the engine.
     subs: [
-      { type: "timer", deps: (s: ExpenseState) => ask.timer(s.resilience) },
+      { _tag: "timer", deps: (s: ExpenseState) => ask.timer(s.resilience) },
     ],
   });
 }
@@ -218,7 +218,7 @@ export function fakeJev(
         model: "jev-1",
         answers: {
           category: {
-            type: "choice",
+            _tag: "choice",
             choice,
             confidence,
             probabilities: {
@@ -254,7 +254,7 @@ export function classifyOne(
   return drive(
     expenseMachine(ask),
     { resilience: ask.init(), verdicts: {} },
-    { type: "classify", key, memo, at: 0 },
+    { _tag: "classify", key, memo, at: 0 },
     jevHandler(ask, callJev),
   );
 }
@@ -348,10 +348,10 @@ export const ledgerMachine = defineMachine({
   // One timer per knob.
   subs: [
     {
-      type: "timer",
+      _tag: "timer",
       deps: (s: LedgerState) => categoryAsk.timer(s.category),
     },
-    { type: "timer", deps: (s: LedgerState) => reviewAsk.timer(s.review) },
+    { _tag: "timer", deps: (s: LedgerState) => reviewAsk.timer(s.review) },
   ],
 });
 
@@ -391,7 +391,7 @@ describe("docs/how-to/ask-jev-a-typed-question.md (#576) — two knobs run", () 
         model: "jev-1",
         answers: {
           review: {
-            type: "choice",
+            _tag: "choice",
             choice: "flag",
             confidence: 0.8,
             probabilities: { fine: 0.2, flag: 0.8 },
@@ -403,7 +403,7 @@ describe("docs/how-to/ask-jev-a-typed-question.md (#576) — two knobs run", () 
     const { state } = await drive(
       ledgerMachine,
       { category: categoryAsk.init(), review: reviewAsk.init() },
-      { type: "classify", key: "tx-1", memo: "PIZZA NAPOLI 240 EUR", at: 0 },
+      { _tag: "classify", key: "tx-1", memo: "PIZZA NAPOLI 240 EUR", at: 0 },
       ledgerHandlers(fakeJev([["dining", 0.93]]), callReview),
     );
 

@@ -28,10 +28,10 @@ class Greeter extends Context.Service<
 
 type State = { readonly trail: string; readonly greeting: string };
 type Msg =
-  | { readonly type: "mark"; readonly ch: string }
-  | { readonly type: "greet" }
-  | { readonly type: "greeted"; readonly text: string };
-type Say = { readonly type: "say" };
+  | { readonly _tag: "mark"; readonly ch: string }
+  | { readonly _tag: "greet" }
+  | { readonly _tag: "greeted"; readonly text: string };
+type Say = { readonly _tag: "say" };
 type Ticker = Sub<"ticker", { readonly id: string }>;
 
 const greeter = defineMachine({
@@ -45,10 +45,10 @@ const greeter = defineMachine({
   init: () => [{ trail: "", greeting: "" }, []],
   update: {
     mark: (s, msg) => [{ ...s, trail: s.trail + msg.ch }, []],
-    greet: (s) => [s, [{ type: "say" }]],
+    greet: (s) => [s, [{ _tag: "say" }]],
     greeted: (s, msg) => [{ ...s, greeting: msg.text }, []],
   },
-  subs: [{ type: "ticker", deps: () => ({ id: "t" }) }],
+  subs: [{ _tag: "ticker", deps: () => ({ id: "t" }) }],
 });
 
 /** The Layer builds when `open` is called. */
@@ -91,7 +91,7 @@ function probe() {
               seen.released += 1;
             }),
         );
-        return { type: "greeted", text: service.greet("x") } as const;
+        return { _tag: "greeted", text: service.greet("x") } as const;
       }),
   };
   const subscribe = {
@@ -175,10 +175,10 @@ describe("an async Layer", () => {
       expect(handlers.seen.starts).toBe(0);
 
       await act(async () => {
-        slot.send?.({ type: "mark", ch: "a" });
-        slot.send?.({ type: "mark", ch: "b" });
-        slot.send?.({ type: "greet" });
-        slot.send?.({ type: "mark", ch: "c" });
+        slot.send?.({ _tag: "mark", ch: "a" });
+        slot.send?.({ _tag: "mark", ch: "b" });
+        slot.send?.({ _tag: "greet" });
+        slot.send?.({ _tag: "mark", ch: "c" });
       });
       expect(text()).toBe("|");
       expect(handlers.seen.said).toBe(0);
@@ -214,11 +214,11 @@ describe("an async Layer", () => {
         ),
       );
       await act(async () => {
-        slot.send?.({ type: "mark", ch: "a" });
+        slot.send?.({ _tag: "mark", ch: "a" });
       });
       await act(beat);
       await act(async () => {
-        slot.send?.({ type: "mark", ch: "b" });
+        slot.send?.({ _tag: "mark", ch: "b" });
       });
 
       expect(onError.mock.calls).toEqual([
@@ -242,7 +242,7 @@ describe("an async Layer", () => {
     try {
       await act(async () => root.render(<Page />));
       await act(async () => {
-        slot.send?.({ type: "greet" });
+        slot.send?.({ _tag: "greet" });
       });
       await act(async () => root.render(null));
       open();
@@ -262,17 +262,17 @@ describe("a State restored by a reload, shown while its Cmd runs (#695)", () => 
   type Phase = "idle" | "reading" | "thinking" | "writing" | "done";
   type Phased = { readonly phase: Phase };
   type Step =
-    | { readonly type: "read" }
-    | { readonly type: "think" }
-    | { readonly type: "write" };
+    | { readonly _tag: "read" }
+    | { readonly _tag: "think" }
+    | { readonly _tag: "write" };
   type Move =
-    | { readonly type: "read" }
-    | { readonly type: "thought" }
-    | { readonly type: "wrote" };
+    | { readonly _tag: "read" }
+    | { readonly _tag: "thought" }
+    | { readonly _tag: "wrote" };
 
   const update: Reducer<Phased, Move, Step> = {
-    read: () => [{ phase: "thinking" }, [{ type: "think" }]],
-    thought: () => [{ phase: "writing" }, [{ type: "write" }]],
+    read: () => [{ phase: "thinking" }, [{ _tag: "think" }]],
+    thought: () => [{ phase: "writing" }, [{ _tag: "write" }]],
     wrote: () => [{ phase: "done" }, []],
   };
 
@@ -285,7 +285,7 @@ describe("a State restored by a reload, shown while its Cmd runs (#695)", () => 
     },
     init: (loaded) =>
       loaded?.phase === "reading"
-        ? [loaded, [{ type: "read" as const }]]
+        ? [loaded, [{ _tag: "read" as const }]]
         : [loaded ?? { phase: "idle" as const }, []],
     update,
   });
@@ -294,8 +294,8 @@ describe("a State restored by a reload, shown while its Cmd runs (#695)", () => 
 
   /** A handler that waits for the test to release it. */
   function held() {
-    const releases = new Map<Step["type"], () => void>();
-    const hold = (cmd: Step["type"], then: Move) => () =>
+    const releases = new Map<Step["_tag"], () => void>();
+    const hold = (cmd: Step["_tag"], then: Move) => () =>
       Effect.promise(
         () =>
           new Promise<Move>((resolve) => {
@@ -304,11 +304,11 @@ describe("a State restored by a reload, shown while its Cmd runs (#695)", () => 
       );
     return {
       interpret: {
-        read: hold("read", { type: "read" }),
-        think: hold("think", { type: "thought" }),
-        write: hold("write", { type: "wrote" }),
+        read: hold("read", { _tag: "read" }),
+        think: hold("think", { _tag: "thought" }),
+        write: hold("write", { _tag: "wrote" }),
       },
-      release: (cmd: Step["type"]) => releases.get(cmd)?.(),
+      release: (cmd: Step["_tag"]) => releases.get(cmd)?.(),
     };
   }
 
@@ -421,7 +421,7 @@ describe("Stop", () => {
         ),
       );
       await act(async () => {
-        slot.send?.({ type: "greet" });
+        slot.send?.({ _tag: "greet" });
       });
       await act(beat);
       expect(handlers.seen).toMatchObject({
@@ -452,7 +452,7 @@ describe("Stop", () => {
         subscribe: handlers.subscribe,
       });
       await handle.ready;
-      handle.dispatch({ type: "greet" }).catch(() => {});
+      handle.dispatch({ _tag: "greet" }).catch(() => {});
       await beat();
 
       const first = handle.stop();

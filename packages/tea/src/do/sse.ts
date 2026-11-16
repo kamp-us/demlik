@@ -144,7 +144,7 @@ export function sseHub<E>(): SseHub<E> {
  * const sseRoute = (): Response => hub.open();
  * ```
  */
-export function sseProjection<Model, Msg extends { type: string }, E>(
+export function sseProjection<Model, Msg extends { _tag: string }, E>(
   hub: SseHub<E>,
   toEvent: (msg: Msg | null, model: Model) => E | null,
   id: { name?: string; key?: string } = {},
@@ -232,9 +232,9 @@ export function sseProjection<Model, Msg extends { type: string }, E>(
  */
 export function sseFromAgentEvents<R, Frame>(
   runtime: {
-    on<K extends AgentEvent<R>["type"]>(
+    on<K extends AgentEvent<R>["_tag"]>(
       type: K,
-      handler: (event: Extract<AgentEvent<R>, { type: K }>) => void,
+      handler: (event: Extract<AgentEvent<R>, { _tag: K }>) => void,
     ): () => void;
   },
   hub: SseHub<Frame>,

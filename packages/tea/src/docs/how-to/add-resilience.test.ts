@@ -47,9 +47,9 @@ import {
 type DoFetch = Cmd<"do_fetch"> & { readonly url: string };
 
 type Msg =
-  | { readonly type: "fetch"; readonly url: string }
-  | { readonly type: "fetch_ok"; readonly body: string }
-  | { readonly type: "fetch_err"; readonly error: string; readonly at: number };
+  | { readonly _tag: "fetch"; readonly url: string }
+  | { readonly _tag: "fetch_ok"; readonly body: string }
+  | { readonly _tag: "fetch_err"; readonly error: string; readonly at: number };
 
 interface Ctx {
   readonly http: (url: string) => Promise<string>;
@@ -75,7 +75,7 @@ const resilientFetch = defineMachine({
   update: {
     fetch: (s, m) => [
       { ...s, phase: "fetching", body: null },
-      [{ type: "do_fetch", url: m.url }],
+      [{ _tag: "do_fetch", url: m.url }],
     ],
     fetch_ok: (s, m) => [
       { ...s, phase: "ok", body: m.body, retry: initRetry() },
@@ -110,8 +110,8 @@ const ctx: Ctx = {
 const interpret: Interpret<Msg, DoFetch, Ctx> = {
   do_fetch: tryInterpret<DoFetch, string, Msg, Ctx>(
     (cmd, ctx) => ctx.http(cmd.url),
-    (body) => ({ type: "fetch_ok", body }),
-    (err) => ({ type: "fetch_err", error: String(err), at: Date.now() }),
+    (body) => ({ _tag: "fetch_ok", body }),
+    (err) => ({ _tag: "fetch_err", error: String(err), at: Date.now() }),
   ),
 };
 
@@ -154,7 +154,7 @@ const outageBoundedFetch = defineMachine({
   update: {
     fetch: (s, m) => [
       { ...s, phase: "fetching", body: null },
-      [{ type: "do_fetch", url: m.url }],
+      [{ _tag: "do_fetch", url: m.url }],
     ],
     fetch_ok: (s, m) => [
       { ...s, phase: "ok", body: m.body, retry: initRetry() },
@@ -188,8 +188,8 @@ describe("docs/how-to/add-resilience.md — it runs", () => {
   it("step 3: the attempt emits the call as a Cmd", () => {
     expectCmdEmitted(
       resilientFetch,
-      { msgs: [{ type: "fetch", url: "/x" }], ctx },
-      { type: "do_fetch", url: "/x" },
+      { msgs: [{ _tag: "fetch", url: "/x" }], ctx },
+      { _tag: "do_fetch", url: "/x" },
     );
   });
 
@@ -204,13 +204,13 @@ describe("docs/how-to/add-resilience.md — it runs", () => {
     const booted = await runtime.ready;
     const before = Date.now();
 
-    await booted.dispatch({ type: "fetch", url: "/x" });
+    await booted.dispatch({ _tag: "fetch", url: "/x" });
     const waiting = booted.getState();
     expect(waiting.phase).toBe("waiting_retry");
     expect(waiting.retry.attempt).toBe(1);
     expect(waiting.retryAtMs).toBeGreaterThanOrEqual(before);
 
-    await booted.dispatch({ type: "fetch", url: "/x" });
+    await booted.dispatch({ _tag: "fetch", url: "/x" });
     expect(booted.getState()).toMatchObject({
       phase: "ok",
       body: "body of /x",
@@ -222,7 +222,7 @@ describe("docs/how-to/add-resilience.md — it runs", () => {
   it("step 3: the count bound gives up after `maxAttempts`", () => {
     const failures = Array.from(
       { length: defaultRetryPolicy.maxAttempts },
-      (): Msg => ({ type: "fetch_err", error: "503", at: 1_000 }),
+      (): Msg => ({ _tag: "fetch_err", error: "503", at: 1_000 }),
     );
     const { state } = replay(resilientFetch, { msgs: failures, ctx });
     expect(state.phase).toBe("failed");
@@ -230,7 +230,7 @@ describe("docs/how-to/add-resilience.md — it runs", () => {
 
   it("step 5: the outage bound retries inside the window and gives up past it", () => {
     const failAt = (at: number): Msg => ({
-      type: "fetch_err",
+      _tag: "fetch_err",
       error: "503",
       at,
     });

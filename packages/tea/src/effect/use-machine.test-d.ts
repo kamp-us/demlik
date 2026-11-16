@@ -31,8 +31,8 @@ const runtime = ManagedRuntime.make(
 );
 
 type State = { readonly n: number };
-type Msg = { readonly type: "go" } | { readonly type: "done" };
-type Work = { readonly type: "work" };
+type Msg = { readonly _tag: "go" } | { readonly _tag: "done" };
+type Work = { readonly _tag: "work" };
 type Tick = Sub<"tick", { readonly every: number }>;
 
 const withCmd = defineMachine({
@@ -44,7 +44,7 @@ const withCmd = defineMachine({
   },
   init: () => [{ n: 0 }, []],
   update: {
-    go: (s) => [s, [{ type: "work" }]],
+    go: (s) => [s, [{ _tag: "work" }]],
     done: (s) => [{ n: s.n + 1 }, []],
   },
 });
@@ -57,7 +57,7 @@ const withSub = defineMachine({
   },
   init: () => [{ n: 0 }, []],
   update: { go: (s) => [s, []], done: (s) => [{ n: s.n + 1 }, []] },
-  subs: [{ type: "tick", deps: () => ({ every: 1 }) }],
+  subs: [{ _tag: "tick", deps: () => ({ every: 1 }) }],
 });
 const plain = defineMachine({
   types: { model: {} as State, msg: {} as Msg, ctx: undefined },
@@ -75,19 +75,19 @@ export function Components() {
         Effect.gen(function* () {
           const greeter = yield* Greeter;
           return greeter.greet() === "hello"
-            ? ({ type: "done" } as const)
+            ? ({ _tag: "done" } as const)
             : undefined;
         }),
     },
   });
   const n: number = state.n;
-  send({ type: "go" });
+  send({ _tag: "go" });
   void n;
 
   useMachine(withCmd, {
     run: runIn(runtime),
     ctx: undefined,
-    interpret: { work: () => Effect.succeed({ type: "done" } as const) },
+    interpret: { work: () => Effect.succeed({ _tag: "done" } as const) },
   });
   useMachine(withCmd, {
     run: runIn(runtime),
@@ -101,7 +101,7 @@ export function Components() {
     interpret: {
       work: () =>
         Effect.acquireRelease(Effect.void, () => Effect.void).pipe(
-          Effect.as({ type: "done" } as const),
+          Effect.as({ _tag: "done" } as const),
         ),
     },
   });
@@ -109,14 +109,14 @@ export function Components() {
     run: runIn(runtime),
     ctx: undefined,
     // @ts-expect-error a Promise is not an Effect
-    interpret: { work: async () => ({ type: "done" }) as const },
+    interpret: { work: async () => ({ _tag: "done" }) as const },
   });
   useMachine(withCmd, {
     run: runIn(runtime),
     ctx: undefined,
     interpret: {
       // @ts-expect-error a Msg the machine does not have
-      work: () => Effect.succeed({ type: "nope" } as const),
+      work: () => Effect.succeed({ _tag: "nope" } as const),
     },
   });
   useMachine(withCmd, {
@@ -145,7 +145,7 @@ export function Components() {
   useMachine(withSub, {
     run: runIn(runtime),
     ctx: undefined,
-    subscribe: { tick: () => Stream.make({ type: "done" } as const) },
+    subscribe: { tick: () => Stream.make({ _tag: "done" } as const) },
   });
   useMachine(withSub, {
     run: runIn(runtime),
@@ -153,7 +153,7 @@ export function Components() {
     subscribe: {
       tick: () =>
         Stream.unwrap(
-          Effect.map(Greeter, () => Stream.make({ type: "go" } as const)),
+          Effect.map(Greeter, () => Stream.make({ _tag: "go" } as const)),
         ),
     },
   });
@@ -181,7 +181,7 @@ export function Components() {
   useMachine(withCmd, {
     run: runPromise,
     ctx: undefined,
-    interpret: { work: async () => ({ type: "done" }) as const },
+    interpret: { work: async () => ({ _tag: "done" }) as const },
   });
   useMachine(withSub, {
     run: runPromise,

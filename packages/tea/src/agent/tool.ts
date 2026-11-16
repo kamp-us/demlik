@@ -396,7 +396,7 @@ export interface ToolRouter<T extends AnyToolDef> {
    * its payload ride beside that rendering, never instead of it (#115).
    */
   readonly outcomeOf: (msg: {
-    readonly type: string;
+    readonly _tag: string;
   }) => ToolSettlement<ToolResult<T>, ToolError<T>> | null;
 }
 
@@ -459,16 +459,16 @@ export function toolRouter<T extends AnyToolDef>(
   >;
 
   const outcomeOf = (msg: {
-    readonly type: string;
+    readonly _tag: string;
   }): ToolSettlement<ToolResult<T>, ToolError<T>> | null => {
-    if (okTypes.has(msg.type)) {
+    if (okTypes.has(msg._tag)) {
       const ok = msg as unknown as SettledShape<ToolResult<T>>;
       return {
         callId: ok.cmd.callId,
         outcome: { kind: "ok", result: ok.value },
       };
     }
-    if (errTypes.has(msg.type)) {
+    if (errTypes.has(msg._tag)) {
       const err = msg as unknown as SettledShape<ToolResult<T>>;
       return {
         callId: err.cmd.callId,

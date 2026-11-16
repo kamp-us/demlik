@@ -22,7 +22,7 @@ import {
 } from "../index";
 
 type State = { count: number };
-type Msg = { type: "inc" } | { type: "dec" };
+type Msg = { _tag: "inc" } | { _tag: "dec" };
 // Use a cmd-less machine (`Cmd<never>`) so `run` needs no `interpret` — keeps these
 // type-level cases focused on the reducer guard, not on effect wiring.
 type NoCmd = Cmd<never>;
@@ -58,7 +58,7 @@ void branded;
 // One Msg variant, so the failed overload reports at exactly the offending cell
 // and the directive pins that cell rather than a sibling it took down with it.
 defineMachine({
-  types: { model: {} as State, msg: {} as { type: "inc" } },
+  types: { model: {} as State, msg: {} as { _tag: "inc" } },
   init: () => [{ count: 0 }, []],
   update: {
     // @ts-expect-error async reducer cell returns a Promise — rejected
@@ -85,14 +85,14 @@ const annotated: Reducer<State, Msg, NoCmd> = {
 void annotated;
 
 // ── Transitions cells carry the same guard ──────────────────────────────────────
-type Phase = { type: "idle" } | { type: "busy" };
-type PhaseMsg = { type: "go" } | { type: "stop" };
+type Phase = { _tag: "idle" } | { _tag: "busy" };
+type PhaseMsg = { _tag: "go" } | { _tag: "stop" };
 
 // NEGATIVE: an async transition cell makes the table fail to type-check. One
 // phase and one Msg variant, for the same reason as the reducer case above.
 defineMachine({
-  types: { model: {} as { type: "idle" }, msg: {} as { type: "go" } },
-  init: (loaded) => [loaded ?? { type: "idle" }, []],
+  types: { model: {} as { _tag: "idle" }, msg: {} as { _tag: "go" } },
+  init: (loaded) => [loaded ?? { _tag: "idle" }, []],
   update: {
     idle: {
       // @ts-expect-error async transition cell returns a Promise — rejected
@@ -104,12 +104,12 @@ defineMachine({
 // POSITIVE: a pure synchronous transition table compiles.
 const transitions: Transitions<Phase, PhaseMsg, NoCmd> = {
   idle: {
-    go: (_s, _m) => [{ type: "busy" }, []],
+    go: (_s, _m) => [{ _tag: "busy" }, []],
     stop: (s, _m) => [s, []],
   },
   busy: {
     go: (s, _m) => [s, []],
-    stop: (_s, _m) => [{ type: "idle" }, []],
+    stop: (_s, _m) => [{ _tag: "idle" }, []],
   },
 };
 void transitions;

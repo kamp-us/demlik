@@ -30,16 +30,16 @@ describe("idle() rejects on quiescence timeout (no silent fall-through)", () => 
   // returns a `tick` follow-up; `tick`'s cell re-emits `loop`. The tail never
   // stabilizes, so `idle()` must hit its cap and REJECT rather than resolve.
   type State = { readonly ticks: number };
-  type Msg = { readonly type: "tick" };
-  type LoopCmd = { readonly type: "loop" };
+  type Msg = { readonly _tag: "tick" };
+  type LoopCmd = { readonly _tag: "loop" };
 
   function livelockMachine() {
     const update: Reducer<State, Msg, LoopCmd> = {
-      tick: (s) => [{ ticks: s.ticks + 1 }, [{ type: "loop" }]],
+      tick: (s) => [{ ticks: s.ticks + 1 }, [{ _tag: "loop" }]],
     };
     const interpret: Interpret<Msg, LoopCmd, undefined> = {
       // Every loop schedules another tick — the tail advances forever.
-      loop: async () => ({ type: "tick" }),
+      loop: async () => ({ _tag: "tick" }),
     };
     const machine = defineMachine({
       types: {
@@ -49,7 +49,7 @@ describe("idle() rejects on quiescence timeout (no silent fall-through)", () => 
         ctx: undefined,
       },
       // Kick the loop off at boot.
-      init: () => [{ ticks: 0 }, [{ type: "loop" }]],
+      init: () => [{ ticks: 0 }, [{ _tag: "loop" }]],
       update,
     });
     return { machine, interpret };
@@ -95,15 +95,15 @@ describe("idle() rejects on quiescence timeout (no silent fall-through)", () => 
   it("still RESOLVES for a machine that genuinely quiesces", async () => {
     // Control: a finite follow-up chain reaches quiescence — idle() resolves.
     type S2 = { readonly n: number };
-    type M2 = { readonly type: "step" } | { readonly type: "done" };
-    type C2 = { readonly type: "advance" };
+    type M2 = { readonly _tag: "step" } | { readonly _tag: "done" };
+    type C2 = { readonly _tag: "advance" };
     const update: Reducer<S2, M2, C2> = {
-      step: (s) => [{ n: s.n + 1 }, [{ type: "advance" }]],
+      step: (s) => [{ n: s.n + 1 }, [{ _tag: "advance" }]],
       done: (s) => [s, []],
     };
     const interpret: Interpret<M2, C2, undefined> = {
       // One advance, then a terminal `done` — the chain ends.
-      advance: async () => ({ type: "done" }),
+      advance: async () => ({ _tag: "done" }),
     };
     const machine = defineMachine({
       types: { model: {} as S2, msg: {} as M2, cmd: {} as C2, ctx: undefined },
@@ -115,7 +115,7 @@ describe("idle() rejects on quiescence timeout (no silent fall-through)", () => 
       interpret,
       __idleCap: 25,
     }).ready;
-    await runtime.dispatch({ type: "step" });
+    await runtime.dispatch({ _tag: "step" });
     await expect(runtime.idle()).resolves.toBeUndefined();
     await runtime.stop();
   });
@@ -130,15 +130,15 @@ describe("follow-up dispatch failures route to the onError sink", () => {
     // caller. Build a chain: kick → interpret returns `boom` → boom emits
     // `explode` → explode throws.
     type S2 = { readonly seen: boolean };
-    type M2 = { readonly type: "kick" } | { readonly type: "boom" };
-    type C2 = { readonly type: "trigger" } | { readonly type: "explode" };
+    type M2 = { readonly _tag: "kick" } | { readonly _tag: "boom" };
+    type C2 = { readonly _tag: "trigger" } | { readonly _tag: "explode" };
     const update: Reducer<S2, M2, C2> = {
-      kick: (s) => [s, [{ type: "trigger" }]],
-      boom: (s) => [{ ...s }, [{ type: "explode" }]],
+      kick: (s) => [s, [{ _tag: "trigger" }]],
+      boom: (s) => [{ ...s }, [{ _tag: "explode" }]],
     };
     const interpret: Interpret<M2, C2, undefined> = {
       // `trigger` returns the `boom` follow-up Msg (caller-less re-dispatch).
-      trigger: async () => ({ type: "boom" }),
+      trigger: async () => ({ _tag: "boom" }),
       // `explode` throws — the follow-up `boom` dispatch rejects.
       explode: async () => {
         throw FOLLOW_UP_ERROR;
@@ -159,7 +159,7 @@ describe("follow-up dispatch failures route to the onError sink", () => {
 
     // The original dispatch resolves (its own transition + the `trigger`
     // interpret succeed). The FOLLOW-UP `boom` is what fails, with no caller.
-    await runtime.dispatch({ type: "kick" });
+    await runtime.dispatch({ _tag: "kick" });
     // Let the follow-up chain settle.
     await runtime.idle().catch(() => {});
     await runtime.stop();
@@ -185,17 +185,17 @@ describe("dispatch() runs to quiescence by default (#50)", () => {
   // `bump` follow-up; `bump` emits nothing. The chain ends after two
   // transitions. A plain `await dispatch` must see BOTH folded in.
   type State = { readonly steps: number; readonly bumped: boolean };
-  type Msg = { readonly type: "kick" } | { readonly type: "bump" };
-  type Cmds = { readonly type: "step" };
+  type Msg = { readonly _tag: "kick" } | { readonly _tag: "bump" };
+  type Cmds = { readonly _tag: "step" };
 
   function chainMachine() {
     const update: Reducer<State, Msg, Cmds> = {
-      kick: (s) => [{ ...s, steps: s.steps + 1 }, [{ type: "step" }]],
+      kick: (s) => [{ ...s, steps: s.steps + 1 }, [{ _tag: "step" }]],
       bump: (s) => [{ ...s, bumped: true }, []],
     };
     const interpret: Interpret<Msg, Cmds, undefined> = {
       // The follow-up the pre-#50 `dispatch` did NOT await.
-      step: async () => ({ type: "bump" }),
+      step: async () => ({ _tag: "bump" }),
     };
     const machine = defineMachine({
       types: {
@@ -215,7 +215,7 @@ describe("dispatch() runs to quiescence by default (#50)", () => {
     const runtime = await run(machine, { interpret, ctx: undefined }).ready;
     // No `idle()`, no poll — just the dispatch. The follow-up `bump` must have
     // landed by the time it resolves.
-    await runtime.dispatch({ type: "kick" });
+    await runtime.dispatch({ _tag: "kick" });
     expect(runtime.getState()).toEqual({ steps: 1, bumped: true });
     await runtime.stop();
   });
@@ -232,22 +232,22 @@ describe("dispatch() runs to quiescence by default (#50)", () => {
   // mark reducer sets bumped. The first transition (kick) is the single step;
   // everything past it is the follow-up chain `idle()` drains.
   type GatedMsg =
-    | { readonly type: "kick" }
-    | { readonly type: "bump" }
-    | { readonly type: "mark" };
-  type GatedCmds = { readonly type: "step" } | { readonly type: "await" };
+    | { readonly _tag: "kick" }
+    | { readonly _tag: "bump" }
+    | { readonly _tag: "mark" };
+  type GatedCmds = { readonly _tag: "step" } | { readonly _tag: "await" };
 
   function gatedChainMachine(gate: Promise<void>) {
     const update: Reducer<State, GatedMsg, GatedCmds> = {
-      kick: (s) => [{ ...s, steps: s.steps + 1 }, [{ type: "step" }]],
-      bump: (s) => [s, [{ type: "await" }]],
+      kick: (s) => [{ ...s, steps: s.steps + 1 }, [{ _tag: "step" }]],
+      bump: (s) => [s, [{ _tag: "await" }]],
       mark: (s) => [{ ...s, bumped: true }, []],
     };
     const interpret: Interpret<GatedMsg, GatedCmds, undefined> = {
-      step: async () => ({ type: "bump" }),
+      step: async () => ({ _tag: "bump" }),
       await: async () => {
         await gate;
-        return { type: "mark" };
+        return { _tag: "mark" };
       },
     };
     const machine = defineMachine({
@@ -272,7 +272,7 @@ describe("dispatch() runs to quiescence by default (#50)", () => {
     const runtime = await run(machine, { interpret, ctx: undefined }).ready;
     // Single step: kick's transition. The follow-up chain (bump → await →
     // mark) is enqueued but stalls at the shut gate, so `bumped` stays false.
-    await runtime.dispatchOnce({ type: "kick" });
+    await runtime.dispatchOnce({ _tag: "kick" });
     expect(runtime.getState()).toEqual({ steps: 1, bumped: false });
     // Release the gate and drain the tail ourselves.
     openGate();
@@ -288,7 +288,7 @@ describe("dispatch() runs to quiescence by default (#50)", () => {
     });
     const { machine, interpret } = gatedChainMachine(gate);
     const runtime = await run(machine, { interpret, ctx: undefined }).ready;
-    await runtime.dispatch({ type: "kick" }, { settle: "once" });
+    await runtime.dispatch({ _tag: "kick" }, { settle: "once" });
     expect(runtime.getState()).toEqual({ steps: 1, bumped: false });
     openGate();
     await runtime.idle();
@@ -299,7 +299,7 @@ describe("dispatch() runs to quiescence by default (#50)", () => {
   it("dispatch(msg, { settle: 'quiescent' }) is the explicit form of the default", async () => {
     const { machine, interpret } = chainMachine();
     const runtime = await run(machine, { interpret, ctx: undefined }).ready;
-    await runtime.dispatch({ type: "kick" }, { settle: "quiescent" });
+    await runtime.dispatch({ _tag: "kick" }, { settle: "quiescent" });
     expect(runtime.getState()).toEqual({ steps: 1, bumped: true });
     await runtime.stop();
   });
@@ -308,14 +308,14 @@ describe("dispatch() runs to quiescence by default (#50)", () => {
     // The drain shares `idle()`'s cap + reject contract (#51): a follow-up
     // chain that never stabilizes surfaces, never silently resolves.
     type S2 = { readonly ticks: number };
-    type M2 = { readonly type: "go" } | { readonly type: "tick" };
-    type C2 = { readonly type: "loop" };
+    type M2 = { readonly _tag: "go" } | { readonly _tag: "tick" };
+    type C2 = { readonly _tag: "loop" };
     const update: Reducer<S2, M2, C2> = {
-      go: (s) => [s, [{ type: "loop" }]],
-      tick: (s) => [{ ticks: s.ticks + 1 }, [{ type: "loop" }]],
+      go: (s) => [s, [{ _tag: "loop" }]],
+      tick: (s) => [{ ticks: s.ticks + 1 }, [{ _tag: "loop" }]],
     };
     const interpret: Interpret<M2, C2, undefined> = {
-      loop: async () => ({ type: "tick" }),
+      loop: async () => ({ _tag: "tick" }),
     };
     const machine = defineMachine({
       types: { model: {} as S2, msg: {} as M2, cmd: {} as C2, ctx: undefined },
@@ -328,7 +328,7 @@ describe("dispatch() runs to quiescence by default (#50)", () => {
       __idleCap: 25,
       onError: () => {},
     }).ready;
-    await expect(runtime.dispatch({ type: "go" })).rejects.toBeInstanceOf(
+    await expect(runtime.dispatch({ _tag: "go" })).rejects.toBeInstanceOf(
       QuiescenceTimeoutError,
     );
     await runtime.stop();
@@ -338,7 +338,7 @@ describe("dispatch() runs to quiescence by default (#50)", () => {
     // A reducer throw on THIS Msg must reject the dispatch directly (phase
     // "reduce"), not get masked by a later quiescence outcome.
     type S2 = { readonly n: number };
-    type M2 = { readonly type: "explode" };
+    type M2 = { readonly _tag: "explode" };
     const REDUCER_ERROR = new Error("reducer threw on this very Msg");
     const update: Reducer<S2, M2, Cmd> = {
       explode: () => {
@@ -354,7 +354,7 @@ describe("dispatch() runs to quiescence by default (#50)", () => {
       ctx: undefined,
       onError: () => {},
     }).ready;
-    await expect(runtime.dispatch({ type: "explode" })).rejects.toBe(
+    await expect(runtime.dispatch({ _tag: "explode" })).rejects.toBe(
       REDUCER_ERROR,
     );
     await runtime.stop();
@@ -363,7 +363,7 @@ describe("dispatch() runs to quiescence by default (#50)", () => {
 
 describe("stop-save failure routes to the onError sink (no silent data loss)", () => {
   type State = { readonly n: number };
-  type Msg = { readonly type: "inc" };
+  type Msg = { readonly _tag: "inc" };
 
   function counterMachine() {
     const update: Reducer<State, Msg, Cmd> = {
@@ -402,7 +402,7 @@ describe("stop-save failure routes to the onError sink (no silent data loss)", (
       store,
       onError: (error, context) => seen.push({ error, context }),
     }).ready;
-    await runtime.dispatch({ type: "inc" });
+    await runtime.dispatch({ _tag: "inc" });
 
     // Arm the failure for the stop-flush save only.
     failNextSave = true;
@@ -430,7 +430,7 @@ describe("stop-save failure routes to the onError sink (no silent data loss)", (
       store,
       onError,
     }).ready;
-    await runtime.dispatch({ type: "inc" });
+    await runtime.dispatch({ _tag: "inc" });
     await runtime.stop();
     expect(onError).not.toHaveBeenCalled();
   });
@@ -443,18 +443,18 @@ describe("default onError (no sink) surfaces rather than swallows", () => {
   // macrotask and assert the throw actually escapes (the "surface, never
   // swallow" default of invariant 6).
   type S = { readonly _: 0 };
-  type M = { readonly type: "kick" } | { readonly type: "boom" };
-  type C = { readonly type: "trigger" } | { readonly type: "explode" };
+  type M = { readonly _tag: "kick" } | { readonly _tag: "boom" };
+  type C = { readonly _tag: "trigger" } | { readonly _tag: "explode" };
 
   const BOOM = new Error("follow-up boom, no sink");
 
   function followUpMachine() {
     const update: Reducer<S, M, C> = {
-      kick: (s) => [s, [{ type: "trigger" }]],
-      boom: (s) => [s, [{ type: "explode" }]],
+      kick: (s) => [s, [{ _tag: "trigger" }]],
+      boom: (s) => [s, [{ _tag: "explode" }]],
     };
     const interpret: Interpret<M, C, undefined> = {
-      trigger: async () => ({ type: "boom" }),
+      trigger: async () => ({ _tag: "boom" }),
       explode: async () => {
         throw BOOM;
       },
@@ -485,7 +485,7 @@ describe("default onError (no sink) surfaces rather than swallows", () => {
       const runtime = await run(machine, { interpret, ctx: undefined }).ready;
       // Original dispatch resolves; the caller-less follow-up fails and is
       // handed to defaultOnError → scheduled here.
-      await expect(runtime.dispatch({ type: "kick" })).resolves.toBeUndefined();
+      await expect(runtime.dispatch({ _tag: "kick" })).resolves.toBeUndefined();
       await runtime.idle().catch(() => {});
       await runtime.stop();
 

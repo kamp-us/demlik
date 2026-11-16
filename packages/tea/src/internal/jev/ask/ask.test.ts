@@ -43,7 +43,7 @@ const okBody = {
   model: "jev-1",
   answers: {
     category: {
-      type: "choice",
+      _tag: "choice",
       choice: "dining",
       probabilities: { groceries: 0.1, dining: 0.9 },
       confidence: 0.9,
@@ -95,7 +95,7 @@ interface HostState {
   readonly resilience: ResilientState<JevRequest<Questions>, JevOk<Questions>>;
 }
 type HostMsg =
-  | { type: "ask"; key: string; content: string; at: number }
+  | { _tag: "ask"; key: string; content: string; at: number }
   | JevTimerMsg;
 
 /** The knob, as the host sees it. */
@@ -132,7 +132,7 @@ function hostMachine(ask: Ask) {
         return [{ resilience: slice }, cmds];
       },
     },
-    subs: [{ type: "timer", deps: (s: HostState) => ask.timer(s.resilience) }],
+    subs: [{ _tag: "timer", deps: (s: HostState) => ask.timer(s.resilience) }],
   });
   return { ...machine, cmds: [ask.run] };
 }
@@ -175,7 +175,7 @@ async function settle(
   const machine = hostMachine(ask);
   const interpret = interpretWith(ask, http);
   let state: HostState = { resilience: ask.init() };
-  let msg: HostMsg = { type: "ask", key, content, at: 0 };
+  let msg: HostMsg = { _tag: "ask", key, content, at: 0 };
   for (let guard = 0; guard < 20; guard += 1) {
     ({ state } = await drive(machine, state, msg, interpret, {
       clock: () => 0,
@@ -183,7 +183,7 @@ async function settle(
     const call = callOf(state, key);
     if (call.phase !== "waiting_retry") return state;
     msg = {
-      type: "deadline_exceeded",
+      _tag: "deadline_exceeded",
       id: `resilient:retry:${key}`,
       atMs: call.retryAtMs,
     };
@@ -221,7 +221,7 @@ describe("createJevAsk — the slice and verbs are resilient-call's", () => {
     const [s, cmds] = ask.attempt(ask.init(), "k", "a receipt", 0);
     expect(cmds).toEqual([
       {
-        type: jevAskCmdDef<Questions>().cmdType,
+        _tag: jevAskCmdDef<Questions>().cmdType,
         key: "k",
         input: { state: "a receipt", model: "jev-latest", questions },
       },
@@ -263,10 +263,10 @@ describe("createJevAsk — the slice and verbs are resilient-call's", () => {
     expect(ask.deadlines(t)).toEqual([deadlineSub("resilient:retry:k", 0)]);
     expect(ask.timer(t)).toEqual({
       ms: 0,
-      msg: { type: "deadline_exceeded", id: "resilient:retry:k", atMs: 0 },
+      msg: { _tag: "deadline_exceeded", id: "resilient:retry:k", atMs: 0 },
     });
     const [, cmds] = ask.onTimer(t, {
-      type: "deadline_exceeded",
+      _tag: "deadline_exceeded",
       id: "resilient:retry:k",
       atMs: 0,
     });
@@ -475,7 +475,7 @@ describe("createJevAsk — a named knob", () => {
     expect(jevAskCmdDef<Questions, "judge">("judge").cmdType).toBe("judge_run");
 
     const [running, cmds] = ask.attempt(ask.init(), "k", "x", 0);
-    expect(cmds.map((cmd) => cmd.type)).toEqual(["judge_run"]);
+    expect(cmds.map((cmd) => cmd._tag)).toEqual(["judge_run"]);
 
     const cmd = ask.run({ key: "k", input: request });
     const result: JevOk<Questions> = {
@@ -484,18 +484,18 @@ describe("createJevAsk — a named knob", () => {
       usage: { input_tokens: 1, output_tokens: 1 },
       source: "port",
     };
-    expect(ask.run.ok(cmd, result, 0).type).toBe("judge_run_ok");
+    expect(ask.run.ok(cmd, result, 0)._tag).toBe("judge_run_ok");
     const failed = ask.run.err(
       cmd,
       { _tag: "port_rejected", jev: { _tag: "http_retry", status: 429 } },
       0,
     );
-    expect(failed.type).toBe("judge_run_err");
+    expect(failed._tag).toBe("judge_run_err");
 
     const [waiting] = ask.fail(running, failed);
     expect(ask.timer(waiting)).toEqual({
       ms: 0,
-      msg: { type: "judge_deadline", id: "judge:retry:k", atMs: 0 },
+      msg: { _tag: "judge_deadline", id: "judge:retry:k", atMs: 0 },
     });
   });
 
@@ -512,7 +512,7 @@ describe("createJevAsk — a named knob", () => {
     interface JudgeState {
       readonly judge: ResilientState<JevRequest<Questions>, JevOk<Questions>>;
     }
-    type JudgeMsg = { type: "ask"; content: string } | JevTimerMsg<"judge">;
+    type JudgeMsg = { _tag: "ask"; content: string } | JevTimerMsg<"judge">;
     const machine = defineMachine({
       types: { model: {} as JudgeState, msg: {} as JudgeMsg, ctx: undefined },
       cmds: [ask.run],
@@ -539,7 +539,7 @@ describe("createJevAsk — a named knob", () => {
     });
 
     let state: JudgeState = { judge: ask.init() };
-    let msg: JudgeMsg = { type: "ask", content: "a diff" };
+    let msg: JudgeMsg = { _tag: "ask", content: "a diff" };
     const folded: string[] = [];
     for (let guard = 0; guard < 20; guard += 1) {
       const driven = await drive(
@@ -559,11 +559,11 @@ describe("createJevAsk — a named knob", () => {
       );
       state = driven.state;
       for (const entry of driven.trace) {
-        if (entry.kind === "msg") folded.push(entry.msg.type);
+        if (entry.kind === "msg") folded.push(entry.msg._tag);
       }
       const call = state.judge.calls.k;
       if (call?.phase !== "waiting_retry") break;
-      msg = { type: "judge_deadline", id: "judge:retry:k", atMs: 0 };
+      msg = { _tag: "judge_deadline", id: "judge:retry:k", atMs: 0 };
     }
 
     expect(calls).toEqual([429, 429, 429]);
@@ -598,12 +598,12 @@ describe("createJevAsk — the outcome builders a handler returns", () => {
     const { trace } = await drive(
       hostMachine(ask),
       { resilience: ask.init() },
-      { type: "ask", key: "k", content: "x", at: 0 },
+      { _tag: "ask", key: "k", content: "x", at: 0 },
       interpretWith(ask, async () => ({ status: 200, body: okBody })),
       { clock: () => 42 },
     );
     const settled = trace.find(
-      (e) => e.kind === "msg" && e.msg.type === "resilient_run_ok",
+      (e) => e.kind === "msg" && e.msg._tag === "resilient_run_ok",
     );
     expect(
       settled?.kind === "msg" && "at" in settled.msg && settled.msg.at,
@@ -659,7 +659,7 @@ describe("createJevAsk — a caller may name a question `_tag`", () => {
 
   const tagAnswers = {
     _tag: {
-      type: "choice",
+      _tag: "choice",
       choice: "dining",
       probabilities: { groceries: 0.1, dining: 0.9 },
       confidence: 0.9,

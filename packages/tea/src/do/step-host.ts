@@ -489,7 +489,7 @@ export function stepHost<R, I, O>(
         );
         intakeState = nextIntake;
         for (const cmd of cmds) {
-          if (cmd.type === "intake:process") {
+          if (cmd._tag === "intake:process") {
             await engine.resume(request.runId, posted);
             const [completed] = intake.complete(
               intakeState,

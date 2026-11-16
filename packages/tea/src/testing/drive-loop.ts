@@ -265,7 +265,7 @@ export function driveContractOf(
  */
 export async function driveLoop<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -308,9 +308,9 @@ export async function driveLoop<
 
       for (const cmd of emitted) {
         trace.push({ kind: "cmd", cmd });
-        const cell = cellFor(cmd.type);
+        const cell = cellFor(cmd._tag);
         if (cell === undefined) {
-          throw new DriveNoHandlerError<M, C>(cmd.type, trace);
+          throw new DriveNoHandlerError<M, C>(cmd._tag, trace);
         }
         // The dispatch half of ADR 0021, as the engine applies it (#304): a
         // `Cmd.define`d handler may not send a `_ok` / `_err` it built itself.

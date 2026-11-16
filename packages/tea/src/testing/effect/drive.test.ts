@@ -32,10 +32,10 @@ interface CountState {
 }
 
 type CountMsg =
-  | { readonly type: "start"; readonly left: number }
-  | { readonly type: "worked"; readonly label: string };
+  | { readonly _tag: "start"; readonly left: number }
+  | { readonly _tag: "worked"; readonly label: string };
 
-type WorkCmd = { readonly type: "work"; readonly label: string };
+type WorkCmd = { readonly _tag: "work"; readonly label: string };
 
 const counting = defineMachine({
   types: {
@@ -48,13 +48,13 @@ const counting = defineMachine({
   update: {
     start: (_s, m) => [
       { left: m.left, done: 0 },
-      m.left > 0 ? [{ type: "work" as const, label: `w${m.left}` }] : [],
+      m.left > 0 ? [{ _tag: "work" as const, label: `w${m.left}` }] : [],
     ],
     worked: (s) => {
       const left = s.left - 1;
       return [
         { left, done: s.done + 1 },
-        left > 0 ? [{ type: "work" as const, label: `w${left}` }] : [],
+        left > 0 ? [{ _tag: "work" as const, label: `w${left}` }] : [],
       ];
     },
   },
@@ -62,7 +62,7 @@ const counting = defineMachine({
 
 const working = {
   work: (cmd: WorkCmd) =>
-    Effect.succeed({ type: "worked" as const, label: cmd.label }),
+    Effect.succeed({ _tag: "worked" as const, label: cmd.label }),
 };
 
 const idle: CountState = { left: 0, done: 0 };
@@ -85,30 +85,30 @@ function failureOf<E>(exit: Exit.Exit<unknown, E>): E {
 describe("drive (Effect)", () => {
   it("settles the machine and yields the state and the trace", async () => {
     const { state, trace } = await Effect.runPromise(
-      drive(counting, idle, { type: "start", left: 2 }, working),
+      drive(counting, idle, { _tag: "start", left: 2 }, working),
     );
 
     expect(state).toEqual({ left: 0, done: 2 });
     expect(trace).toEqual([
-      { kind: "msg", msg: { type: "start", left: 2 } },
-      { kind: "cmd", cmd: { type: "work", label: "w2" } },
-      { kind: "msg", msg: { type: "worked", label: "w2" } },
-      { kind: "cmd", cmd: { type: "work", label: "w1" } },
-      { kind: "msg", msg: { type: "worked", label: "w1" } },
+      { kind: "msg", msg: { _tag: "start", left: 2 } },
+      { kind: "cmd", cmd: { _tag: "work", label: "w2" } },
+      { kind: "msg", msg: { _tag: "worked", label: "w2" } },
+      { kind: "cmd", cmd: { _tag: "work", label: "w1" } },
+      { kind: "msg", msg: { _tag: "worked", label: "w1" } },
     ]);
   });
 
   it("traces the same history as the Promise drive on the same machine", async () => {
     const effect = await Effect.runPromise(
-      drive(counting, idle, { type: "start", left: 3 }, working),
+      drive(counting, idle, { _tag: "start", left: 3 }, working),
     );
     const promise = await drivePromise(
       counting,
       idle,
-      { type: "start", left: 3 },
+      { _tag: "start", left: 3 },
       {
         work: async (cmd: WorkCmd) => ({
-          type: "worked" as const,
+          _tag: "worked" as const,
           label: cmd.label,
         }),
       },
@@ -119,9 +119,9 @@ describe("drive (Effect)", () => {
 
   it("folds a hand-written cell's Msg list in order, and settles on nothing (#324)", async () => {
     type Msg =
-      | { readonly type: "fire" }
-      | { readonly type: "got"; readonly n: number };
-    type Burst = { readonly type: "burst" } | { readonly type: "hush" };
+      | { readonly _tag: "fire" }
+      | { readonly _tag: "got"; readonly n: number };
+    type Burst = { readonly _tag: "burst" } | { readonly _tag: "hush" };
     const burst = defineMachine({
       types: {
         model: {} as readonly number[],
@@ -133,7 +133,7 @@ describe("drive (Effect)", () => {
       update: {
         fire: (s) => [
           s,
-          [{ type: "burst" as const }, { type: "hush" as const }],
+          [{ _tag: "burst" as const }, { _tag: "hush" as const }],
         ],
         got: (s, m) => [[...s, m.n], []],
       },
@@ -143,17 +143,17 @@ describe("drive (Effect)", () => {
       drive(
         burst,
         [],
-        { type: "fire" },
+        { _tag: "fire" },
         {
           burst: () =>
-            Effect.succeed([0, 1, 2].map((n) => ({ type: "got" as const, n }))),
+            Effect.succeed([0, 1, 2].map((n) => ({ _tag: "got" as const, n }))),
           hush: () => Effect.void,
         },
       ),
     );
 
     expect(state).toEqual([0, 1, 2]);
-    expect(msgsOf(trace).map((m) => m.type)).toEqual([
+    expect(msgsOf(trace).map((m) => m._tag)).toEqual([
       "fire",
       "got",
       "got",
@@ -168,7 +168,7 @@ describe("drive (Effect)", () => {
       err: ["missing"],
     });
     type Msg =
-      | { readonly type: "go"; readonly id: string }
+      | { readonly _tag: "go"; readonly id: string }
       | Settled<typeof load>;
     type Model = { readonly names: readonly string[]; readonly errs: number };
     const lookup = defineMachine({
@@ -191,14 +191,14 @@ describe("drive (Effect)", () => {
         drive(
           lookup,
           start,
-          { type: "go", id: "7" },
+          { _tag: "go", id: "7" },
           { load: (cmd) => Effect.succeed({ name: `user ${cmd.id}` }) },
           { clock: () => 42 },
         ),
       );
 
       expect(state).toEqual({ names: ["user 7"], errs: 0 });
-      expect(msgsOf(trace)[1]).toMatchObject({ type: "load_ok", at: 42 });
+      expect(msgsOf(trace)[1]).toMatchObject({ _tag: "load_ok", at: 42 });
     });
 
     it("mints its declared failure into `_err`, and the drive still settles", async () => {
@@ -206,7 +206,7 @@ describe("drive (Effect)", () => {
         drive(
           lookup,
           start,
-          { type: "go", id: "7" },
+          { _tag: "go", id: "7" },
           { load: () => Effect.fail({ _tag: "missing" as const }) },
         ),
       );
@@ -218,12 +218,12 @@ describe("drive (Effect)", () => {
       drive(
         lookup,
         start,
-        { type: "go", id: "7" },
+        { _tag: "go", id: "7" },
         {
           // @ts-expect-error — an Effect cell takes the Cmd only; there is no
           // `dispatch` to send a self-built `load_ok` through
           load: (_cmd: unknown, dispatch: (msg: Msg) => void) =>
-            Effect.sync(() => dispatch({ type: "go", id: "again" })),
+            Effect.sync(() => dispatch({ _tag: "go", id: "again" })),
         },
       );
     });
@@ -233,7 +233,7 @@ describe("drive (Effect)", () => {
         drive(
           lookup,
           start,
-          { type: "go", id: "7" },
+          { _tag: "go", id: "7" },
           { load: () => Effect.die(new Error("boom")) },
         ),
       );
@@ -253,36 +253,36 @@ describe("drive (Effect)", () => {
 
     type Beat = Sub<"beat", { readonly on: true }>;
     type Msg =
-      | { readonly type: "go"; readonly id: string }
-      | { readonly type: "named"; readonly name: string }
-      | { readonly type: "beat" };
+      | { readonly _tag: "go"; readonly id: string }
+      | { readonly _tag: "named"; readonly name: string }
+      | { readonly _tag: "beat" };
     type Model = { readonly names: readonly string[]; readonly beats: number };
     const named = defineMachine({
       types: {
         model: {} as Model,
         msg: {} as Msg,
-        cmd: {} as { readonly type: "name"; readonly id: string },
+        cmd: {} as { readonly _tag: "name"; readonly id: string },
         sub: {} as Beat,
         ctx: undefined,
       },
       init: (loaded) => [loaded ?? { names: [], beats: 0 }, []],
       update: {
-        go: (m, msg) => [m, [{ type: "name" as const, id: msg.id }]],
+        go: (m, msg) => [m, [{ _tag: "name" as const, id: msg.id }]],
         named: (m, msg) => [{ ...m, names: [...m.names, msg.name] }, []],
         beat: (m) => [{ ...m, beats: m.beats + 1 }, []],
       },
-      subs: [{ type: "beat", deps: () => ({ on: true as const }) }],
+      subs: [{ _tag: "beat", deps: () => ({ on: true as const }) }],
     });
 
     const program = drive(
       named,
       { names: [], beats: 0 },
-      { type: "go", id: "7" },
+      { _tag: "go", id: "7" },
       {
         name: (cmd) =>
           Effect.gen(function* () {
             const directory = yield* Directory;
-            return { type: "named" as const, name: directory.nameOf(cmd.id) };
+            return { _tag: "named" as const, name: directory.nameOf(cmd.id) };
           }),
       },
       {
@@ -292,7 +292,7 @@ describe("drive (Effect)", () => {
               Effect.gen(function* () {
                 const pulse = yield* Pulse;
                 return Stream.range(1, pulse.beats).pipe(
-                  Stream.map(() => ({ type: "beat" as const })),
+                  Stream.map(() => ({ _tag: "beat" as const })),
                 );
               }),
             ),
@@ -306,15 +306,15 @@ describe("drive (Effect)", () => {
           DriveResult<
             Model,
             Msg,
-            { readonly type: "name"; readonly id: string }
+            { readonly _tag: "name"; readonly id: string }
           >,
           | DriveRoundsExceededError<
               Msg,
-              { readonly type: "name"; readonly id: string }
+              { readonly _tag: "name"; readonly id: string }
             >
           | DriveNoHandlerError<
               Msg,
-              { readonly type: "name"; readonly id: string }
+              { readonly _tag: "name"; readonly id: string }
             >,
           Directory | Pulse
         >
@@ -338,9 +338,9 @@ describe("drive (Effect)", () => {
   describe("Subs", () => {
     type Tick = Sub<"ticks", { readonly until: number }>;
     type Msg =
-      | { readonly type: "arm"; readonly until: number }
-      | { readonly type: "tick" }
-      | { readonly type: "later" };
+      | { readonly _tag: "arm"; readonly until: number }
+      | { readonly _tag: "tick" }
+      | { readonly _tag: "later" };
     type Model = {
       readonly until: number | null;
       readonly ticks: number;
@@ -368,14 +368,14 @@ describe("drive (Effect)", () => {
       },
       subs: [
         {
-          type: "ticks",
+          _tag: "ticks",
           deps: (m) => (m.until === null ? null : { until: m.until }),
         },
         {
-          type: "timer",
+          _tag: "timer",
           deps: (m) =>
             m.ticks > 0 && !m.later
-              ? { ms: 1, msg: { type: "later" as const } }
+              ? { ms: 1, msg: { _tag: "later" as const } }
               : null,
         },
       ],
@@ -388,7 +388,7 @@ describe("drive (Effect)", () => {
         drive(
           ticking,
           start,
-          { type: "arm", until: 2 },
+          { _tag: "arm", until: 2 },
           {},
           {
             subscribe: {
@@ -396,8 +396,8 @@ describe("drive (Effect)", () => {
               // stops it, which is the reconcile under test.
               ticks: () =>
                 Stream.make(
-                  { type: "tick" as const },
-                  { type: "tick" as const },
+                  { _tag: "tick" as const },
+                  { _tag: "tick" as const },
                 ).pipe(
                   Stream.concat(Stream.never),
                   Stream.ensuring(
@@ -413,7 +413,7 @@ describe("drive (Effect)", () => {
 
       expect(stopped).toBe(true);
       expect(state).toEqual({ until: null, ticks: 2, later: true });
-      expect(msgsOf(trace).map((m) => m.type)).toEqual([
+      expect(msgsOf(trace).map((m) => m._tag)).toEqual([
         "arm",
         "tick",
         "tick",
@@ -426,7 +426,7 @@ describe("drive (Effect)", () => {
         drive(
           ticking,
           { ...start, ticks: 1 },
-          { type: "tick" },
+          { _tag: "tick" },
           {},
           {
             subscribe: { ticks: () => Stream.empty },
@@ -442,7 +442,7 @@ describe("drive (Effect)", () => {
         drive(
           ticking,
           start,
-          { type: "arm", until: 2 },
+          { _tag: "arm", until: 2 },
           {},
           {
             subscribe: { ticks: () => Stream.fail("socket closed") },
@@ -458,7 +458,7 @@ describe("drive (Effect)", () => {
         drive(
           ticking,
           start,
-          { type: "arm", until: 2 },
+          { _tag: "arm", until: 2 },
           {},
           // Cast: the typed map requires `ticks`; the runtime arm is under test.
           { subscribe: {} as { ticks: () => Stream.Stream<Msg> } },
@@ -472,7 +472,7 @@ describe("drive (Effect)", () => {
   describe("how a drive fails", () => {
     it("fails with DriveRoundsExceededError, typed, instead of a half-driven state", async () => {
       const exit = await exitOf(
-        drive(counting, idle, { type: "start", left: 10 }, working, {
+        drive(counting, idle, { _tag: "start", left: 10 }, working, {
           maxRounds: 3,
         }),
       );
@@ -489,7 +489,7 @@ describe("drive (Effect)", () => {
         drive(
           counting,
           idle,
-          { type: "start", left: 1 },
+          { _tag: "start", left: 1 },
           {} as unknown as typeof working,
         ),
       );
@@ -504,7 +504,7 @@ describe("drive (Effect)", () => {
       const program = drive(
         counting,
         idle,
-        { type: "start", left: 3 },
+        { _tag: "start", left: 3 },
         {
           work: () => Effect.fail(new PortDown()),
         },
@@ -523,8 +523,8 @@ describe("drive (Effect)", () => {
 
       expect(err).toBeInstanceOf(PortDown);
       expect(driveTraceOf(err)).toEqual([
-        { kind: "msg", msg: { type: "start", left: 3 } },
-        { kind: "cmd", cmd: { type: "work", label: "w3" } },
+        { kind: "msg", msg: { _tag: "start", left: 3 } },
+        { kind: "cmd", cmd: { _tag: "work", label: "w3" } },
       ]);
     });
 
@@ -534,7 +534,7 @@ describe("drive (Effect)", () => {
         drive(
           counting,
           idle,
-          { type: "start", left: 1 },
+          { _tag: "start", left: 1 },
           {
             work: () =>
               Effect.never.pipe(

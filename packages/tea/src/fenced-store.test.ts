@@ -26,7 +26,7 @@ import { run } from "./promise";
 // ───────────────────────────────────────────────────────────────────────────
 
 type NoteState = { readonly notes: readonly string[] };
-type NoteMsg = { readonly type: "note"; readonly text: string };
+type NoteMsg = { readonly _tag: "note"; readonly text: string };
 
 function parseNotes(raw: unknown): NoteState | null {
   if (typeof raw !== "object" || raw === null) return null;
@@ -107,7 +107,7 @@ describe("run — a fenced store refuses the second live writer", () => {
       store,
       onError: ignoreReports,
     }).ready;
-    await winner.dispatch({ type: "note", text: "one" });
+    await winner.dispatch({ _tag: "note", text: "one" });
 
     const loser = run(noteMachine, {
       ctx: undefined,
@@ -126,8 +126,8 @@ describe("run — a fenced store refuses the second live writer", () => {
     const a = await run(noteMachine, { ctx: undefined, store }).ready;
     const b = await run(noteMachine, { ctx: undefined, store }).ready;
     // No refusal anywhere: this is exactly the old behaviour, kept on purpose.
-    await a.dispatch({ type: "note", text: "a" });
-    await b.dispatch({ type: "note", text: "b" });
+    await a.dispatch({ _tag: "note", text: "a" });
+    await b.dispatch({ _tag: "note", text: "b" });
     await a.stop();
     await b.stop();
   });
@@ -197,9 +197,9 @@ describe("fileStore — fenced", () => {
     first.observe((msg) => {
       appendFileSync(notesPath, `${msg.text}\n`, "utf8");
     });
-    await first.dispatch({ type: "note", text: "one" });
-    await first.dispatch({ type: "note", text: "two" });
-    await first.dispatch({ type: "note", text: "three" });
+    await first.dispatch({ _tag: "note", text: "one" });
+    await first.dispatch({ _tag: "note", text: "two" });
+    await first.dispatch({ _tag: "note", text: "three" });
 
     const loser = run(noteMachine, {
       ctx: undefined,

@@ -31,8 +31,8 @@ import {
 // discriminants are plain `string`, so `Transitions<S, M, C>`'s mapped type
 // enforces no uniformity and rows legitimately differ. "late" appears ONLY in
 // the second row — the key the old first-row reading could never see.
-type DynState = { readonly type: string };
-type DynMsg = { readonly type: string };
+type DynState = { readonly _tag: string };
+type DynMsg = { readonly _tag: string };
 
 function raggedTable(): Record<
   string,
@@ -40,11 +40,11 @@ function raggedTable(): Record<
 > {
   return {
     idle: {
-      start: () => [{ type: "busy" }, []],
+      start: () => [{ _tag: "busy" }, []],
     },
     busy: {
       start: (s) => [s, []],
-      late: () => [{ type: "idle" }, []],
+      late: () => [{ _tag: "idle" }, []],
     },
   };
 }
@@ -52,7 +52,7 @@ function raggedTable(): Record<
 function raggedMachine() {
   return defineMachine({
     types: { model: {} as DynState, msg: {} as DynMsg, ctx: undefined },
-    init: (_loaded) => [{ type: "idle" }, []],
+    init: (_loaded) => [{ _tag: "idle" }, []],
     update: raggedTable() as unknown as Transitions<DynState, DynMsg, never>,
   });
 }
@@ -81,12 +81,12 @@ describe("msgKeysOf — ragged Transitions table", () => {
 
   it("is order-stable and deduped: first-seen order across rows", () => {
     const update = {
-      a: { one: () => [{ type: "a" }, []] as const },
+      a: { one: () => [{ _tag: "a" }, []] as const },
       b: {
-        two: () => [{ type: "b" }, []] as const,
-        one: () => [{ type: "b" }, []] as const,
+        two: () => [{ _tag: "b" }, []] as const,
+        one: () => [{ _tag: "b" }, []] as const,
       },
-      c: { three: () => [{ type: "c" }, []] as const },
+      c: { three: () => [{ _tag: "c" }, []] as const },
     };
     expect(msgKeysOf({ update, __form: "transitions" })).toEqual([
       "one",
@@ -110,17 +110,17 @@ describe("msgKeysOf — ragged Transitions table", () => {
 });
 
 describe("msgKeysOf — total tables and reducers are UNCHANGED (pure widening)", () => {
-  type LightState = { readonly type: "red" } | { readonly type: "green" };
-  type LightMsg = { readonly type: "go" } | { readonly type: "stop" };
+  type LightState = { readonly _tag: "red" } | { readonly _tag: "green" };
+  type LightMsg = { readonly _tag: "go" } | { readonly _tag: "stop" };
 
   it("a TOTAL Transitions table yields exactly the first row's keys, same order", () => {
     const update: Transitions<LightState, LightMsg, never> = {
-      red: { go: () => [{ type: "green" }, []], stop: (s) => [s, []] },
-      green: { go: (s) => [s, []], stop: () => [{ type: "red" }, []] },
+      red: { go: () => [{ _tag: "green" }, []], stop: (s) => [s, []] },
+      green: { go: (s) => [s, []], stop: () => [{ _tag: "red" }, []] },
     };
     const m = defineMachine({
       types: { model: {} as LightState, msg: {} as LightMsg, ctx: undefined },
-      init: (_loaded) => [{ type: "red" }, []],
+      init: (_loaded) => [{ _tag: "red" }, []],
       update,
     });
     // The union and the old first-row reading agree — that is what "total"
@@ -131,7 +131,7 @@ describe("msgKeysOf — total tables and reducers are UNCHANGED (pure widening)"
 
   it("a Reducer's own keys are still returned verbatim", () => {
     type S = { readonly count: number };
-    type M = { readonly type: "bump" } | { readonly type: "reset" };
+    type M = { readonly _tag: "bump" } | { readonly _tag: "reset" };
     const update: Reducer<S, M, never> = {
       bump: (s) => [{ count: s.count + 1 }, []],
       reset: () => [{ count: 0 }, []],

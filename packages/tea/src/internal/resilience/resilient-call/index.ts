@@ -472,7 +472,7 @@ export type SucceedMsg<
   N extends string = DefaultResilientName,
   I = unknown,
 > = {
-  readonly type: ResilientOkType<N>;
+  readonly _tag: ResilientOkType<N>;
   readonly cmd: RunCmd<I, N>;
   readonly value: R;
   readonly at: number;
@@ -486,7 +486,7 @@ export type FailMsg<
   I = unknown,
   E = RunErr | MalformedResult,
 > = {
-  readonly type: ResilientErrType<N>;
+  readonly _tag: ResilientErrType<N>;
   readonly cmd: RunCmd<I, N>;
   readonly error: E;
   readonly at: number;
@@ -501,13 +501,13 @@ export type FailMsg<
  */
 export type SettleMsg<R, N extends string = DefaultResilientName> =
   | {
-      readonly type?: ResilientOkType<N>;
+      readonly _tag?: ResilientOkType<N>;
       readonly cmd: { readonly key: string };
       readonly value: R;
       readonly at: number;
     }
   | {
-      readonly type?: ResilientErrType<N>;
+      readonly _tag?: ResilientErrType<N>;
       readonly cmd: { readonly key: string };
       readonly error: unknown;
       readonly at: number;

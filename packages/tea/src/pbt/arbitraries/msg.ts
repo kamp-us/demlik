@@ -47,8 +47,8 @@ import * as fc from "fast-check";
  * };
  * ```
  */
-export type MsgArbitraryTable<M extends { type: string }> = {
-  [K in M["type"]]: fc.Arbitrary<Extract<M, { type: K }>>;
+export type MsgArbitraryTable<M extends { _tag: string }> = {
+  [K in M["_tag"]]: fc.Arbitrary<Extract<M, { _tag: K }>>;
 };
 
 /**
@@ -73,12 +73,12 @@ export type MsgArbitraryTable<M extends { type: string }> = {
  * }, { weights: { tick: 5, start: 1, stop: 1 } });
  * ```
  */
-export function arbMsg<M extends { type: string }>(
+export function arbMsg<M extends { _tag: string }>(
   table: MsgArbitraryTable<M>,
-  opts?: { weights?: Partial<Record<M["type"], number>> },
+  opts?: { weights?: Partial<Record<M["_tag"], number>> },
 ): fc.Arbitrary<M> {
   const weights = opts?.weights;
-  const entries = Object.entries(table) as [M["type"], fc.Arbitrary<M>][];
+  const entries = Object.entries(table) as [M["_tag"], fc.Arbitrary<M>][];
   if (entries.length === 0) {
     throw new Error("@demlik/tea/pbt: arbMsg table is empty");
   }
@@ -103,8 +103,8 @@ export function arbMsg<M extends { type: string }>(
  */
 export function arbConstantMsg<T extends string>(
   type: T,
-): fc.Arbitrary<{ type: T }> {
-  return fc.constant({ type });
+): fc.Arbitrary<{ _tag: T }> {
+  return fc.constant({ _tag: type });
 }
 
 /**
@@ -124,7 +124,7 @@ export function arbConstantMsg<T extends string>(
 export function arbRecordMsg<T extends string, R>(
   type: T,
   fields: { [K in keyof R]: fc.Arbitrary<R[K]> },
-): fc.Arbitrary<{ type: T } & R> {
+): fc.Arbitrary<{ _tag: T } & R> {
   // `fc.record` builds an arbitrary of the merged-shape record. The
   // `type: fc.constant(type)` field stamps the literal discriminator;
   // the spread of `fields` provides every payload field's arbitrary.
@@ -138,10 +138,10 @@ export function arbRecordMsg<T extends string, R>(
   // boundary. Mirrors the same discipline `fc.record` callers use
   // throughout the prior-art branch.
   const recordArbitraries: Record<string, fc.Arbitrary<unknown>> = {
-    type: fc.constant(type),
+    _tag: fc.constant(type),
     ...(fields as Record<string, fc.Arbitrary<unknown>>),
   };
   return fc.record(recordArbitraries) as unknown as fc.Arbitrary<
-    { type: T } & R
+    { _tag: T } & R
   >;
 }

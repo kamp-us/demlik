@@ -102,7 +102,7 @@ export interface UseBackgroundRuntimeResult<S, M> {
  * popup or side panel component. The bridge still waits for the host internally;
  * the click handler waits for nothing. Read state for the outcome.
  */
-export function useBackgroundRuntime<S, M extends { type: string }>({
+export function useBackgroundRuntime<S, M extends { _tag: string }>({
   channel,
   parseState,
   onError,
@@ -226,7 +226,7 @@ const PROVIDER_ERROR =
  */
 export function createBackgroundRuntimeContext<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
 >(): BackgroundRuntimeContext<S, M> {
   // `null` is the "not inside a Provider" sentinel — the hooks below
   // throw on read. Distinct from `state: null` (pre-hydrate), which IS a

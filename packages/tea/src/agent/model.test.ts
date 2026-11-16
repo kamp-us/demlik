@@ -69,7 +69,7 @@ function loaderOf(seen: LlmCall<Purpose>[]) {
 }
 
 const cmdOf = (input: LlmCall<Purpose>): LlmRunCmd<Purpose> =>
-  ({ type: "resilient_run", key: input.purpose, input }) as LlmRunCmd<Purpose>;
+  ({ _tag: "resilient_run", key: input.purpose, input }) as LlmRunCmd<Purpose>;
 
 describe("brainHandler — structured-output parse + purpose branch", () => {
   it("assembles messages via the loader, binds the purpose schema, parses the output", async () => {
@@ -201,7 +201,7 @@ describe("model ports — plain-function model", () => {
     expect(out._tag).toBe("Err");
     if (out._tag === "Err") {
       const err = llm.errOf({
-        type: "resilient_run_err",
+        _tag: "resilient_run_err",
         cmd: cmdOf(input),
         error: out.error,
         at: 0,

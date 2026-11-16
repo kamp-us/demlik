@@ -217,7 +217,7 @@ describe("the refresh Cmd — a host handler driven through `run`", () => {
   // A host machine: `need` asks for a fresh credential, the engine-minted
   // `refresh_token_ok` installs it, `refresh_token_err` records the failure.
   type Host = { readonly auth: TokenState; readonly failure: unknown };
-  type HostMsg = { readonly type: "need"; readonly at: number };
+  type HostMsg = { readonly _tag: "need"; readonly at: number };
 
   function hostWith(mint: () => Promise<Token>) {
     const tr = createTokenRefresh();
@@ -254,14 +254,14 @@ describe("the refresh Cmd — a host handler driven through `run`", () => {
   it("the knob's `run` is the `refresh_token` def, and it carries no handler", () => {
     const tr = createTokenRefresh();
     expect(tr.run).toBe(refreshToken);
-    expect(refreshTokenCmd()).toEqual({ type: "refresh_token" });
+    expect(refreshTokenCmd()).toEqual({ _tag: "refresh_token" });
     expect("handlers" in tr).toBe(false);
   });
 
   it("a minted token settles as refresh_token_ok and is installed", async () => {
     const minted = tok(9999, "minted");
     const runtime = await hostWith(async () => minted).ready;
-    await runtime.dispatch({ type: "need", at: 0 });
+    await runtime.dispatch({ _tag: "need", at: 0 });
     await runtime.stop();
     expect(runtime.getState().auth).toEqual({ token: minted, stale: false });
     expect(runtime.getState().failure).toBeNull();
@@ -273,7 +273,7 @@ describe("the refresh Cmd — a host handler driven through `run`", () => {
     const runtime = await hostWith(async () => {
       throw boom;
     }).ready;
-    await runtime.dispatch({ type: "need", at: 0 });
+    await runtime.dispatch({ _tag: "need", at: 0 });
     await runtime.stop();
     const failure = runtime.getState().failure as {
       readonly _tag: string;
@@ -289,7 +289,7 @@ describe("the refresh Cmd — a host handler driven through `run`", () => {
     const minted = tok(5, "m");
     const cmd = refreshTokenCmd();
     expect(refreshToken.ok(cmd, minted, 7)).toEqual({
-      type: "refresh_token_ok",
+      _tag: "refresh_token_ok",
       cmd,
       value: minted,
       at: 7,

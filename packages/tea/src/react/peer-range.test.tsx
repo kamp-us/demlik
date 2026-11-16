@@ -26,7 +26,7 @@ import { useMachine } from "./index";
 // ───────────────────────────────────────────────────────────────────────────
 
 type Count = { readonly n: number };
-type Inc = { readonly type: "inc" };
+type Inc = { readonly _tag: "inc" };
 type Probe = Sub<"probe", { readonly name: string }>;
 
 const machine = defineMachine({
@@ -38,7 +38,7 @@ const machine = defineMachine({
   },
   init: (loaded) => [loaded ?? { n: 0 }, []],
   update: { inc: (s) => [{ n: s.n + 1 }, []] },
-  subs: [{ type: "probe", deps: () => ({ name: "p" }) }],
+  subs: [{ _tag: "probe", deps: () => ({ name: "p" }) }],
 });
 
 function parseCount(raw: unknown): Count | null {
@@ -165,7 +165,7 @@ describe.each(wrappers)("useMachine %s", (_kind, wrap) => {
       );
     await rendered(page(0), "n=0");
     await vi.waitFor(() => expect(parts.counts.liveSubs).toBe(1));
-    expect(parts.slot.dispatch({ type: "inc" })).toBeUndefined();
+    expect(parts.slot.dispatch({ _tag: "inc" })).toBeUndefined();
     await vi.waitFor(() => expect(container.textContent).toContain("n=1"));
 
     suspense.suspend();
@@ -189,7 +189,7 @@ describe.each(wrappers)("useMachine %s", (_kind, wrap) => {
       liveSubs: 0,
       subCleanups: 1,
     });
-    expect(slot.dispatch({ type: "inc" })).toBeUndefined();
+    expect(slot.dispatch({ _tag: "inc" })).toBeUndefined();
     expect(onError).toHaveBeenCalledExactlyOnceWith(
       expect.any(DispatchDiscardedError),
       { phase: "discard" },
@@ -203,7 +203,7 @@ describe.each(wrappers)("useMachine %s", (_kind, wrap) => {
 
     gate.release();
     await rendered(page(2), "n=1");
-    expect(slot.dispatch({ type: "inc" })).toBeUndefined();
+    expect(slot.dispatch({ _tag: "inc" })).toBeUndefined();
 
     await vi.waitFor(() => expect(container.textContent).toContain("n=2"));
     expect(counts).toMatchObject({ started: 1, stopped: 0, liveSubs: 1 });
@@ -214,8 +214,8 @@ describe.each(wrappers)("useMachine %s", (_kind, wrap) => {
     await rendered(wrap(<Screen />), "n=0");
     await vi.waitFor(() => expect(counts.liveSubs).toBe(1));
 
-    expect(slot.dispatch({ type: "inc" })).toBeUndefined();
-    expect(slot.dispatch({ type: "inc" })).toBeUndefined();
+    expect(slot.dispatch({ _tag: "inc" })).toBeUndefined();
+    expect(slot.dispatch({ _tag: "inc" })).toBeUndefined();
     await vi.waitFor(() => expect(container.textContent).toContain("n=2"));
     expect(counts).toMatchObject({ started: 1, stopped: 0, liveSubs: 1 });
 
@@ -224,7 +224,7 @@ describe.each(wrappers)("useMachine %s", (_kind, wrap) => {
     await vi.waitFor(() => expect(counts.stopped).toBe(1));
     expect(counts).toMatchObject({ started: 1, liveSubs: 0 });
     await expect(store.load()).resolves.toEqual({ n: 2 });
-    expect(slot.dispatch({ type: "inc" })).toBeUndefined();
+    expect(slot.dispatch({ _tag: "inc" })).toBeUndefined();
     expect(onError).toHaveBeenCalledExactlyOnceWith(
       expect.any(DispatchDiscardedError),
       { phase: "discard" },
@@ -237,7 +237,7 @@ describe.each(wrappers)("useMachine %s", (_kind, wrap) => {
     function LastWord() {
       useEffect(
         () => () => {
-          slot.dispatch({ type: "inc" });
+          slot.dispatch({ _tag: "inc" });
         },
         [],
       );
@@ -255,7 +255,7 @@ describe.each(wrappers)("useMachine %s", (_kind, wrap) => {
     // Strict Mode's extra cleanup sends a Msg of its own on mount.
     await rendered(page(0), "n=");
     await vi.waitFor(() => expect(counts.liveSubs).toBe(1));
-    expect(slot.dispatch({ type: "inc" })).toBeUndefined();
+    expect(slot.dispatch({ _tag: "inc" })).toBeUndefined();
     suspend();
     await rendered(page(1), "loading");
     const before = parseCount(await store.load())?.n ?? 0;
@@ -288,7 +288,7 @@ describe.runIf(Activity !== undefined)("useMachine under `<Activity>`", () => {
     await vi.waitFor(() => expect(counts.liveSubs).toBe(0));
     root.render(page("visible"));
     await vi.waitFor(() => expect(counts.liveSubs).toBe(1));
-    expect(slot.dispatch({ type: "inc" })).toBeUndefined();
+    expect(slot.dispatch({ _tag: "inc" })).toBeUndefined();
     await vi.waitFor(() => expect(container.textContent).toContain("n=1"));
     expect(counts).toMatchObject({ started: 1, stopped: 0 });
 
@@ -297,7 +297,7 @@ describe.runIf(Activity !== undefined)("useMachine under `<Activity>`", () => {
     root.render(null);
 
     await vi.waitFor(() => expect(counts.stopped).toBe(1));
-    expect(slot.dispatch({ type: "inc" })).toBeUndefined();
+    expect(slot.dispatch({ _tag: "inc" })).toBeUndefined();
     expect(onError).toHaveBeenCalledExactlyOnceWith(
       expect.any(DispatchDiscardedError),
       { phase: "discard" },

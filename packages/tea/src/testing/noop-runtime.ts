@@ -42,7 +42,7 @@ import type { Port, Runtime } from "../index";
  *   when the test never calls `getState()` on the no-op runtime — most
  *   tests only need the type-level slot filled.
  */
-export function noopRuntime<S, M extends { type: string }>(opts?: {
+export function noopRuntime<S, M extends { _tag: string }>(opts?: {
   initialState?: S;
 }): Runtime<S, M> {
   const initialState = opts?.initialState;

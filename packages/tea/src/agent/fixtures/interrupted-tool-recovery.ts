@@ -17,9 +17,9 @@ const Failure = z
   .catchall(z.unknown());
 
 export const Checkpoint = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("Pending"), intent: Intent }),
-  z.object({ type: z.literal("Settled"), intent: Intent, result: Result }),
-  z.object({ type: z.literal("Failed"), intent: Intent, failure: Failure }),
+  z.object({ _tag: z.literal("Pending"), intent: Intent }),
+  z.object({ _tag: z.literal("Settled"), intent: Intent, result: Result }),
+  z.object({ _tag: z.literal("Failed"), intent: Intent, failure: Failure }),
 ]);
 
 export const Point = z.enum([
@@ -95,7 +95,7 @@ const note = tool(
   },
 );
 
-type Msg = { readonly type: "HostBooted" };
+type Msg = { readonly _tag: "HostBooted" };
 
 async function main(ctx: Context) {
   process.channel?.ref();
@@ -106,17 +106,17 @@ async function main(ctx: Context) {
       ctx: {} as Context,
     },
     cmds: [note],
-    init: (loaded) => [loaded ?? { type: "Pending", intent: ctx.intent }, []],
+    init: (loaded) => [loaded ?? { _tag: "Pending", intent: ctx.intent }, []],
     update: {
       HostBooted: (s) =>
-        s.type === "Pending" ? [s, [note(s.intent)]] : [s, []],
+        s._tag === "Pending" ? [s, [note(s.intent)]] : [s, []],
       note_ok: (s, msg) =>
-        s.type === "Pending" && s.intent.callId === msg.cmd.callId
-          ? [{ type: "Settled", intent: s.intent, result: msg.value }, []]
+        s._tag === "Pending" && s.intent.callId === msg.cmd.callId
+          ? [{ _tag: "Settled", intent: s.intent, result: msg.value }, []]
           : [s, []],
       note_err: (s, msg) =>
-        s.type === "Pending" && s.intent.callId === msg.cmd.callId
-          ? [{ type: "Failed", intent: s.intent, failure: msg.error }, []]
+        s._tag === "Pending" && s.intent.callId === msg.cmd.callId
+          ? [{ _tag: "Failed", intent: s.intent, failure: msg.error }, []]
           : [s, []],
     },
   });
@@ -136,7 +136,7 @@ async function main(ctx: Context) {
     store: {
       ...backing,
       async save(s) {
-        if (s.type !== "Pending") await pause(ctx, "before_settlement");
+        if (s._tag !== "Pending") await pause(ctx, "before_settlement");
         await backing.save(s);
       },
     },
@@ -146,10 +146,10 @@ async function main(ctx: Context) {
         return note.interpret(cmd, handlerCtx);
       },
     },
-    terminal: (s) => s.type !== "Pending",
+    terminal: (s) => s._tag !== "Pending",
   });
   const booted = await handle.ready;
-  await booted.dispatch({ type: "HostBooted" });
+  await booted.dispatch({ _tag: "HostBooted" });
   await booted.done();
   await booted.stop();
   await announce("done");

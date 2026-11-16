@@ -112,7 +112,7 @@ const host = createAgentHost({
   store,
   ctx: { db: "d1" } as MyCtx,
   toSseFrame: (e): Frame | null =>
-    e.type === "RunDone" ? { kind: "phase" } : null,
+    e._tag === "RunDone" ? { kind: "phase" } : null,
 });
 // the host surface keeps the agent-slice params (Frame included):
 const _host: AgentHost<Stage, Purpose, Outputs, ToolResult, Frame> = host;

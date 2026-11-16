@@ -38,18 +38,18 @@ import { type HistoryTracker, historyTracker, type Runtime } from "../index";
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface BroadcastEnvelope<S, M> {
-  type: string; // === `channel`
+  _tag: string; // === `channel`
   msg: M | null;
   state: S;
 }
 
 interface DispatchEnvelope<M> {
-  type: string; // === `${channel}:dispatch`
+  _tag: string; // === `${channel}:dispatch`
   msg: M;
 }
 
 interface HydrateRequest {
-  type: string; // === `${channel}:hydrate`
+  _tag: string; // === `${channel}:hydrate`
 }
 
 /**
@@ -175,7 +175,7 @@ export interface BridgeRuntimeOpts<S, M, V = S> {
  *   `{ ok: true }`). A msg that fails the parse is dropped — the reducer never
  *   sees it and we reply `{ ok: false }`.
  */
-export function bridgeRuntime<S, M extends { type: string }, V = S>(
+export function bridgeRuntime<S, M extends { _tag: string }, V = S>(
   runtime: Runtime<S, M>,
   { channel, parseMsg, serialize, historySize }: BridgeRuntimeOpts<S, M, V>,
 ): () => void {
@@ -201,7 +201,7 @@ export function bridgeRuntime<S, M extends { type: string }, V = S>(
   // (#47). One helper builds the envelope for both.
   const sendBroadcast = (msg: M | null, state: S): void => {
     const envelope: BroadcastEnvelope<V, M | null> = {
-      type: channel,
+      _tag: channel,
       msg,
       state: project(state),
     };
@@ -379,7 +379,7 @@ export interface BridgeClientOpts<S, M> {
  * (live `subscribe`) or `continue` (backlog replay). Living here keeps the
  * live-broadcast and backlog-replay paths from drifting apart.
  */
-function parseEnvelope<S, M extends { type: string }>(
+function parseEnvelope<S, M extends { _tag: string }>(
   obj: Record<string, unknown>,
   parseState: (raw: unknown) => S | null,
   parseMsg: (raw: unknown) => M | null,
@@ -407,7 +407,7 @@ function parseEnvelope<S, M extends { type: string }>(
  * Extracted so the two clients can't drift in how they parse backlog
  * payloads — both must stay symmetric with their live `subscribe` parse.
  */
-function replayBacklog<S, M extends { type: string }>(
+function replayBacklog<S, M extends { _tag: string }>(
   raw: unknown,
   parseState: (raw: unknown) => S | null,
   parseMsg: (raw: unknown) => M | null,
@@ -455,7 +455,7 @@ interface MakeBridgeClientOpts<S, M> {
  * `getSnapshot` reference stability — lives here so the two clients cannot
  * drift.
  */
-function makeBridgeClient<S, M extends { type: string }>({
+function makeBridgeClient<S, M extends { _tag: string }>({
   channel,
   parseState,
   parseMsg,
@@ -477,7 +477,7 @@ function makeBridgeClient<S, M extends { type: string }>({
 
   const client: BridgeClient<S, M> = {
     async hydrate(): Promise<S | null> {
-      const req: HydrateRequest = { type: hydrateType };
+      const req: HydrateRequest = { _tag: hydrateType };
       const res = (await send(req)) as
         | { state: unknown; backlog?: unknown }
         | undefined;
@@ -501,7 +501,7 @@ function makeBridgeClient<S, M extends { type: string }>({
     },
 
     async dispatch(msg: M): Promise<void> {
-      const env: DispatchEnvelope<M> = { type: dispatchType, msg };
+      const env: DispatchEnvelope<M> = { _tag: dispatchType, msg };
       await send(env);
     },
 
@@ -539,7 +539,7 @@ function makeBridgeClient<S, M extends { type: string }>({
  * Create a `BridgeClient` for a popup, side panel or content script, which
  * talks to the background runtime over `chrome.runtime` messages.
  */
-export function bridgeClient<S, M extends { type: string }>({
+export function bridgeClient<S, M extends { _tag: string }>({
   channel,
   parseState,
   parseMsg,
@@ -607,7 +607,7 @@ export interface BridgeTabClientOpts<S, M> {
  *   so broadcasts from other tabs are ignored (no cross-contamination across
  *   per-tab content-script runtimes).
  */
-export function bridgeTabClient<S, M extends { type: string }>({
+export function bridgeTabClient<S, M extends { _tag: string }>({
   tabId,
   channel,
   parseState,

@@ -99,7 +99,7 @@ function declaredTools(
   tools: readonly AnyToolDef[],
 ): ChatCompletionFunctionTool[] {
   return tools.map((t) => ({
-    type: "function",
+    _tag: "function",
     function: {
       name: t.cmdType,
       description: t.description,
@@ -189,7 +189,7 @@ async function toParams(
             : {
                 tool_calls: m.toolCalls.map((c) => ({
                   id: c.callId,
-                  type: "function" as const,
+                  _tag: "function" as const,
                   function: { name: c.name, arguments: JSON.stringify(c.args) },
                 })),
               }),
@@ -428,7 +428,7 @@ describe("docs/how-to/supply-the-agents-model.md (#337)", () => {
   });
 
   it("maps a completion's tool calls onto a turn, and the endpoint's extras into provider", async () => {
-    const details = [{ type: "reasoning.encrypted", data: "sig" }];
+    const details = [{ _tag: "reasoning.encrypted", data: "sig" }];
     stubFetch(() =>
       json(
         completion({
@@ -438,7 +438,7 @@ describe("docs/how-to/supply-the-agents-model.md (#337)", () => {
           tool_calls: [
             {
               id: "call_1",
-              type: "function",
+              _tag: "function",
               function: { name: "note", arguments: '{"text":"red"}' },
             },
           ],
@@ -501,7 +501,7 @@ describe("docs/how-to/supply-the-agents-model.md (#337)", () => {
         tool_calls: [
           {
             id: "call_1",
-            type: "function",
+            _tag: "function",
             function: { name: "note", arguments: '{"text":"red"}' },
           },
         ],
@@ -514,8 +514,8 @@ describe("docs/how-to/supply-the-agents-model.md (#337)", () => {
     ]);
     expect(sent.tools[0]?.function.name).toBe("note");
     expect(sent.tools[0]?.function.parameters).toMatchObject({
-      type: "object",
-      properties: { text: { type: "string" } },
+      _tag: "object",
+      properties: { text: { _tag: "string" } },
     });
   });
 
@@ -524,9 +524,9 @@ describe("docs/how-to/supply-the-agents-model.md (#337)", () => {
       json(completion({ role: "assistant", content: "ok", refusal: null })),
     );
     const shot = {
-      type: "image" as const,
+      _tag: "image" as const,
       mediaType: "image/png",
-      source: { type: "base64" as const, data: "AAAA" },
+      source: { _tag: "base64" as const, data: "AAAA" },
     };
     await openaiCompatible(ENDPOINT, [note])([
       {
@@ -566,9 +566,9 @@ describe("docs/how-to/supply-the-agents-model.md (#337)", () => {
     expect(sent[0]).toEqual({
       role: "user",
       content: [
-        { type: "text", text: "read this" },
+        { _tag: "text", text: "read this" },
         {
-          type: "file",
+          _tag: "file",
           file: { file_data: "data:application/pdf;base64,AQID" },
         },
       ],
@@ -588,7 +588,7 @@ describe("docs/how-to/supply-the-agents-model.md (#337)", () => {
     expect(sent[4]).toEqual({
       role: "user",
       content: [
-        { type: "image_url", image_url: { url: "data:image/png;base64,AAAA" } },
+        { _tag: "image_url", image_url: { url: "data:image/png;base64,AAAA" } },
       ],
     });
   });
@@ -651,7 +651,7 @@ describe("docs/how-to/supply-the-agents-model.md (#337)", () => {
             {
               index: 0,
               id: "call_1",
-              type: "function",
+              _tag: "function",
               function: { name: "note", arguments: '{"te' },
             },
           ],

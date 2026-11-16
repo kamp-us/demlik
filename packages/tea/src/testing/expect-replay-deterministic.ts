@@ -27,7 +27,7 @@ const AMBIENT_B: Ambient = { now: 9_876_543, rng: 0.987 };
  */
 export function expectReplayDeterministic<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,

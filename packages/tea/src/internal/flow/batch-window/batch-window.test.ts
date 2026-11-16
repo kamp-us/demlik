@@ -18,9 +18,9 @@ import {
 // The Cmd a flush emits in these tests: a plain tagged-data Cmd carrying the
 // batch. `flush` is a pure constructor — no I/O, no clock — so the verbs stay
 // replayable and the emitted Cmd is inspectable structurally.
-type FlushCmd = { type: "flush"; items: readonly number[] };
+type FlushCmd = { _tag: "flush"; items: readonly number[] };
 const flush = (items: readonly number[]): FlushCmd => ({
-  type: "flush",
+  _tag: "flush",
   items,
 });
 
@@ -159,7 +159,7 @@ describe("subsFor — window timer arms only while open", () => {
     [s] = addItem(cfg, s, 1, 100);
     const subs = subsFor(cfg, s);
     expect(subs).toHaveLength(1);
-    expect(subs[0]).toMatchObject({ type: "deadline", atMs: 1100 });
+    expect(subs[0]).toMatchObject({ _tag: "deadline", atMs: 1100 });
   });
 
   it("disarms (returns []) after a flush empties the buffer", () => {
@@ -184,7 +184,7 @@ describe("subsFor — window timer arms only while open", () => {
 describe("batchWindowExpired", () => {
   it("constructs the deadline-shaped Msg the consumer handles via onWindow", () => {
     expect(batchWindowExpired("logs", 1100)).toEqual({
-      type: "deadline_exceeded",
+      _tag: "deadline_exceeded",
       id: "logs",
       atMs: 1100,
     });
@@ -205,7 +205,7 @@ describe("subscribeBatchWindow — the window timer fires", () => {
   // one window deadline.
   const windowSub = (id: string, atMs: number): DeadlinesSub => {
     const deps = [deadlineSub(id, atMs)];
-    return { id: subIdOf("deadline", deps), type: "deadline", deps };
+    return { id: subIdOf("deadline", deps), _tag: "deadline", deps };
   };
 
   it("dispatches batchWindowExpired once after (atMs - now), then never again", () => {
@@ -389,9 +389,9 @@ describe("durability guard — terminal slices round-trip through JSON", () => {
     { requiredKeys: ["seq", "tag"] },
   );
 
-  type FlushLines = { type: "flush"; items: readonly LogLine[] };
+  type FlushLines = { _tag: "flush"; items: readonly LogLine[] };
   const flushLines = (items: readonly LogLine[]): FlushLines => ({
-    type: "flush",
+    _tag: "flush",
     items,
   });
 

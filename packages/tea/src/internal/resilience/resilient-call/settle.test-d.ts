@@ -18,15 +18,15 @@ const cmd = rc.run({ key: "k", input: "in" });
 // 1 — both settle Msgs are accepted, as the engine mints them.
 rc.settle(slice, rc.run.ok(cmd, 1, 0));
 rc.settle(slice, rc.run.err(cmd, { _tag: "port_rejected", cause: "boom" }, 0));
-rc.settle(slice, { type: "job_run_ok", cmd, value: 1, at: 0 });
+rc.settle(slice, { _tag: "job_run_ok", cmd, value: 1, at: 0 });
 rc.settle(slice, {
-  type: "job_run_err",
+  _tag: "job_run_err",
   cmd,
   error: { _tag: "port_rejected" },
   at: 0,
 });
 // @ts-expect-error — another knob's Msg family is refused.
-rc.settle(slice, { type: "resilient_run_ok", cmd, value: 1, at: 0 });
+rc.settle(slice, { _tag: "resilient_run_ok", cmd, value: 1, at: 0 });
 
 // 2 — the three fields, and the value only through `outcome`.
 const r = rc.settle(slice, rc.run.ok(cmd, 1, 0));

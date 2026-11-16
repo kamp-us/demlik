@@ -30,12 +30,12 @@ import { type EffectBootingRuntime, run as runEffect } from "./index";
 type Name = keyof typeof conformanceMachines;
 
 /** What the Promise engine hands back for one case: a started run. */
-type AnyRuntime = BootingRuntime<unknown, { type: string }, never>;
+type AnyRuntime = BootingRuntime<unknown, { _tag: string }, never>;
 
 /** The Effect engine's started run for one case. */
 type AnyEffectRuntime = EffectBootingRuntime<
   unknown,
-  { type: string },
+  { _tag: string },
   never,
   unknown
 >;
@@ -45,9 +45,9 @@ type EffectRun = Effect.Effect<AnyEffectRuntime, never, Scope.Scope>;
 /** The members `drive` reads, with every verb a Promise. */
 interface Driven {
   onBoot(handler: (state: unknown) => void): unknown;
-  observe(observer: (msg: { type: string }, state: unknown) => void): unknown;
+  observe(observer: (msg: { _tag: string }, state: unknown) => void): unknown;
   readonly ready: Promise<{
-    dispatch(msg: { type: string }): Promise<void>;
+    dispatch(msg: { _tag: string }): Promise<void>;
     done(): Promise<unknown>;
   }>;
 }
@@ -94,7 +94,7 @@ const engines: { readonly [K in Name]: EnginePair } = {
               ? ok(answer.value)
               : err({ _tag: "not_found" });
           },
-          audit: async (cmd) => ({ type: "audited", note: cmd.note }),
+          audit: async (cmd) => ({ _tag: "audited", note: cmd.note }),
         },
       }) as AnyRuntime,
     effect: runEffect(lookup, {
@@ -107,7 +107,7 @@ const engines: { readonly [K in Name]: EnginePair } = {
             : Effect.fail({ _tag: "not_found" as const });
         },
         audit: (cmd) =>
-          Effect.succeed({ type: "audited" as const, note: cmd.note }),
+          Effect.succeed({ _tag: "audited" as const, note: cmd.note }),
       },
     }) as EffectRun,
   },
@@ -119,7 +119,7 @@ const engines: { readonly [K in Name]: EnginePair } = {
         subscribe: {
           feed: (sub, _ctx, dispatch) => {
             for (let i = 0; i < sub.deps.count; i++)
-              dispatch({ type: "fed", i });
+              dispatch({ _tag: "fed", i });
             return () => {};
           },
         },
@@ -130,7 +130,7 @@ const engines: { readonly [K in Name]: EnginePair } = {
       subscribe: {
         feed: (sub) =>
           Stream.range(0, sub.deps.count - 1).pipe(
-            Stream.map((i) => ({ type: "fed" as const, i })),
+            Stream.map((i) => ({ _tag: "fed" as const, i })),
           ),
       },
     }) as EffectRun,
@@ -142,7 +142,7 @@ const engines: { readonly [K in Name]: EnginePair } = {
         interpret: {
           burst: async (cmd) => burstAnswer(cmd.count),
           hush: async () => [],
-          last: async () => ({ type: "done" }),
+          last: async () => ({ _tag: "done" }),
         },
       }) as AnyRuntime,
     effect: runEffect(burst, {
@@ -150,7 +150,7 @@ const engines: { readonly [K in Name]: EnginePair } = {
       interpret: {
         burst: (cmd) => Effect.succeed(burstAnswer(cmd.count)),
         hush: () => Effect.succeed([]),
-        last: () => Effect.succeed({ type: "done" as const }),
+        last: () => Effect.succeed({ _tag: "done" as const }),
       },
     }) as EffectRun,
   },
@@ -178,7 +178,7 @@ async function drive(name: Name, rt: Driven): Promise<Trace> {
   rt.observe((msg, state) => trace.push([JSON.stringify(msg), state]));
   const booted = await rt.ready;
   const spec = conformanceMachines[name] as {
-    readonly script: readonly { type: string }[];
+    readonly script: readonly { _tag: string }[];
     readonly terminal?: (state: never) => boolean;
   };
   for (const msg of spec.script) {
@@ -235,25 +235,25 @@ describe("both engines run every shared machine to the same trace", () => {
   it("the latch trace refuses the Msg with no cell and applies the ones after it", async () => {
     const trace = await onEffect("latch");
     expect(trace).toEqual([
-      ["boot", { type: "closed" }],
-      ["refused", JSON.stringify({ type: "close" })],
-      [JSON.stringify({ type: "open" }), { type: "open" }],
-      [JSON.stringify({ type: "close" }), { type: "closed" }],
+      ["boot", { _tag: "closed" }],
+      ["refused", JSON.stringify({ _tag: "close" })],
+      [JSON.stringify({ _tag: "open" }), { _tag: "open" }],
+      [JSON.stringify({ _tag: "close" }), { _tag: "closed" }],
     ]);
   });
 
   it("a returned list folds in order as follow-ups, on each engine (#324)", async () => {
     const expected = [
       ["boot", { log: [] }],
-      [JSON.stringify({ type: "fire" }), { log: [] }],
-      [JSON.stringify({ type: "got", i: 0 }), { log: ["got 0"] }],
-      [JSON.stringify({ type: "got", i: 1 }), { log: ["got 0", "got 1"] }],
+      [JSON.stringify({ _tag: "fire" }), { log: [] }],
+      [JSON.stringify({ _tag: "got", i: 0 }), { log: ["got 0"] }],
+      [JSON.stringify({ _tag: "got", i: 1 }), { log: ["got 0", "got 1"] }],
       [
-        JSON.stringify({ type: "got", i: 2 }),
+        JSON.stringify({ _tag: "got", i: 2 }),
         { log: ["got 0", "got 1", "got 2"] },
       ],
       [
-        JSON.stringify({ type: "done" }),
+        JSON.stringify({ _tag: "done" }),
         { log: ["got 0", "got 1", "got 2", "done"] },
       ],
     ];

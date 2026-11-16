@@ -102,7 +102,7 @@ describe("client-prediction worked example — the full Gambetta loop", () => {
 
   it("property: after full delivery + reconcile, the client equals the authoritative result", () => {
     const arbMove: fc.Arbitrary<Move> = fc.record({
-      type: fc.constant("move" as const),
+      _tag: fc.constant("move" as const),
       dx: fc.integer({ min: -20, max: 20 }),
       dy: fc.integer({ min: -20, max: 20 }),
     });
@@ -134,7 +134,7 @@ describe("client-prediction worked example — the full Gambetta loop", () => {
 
   it("property: a partial ack leaves predicted == authoritative-base folded with the un-acked tail", () => {
     const arbMove: fc.Arbitrary<Move> = fc.record({
-      type: fc.constant("move" as const),
+      _tag: fc.constant("move" as const),
       dx: fc.integer({ min: -20, max: 20 }),
       dy: fc.integer({ min: -20, max: 20 }),
     });
@@ -167,7 +167,7 @@ describe("client-prediction worked example — the full Gambetta loop", () => {
 
   it("property: reconciling is idempotent — re-applying the same snapshot is a no-op", () => {
     const arbMove: fc.Arbitrary<Move> = fc.record({
-      type: fc.constant("move" as const),
+      _tag: fc.constant("move" as const),
       dx: fc.integer({ min: -20, max: 20 }),
       dy: fc.integer({ min: -20, max: 20 }),
     });

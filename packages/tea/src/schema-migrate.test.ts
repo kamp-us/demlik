@@ -91,7 +91,7 @@ describe("schemaMigrate — version migration (job 2)", () => {
 });
 
 describe("schemaMigrate — wired as a real Store.migrate", () => {
-  type Msg = { readonly type: "bump" };
+  type Msg = { readonly _tag: "bump" };
   const update: Reducer<State, Msg, never> = {
     bump: (s) => [{ ...s, count: s.count + 1 }, []],
   };

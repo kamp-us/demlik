@@ -6,8 +6,8 @@ import { toMermaid } from "./index";
 // Transitions-form fixture: a traffic light. State is a discriminated union
 // over the active phase; one cell per (state.type × msg.type).
 // ---------------------------------------------------------------------------
-type LightState = { type: "red" } | { type: "green" } | { type: "yellow" };
-type LightMsg = { type: "go" } | { type: "caution" } | { type: "stop" };
+type LightState = { _tag: "red" } | { _tag: "green" } | { _tag: "yellow" };
+type LightMsg = { _tag: "go" } | { _tag: "caution" } | { _tag: "stop" };
 type LightCmd = Cmd<never>;
 type LightCtx = Record<string, never>;
 
@@ -18,22 +18,22 @@ const trafficLight = defineMachine({
     cmd: {} as LightCmd,
     ctx: {} as LightCtx,
   },
-  init: (loaded) => [loaded ?? { type: "red" }, Cmd.none],
+  init: (loaded) => [loaded ?? { _tag: "red" }, Cmd.none],
   update: {
     red: {
-      go: () => [{ type: "green" }, Cmd.none],
+      go: () => [{ _tag: "green" }, Cmd.none],
       caution: (s) => [s, Cmd.none],
       stop: (s) => [s, Cmd.none],
     },
     green: {
       go: (s) => [s, Cmd.none],
-      caution: () => [{ type: "yellow" }, Cmd.none],
-      stop: () => [{ type: "red" }, Cmd.none],
+      caution: () => [{ _tag: "yellow" }, Cmd.none],
+      stop: () => [{ _tag: "red" }, Cmd.none],
     },
     yellow: {
       go: (s) => [s, Cmd.none],
       caution: (s) => [s, Cmd.none],
-      stop: () => [{ type: "red" }, Cmd.none],
+      stop: () => [{ _tag: "red" }, Cmd.none],
     },
   },
 });
@@ -44,9 +44,9 @@ const trafficLight = defineMachine({
 // ---------------------------------------------------------------------------
 type CounterState = { count: number };
 type CounterMsg =
-  | { type: "increment" }
-  | { type: "decrement" }
-  | { type: "reset" };
+  | { _tag: "increment" }
+  | { _tag: "decrement" }
+  | { _tag: "reset" };
 
 const counter = defineMachine({
   types: {
@@ -75,14 +75,14 @@ describe("toMermaid — Transitions form", () => {
     const out = toMermaid(trafficLight, {
       samples: {
         states: {
-          red: { type: "red" },
-          green: { type: "green" },
-          yellow: { type: "yellow" },
+          red: { _tag: "red" },
+          green: { _tag: "green" },
+          yellow: { _tag: "yellow" },
         },
         msgs: {
-          go: { type: "go" },
-          caution: { type: "caution" },
-          stop: { type: "stop" },
+          go: { _tag: "go" },
+          caution: { _tag: "caution" },
+          stop: { _tag: "stop" },
         },
       },
     });
@@ -132,28 +132,28 @@ describe("toMermaid — Reducer form", () => {
 });
 
 describe("toMermaid — subscriptions annotation", () => {
-  type SubState = { type: "idle" } | { type: "running" };
+  type SubState = { _tag: "idle" } | { _tag: "running" };
   const withSubs = defineMachine({
     types: {
       model: {} as SubState,
-      msg: {} as { type: "start" } | { type: "stop" },
+      msg: {} as { _tag: "start" } | { _tag: "stop" },
       sub: {} as Sub<"tick", { readonly phase: "running" }>,
       ctx: {} as Record<string, never>,
     },
-    init: (loaded) => [loaded ?? { type: "idle" }, Cmd.none],
+    init: (loaded) => [loaded ?? { _tag: "idle" }, Cmd.none],
     update: {
       idle: {
-        start: () => [{ type: "running" }, Cmd.none],
+        start: () => [{ _tag: "running" }, Cmd.none],
         stop: (s) => [s, Cmd.none],
       },
       running: {
         start: (s) => [s, Cmd.none],
-        stop: () => [{ type: "idle" }, Cmd.none],
+        stop: () => [{ _tag: "idle" }, Cmd.none],
       },
     },
     subs: [
       {
-        type: "tick",
+        _tag: "tick",
         deps: (state) =>
           state.type === "running" ? { phase: "running" } : null,
       },
@@ -163,7 +163,7 @@ describe("toMermaid — subscriptions annotation", () => {
   it("annotates active subs per sampled state, reading each entry's `deps` (never a runner)", () => {
     const out = toMermaid(withSubs, {
       samples: {
-        states: { idle: { type: "idle" }, running: { type: "running" } },
+        states: { idle: { _tag: "idle" }, running: { _tag: "running" } },
       },
     });
     expect(out).toContain("subs: tick");

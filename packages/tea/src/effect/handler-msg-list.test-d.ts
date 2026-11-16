@@ -9,37 +9,37 @@ import { Cmd, type InterpretCell, type NoCtx } from "../index";
 import type { EffectInterpretCell } from "./index";
 
 type Msg =
-  | { readonly type: "got"; readonly i: number }
-  | { readonly type: "done" };
-type Plain = { readonly type: "plain" };
+  | { readonly _tag: "got"; readonly i: number }
+  | { readonly _tag: "done" };
+type Plain = { readonly _tag: "plain" };
 
 // ── Promise engine: a plain cell returns a Msg, a list, or nothing ─────────
 
 type PlainCell = InterpretCell<Msg, Plain, NoCtx>;
 
-const one: PlainCell = async () => ({ type: "done" });
+const one: PlainCell = async () => ({ _tag: "done" });
 const many: PlainCell = async () => [
-  { type: "got", i: 0 },
-  { type: "got", i: 1 },
+  { _tag: "got", i: 0 },
+  { _tag: "got", i: 1 },
 ];
 const none: PlainCell = async () => {};
 // @ts-expect-error a list holds Msgs of the machine's union only
-const stray: PlainCell = async () => [{ type: "nope" }];
+const stray: PlainCell = async () => [{ _tag: "nope" }];
 void [one, many, none, stray];
 
 // ── Effect engine: the same three shapes ───────────────────────────────────
 
 type PlainEffectCell = EffectInterpretCell<Msg, Plain>;
 
-const oneE: PlainEffectCell = () => Effect.succeed({ type: "done" as const });
+const oneE: PlainEffectCell = () => Effect.succeed({ _tag: "done" as const });
 const manyE: PlainEffectCell = () =>
   Effect.succeed([
-    { type: "got" as const, i: 0 },
-    { type: "got" as const, i: 1 },
+    { _tag: "got" as const, i: 0 },
+    { _tag: "got" as const, i: 1 },
   ]);
 const noneE: PlainEffectCell = () => Effect.void;
 // @ts-expect-error a list holds Msgs of the machine's union only
-const strayE: PlainEffectCell = () => Effect.succeed([{ type: "nope" }]);
+const strayE: PlainEffectCell = () => Effect.succeed([{ _tag: "nope" }]);
 void [oneE, manyE, noneE, strayE];
 
 // ── A `Cmd.define`d cell keeps returning an outcome ────────────────────────
@@ -54,11 +54,11 @@ type Defined = ReturnType<typeof fetch>;
 type DefinedCell = InterpretCell<Msg, Defined, NoCtx>;
 const outcome: DefinedCell = async (_cmd, { ok }) => ok({ body: "b" });
 // @ts-expect-error a defined Cmd's cell returns an outcome, never a Msg list
-const definedList: DefinedCell = async () => [{ type: "done" }];
+const definedList: DefinedCell = async () => [{ _tag: "done" }];
 void [outcome, definedList];
 
 type DefinedEffectCell = EffectInterpretCell<Msg, Defined>;
 const okE: DefinedEffectCell = () => Effect.succeed({ body: "b" });
 // @ts-expect-error a defined Cmd's Effect cell succeeds with its `Ok`, never a Msg list
-const listE: DefinedEffectCell = () => Effect.succeed([{ type: "done" }]);
+const listE: DefinedEffectCell = () => Effect.succeed([{ _tag: "done" }]);
 void [okE, listE];

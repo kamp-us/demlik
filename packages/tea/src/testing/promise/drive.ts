@@ -63,7 +63,7 @@ import {
  */
 export async function drive<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,

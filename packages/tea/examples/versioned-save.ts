@@ -11,7 +11,7 @@ export interface Settings {
   readonly compact: boolean;
 }
 
-export type SettingsMsg = { readonly type: "toggleCompact" };
+export type SettingsMsg = { readonly _tag: "toggleCompact" };
 
 export const settings = defineMachine({
   types: { model: {} as Settings, msg: {} as SettingsMsg },

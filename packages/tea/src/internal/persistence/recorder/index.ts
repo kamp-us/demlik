@@ -178,7 +178,7 @@ export interface Recorder<S, M> {
  * @param opts    - see {@link RecorderOptions}. Default records everything,
  *                  no step retention.
  */
-export function recorder<S, M extends { type: string }>(
+export function recorder<S, M extends { _tag: string }>(
   runtime: BootingRuntime<S, M>,
   opts?: RecorderOptions,
 ): Recorder<S, M> {
@@ -444,7 +444,7 @@ export interface TraceAttachment {
  * @typeParam S - the machine's State type.
  * @typeParam M - the machine's Msg union.
  */
-export function traceAttachment<S, M extends { type: string }>(
+export function traceAttachment<S, M extends { _tag: string }>(
   trace: Trace<S, M>,
 ): TraceAttachment {
   return {
@@ -511,7 +511,7 @@ export interface BreadcrumbsOptions<M> {
  * @typeParam S - the machine's State type.
  * @typeParam M - the machine's Msg union.
  */
-export function breadcrumbsFromTrace<S, M extends { type: string }>(
+export function breadcrumbsFromTrace<S, M extends { _tag: string }>(
   trace: Trace<S, M>,
   opts?: BreadcrumbsOptions<M>,
 ): TraceBreadcrumb[] {
@@ -538,7 +538,7 @@ export function breadcrumbsFromTrace<S, M extends { type: string }>(
       category: "tea",
       type: "default",
       level: "info",
-      message: serialize ? serialize(msg) : msg.type,
+      message: serialize ? serialize(msg) : msg._tag,
       // Full msg kept verbatim so the structured payload survives even when
       // `message` is a terse one-liner. Cast: a Msg is a `{ type: string }`
       // record, which is a `Record<string, unknown>` for Sentry's `data`.

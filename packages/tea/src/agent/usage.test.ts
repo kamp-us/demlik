@@ -246,14 +246,14 @@ describe("state.usage — the run's running total", () => {
       "turn",
       { turn: AgentTurn },
       string,
-      { readonly type: "noop" },
+      { readonly _tag: "noop" },
       unknown
     >({
       stages: ["plan", "act"],
       model: async () => ({ content: "", toolCalls: [] }),
       schemas: { turn: agentTurnSchema },
       turnOf: () => "turn",
-      toolOf: () => ({ type: "noop" }),
+      toolOf: () => ({ _tag: "noop" }),
     });
     let [s] = agent.start(agent.init(), "r", 0);
     [s] = agent.turn(
@@ -472,14 +472,14 @@ describe("the run's total outlives the run (#354)", () => {
       "turn",
       { turn: AgentTurn },
       string,
-      { readonly type: "noop" },
+      { readonly _tag: "noop" },
       unknown
     >({
       stages: ["plan", "act"],
       model: async () => ({ content: "", toolCalls: [] }),
       schemas: { turn: agentTurnSchema },
       turnOf: () => "turn",
-      toolOf: () => ({ type: "noop" }),
+      toolOf: () => ({ _tag: "noop" }),
     });
   }
 
@@ -530,14 +530,14 @@ describe("the run's total outlives the run (#354)", () => {
       instructions: INSTRUCTIONS,
     }).run(INPUT, {
       onEvent: (event) => {
-        if (event.type === "RunDone") ended.push(event);
+        if (event._tag === "RunDone") ended.push(event);
       },
     });
 
     expect(status(final)).toMatchObject({ kind: "done", usage: SUM });
     expect(ended).toHaveLength(1);
     const [done] = ended;
-    expect(done?.type === "RunDone" && done.status).toMatchObject({
+    expect(done?._tag === "RunDone" && done.status).toMatchObject({
       kind: "done",
       usage: SUM,
     });
@@ -630,13 +630,13 @@ describe("TurnSettled carries the settled turn's usage", () => {
       stopWhen: afterTurns(2),
     }).run(INPUT, {
       onEvent: (event) => {
-        if (event.type === "TurnSettled") settled.push(event);
+        if (event._tag === "TurnSettled") settled.push(event);
       },
     });
 
     expect(settled).toHaveLength(2);
     const [first, second] = settled;
-    expect(first?.type === "TurnSettled" && first.usage).toEqual({
+    expect(first?._tag === "TurnSettled" && first.usage).toEqual({
       inputTokens: 120,
       outputTokens: 30,
     });

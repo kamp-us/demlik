@@ -23,9 +23,9 @@ import { run } from "./promise";
 // ───────────────────────────────────────────────────────────────────────────
 
 type State = { readonly phase: "idle" | "running" | "done" | "failed" };
-type Finished = { readonly type: "graph_finished" };
-type Failed = { readonly type: "graph_failed" };
-type Msg = { readonly type: "go" } | Finished | Failed;
+type Finished = { readonly _tag: "graph_finished" };
+type Failed = { readonly _tag: "graph_failed" };
+type Msg = { readonly _tag: "go" } | Finished | Failed;
 type Start = CmdType<"start_graph">;
 
 // The detached handler, authored against the NARROWED dispatch: only
@@ -37,11 +37,11 @@ const startGraph: InterpretDetached<
 > = async (_cmd, _ctx, dispatch) => {
   // Stand-in for `ctx.waitUntil(longRunningWork().then(...))` — the point is
   // that the terminal Msg leaves via `dispatch`, not via the return value.
-  queueMicrotask(() => dispatch({ type: "graph_finished" }));
+  queueMicrotask(() => dispatch({ _tag: "graph_finished" }));
 };
 
 const update: Reducer<State, Msg, Start> = {
-  go: () => [{ phase: "running" }, [{ type: "start_graph" }]],
+  go: () => [{ phase: "running" }, [{ _tag: "start_graph" }]],
   graph_finished: () => [{ phase: "done" }, []],
   graph_failed: () => [{ phase: "failed" }, []],
 };
@@ -67,7 +67,7 @@ describe("wrapDetached — the typed Cmd→Msg edge", () => {
         undefined
       >,
     }).ready;
-    await rt.dispatch({ type: "go" });
+    await rt.dispatch({ _tag: "go" });
     await rt.idle();
 
     expect(rt.getState().phase).toBe("done");
@@ -79,13 +79,13 @@ describe("wrapDetached — the typed Cmd→Msg edge", () => {
     );
     const fired: Msg[] = [];
     const result = await wrapped(
-      { type: "start_graph" },
+      { _tag: "start_graph" },
       { emit: () => {} },
       (m) => fired.push(m),
     );
     expect(result).toBeUndefined();
     await new Promise<void>((resolve) => queueMicrotask(resolve));
-    expect(fired).toEqual([{ type: "graph_finished" }]);
+    expect(fired).toEqual([{ _tag: "graph_finished" }]);
   });
 
   it("throws loudly when invoked WITHOUT the injected dispatch", async () => {
@@ -94,7 +94,7 @@ describe("wrapDetached — the typed Cmd→Msg edge", () => {
     const wrapped = wrapDetached<Start, Msg, Finished | Failed, undefined>(
       startGraph,
     );
-    expect(() => wrapped({ type: "start_graph" }, { emit: () => {} })).toThrow(
+    expect(() => wrapped({ _tag: "start_graph" }, { emit: () => {} })).toThrow(
       /without the injected dispatch/,
     );
   });
@@ -109,7 +109,7 @@ describe("wrapDetached — the typed Cmd→Msg edge", () => {
       Finished | Failed,
       undefined
     > = async (_cmd, _ctx, dispatch) => {
-      dispatch({ type: "graph_finished" });
+      dispatch({ _tag: "graph_finished" });
     };
     const machine = defineMachine({
       types: {
@@ -130,7 +130,7 @@ describe("wrapDetached — the typed Cmd→Msg edge", () => {
         undefined
       >,
     }).ready;
-    await rt.dispatch({ type: "go" });
+    await rt.dispatch({ _tag: "go" });
     await rt.idle();
     expect(rt.getState().phase).toBe("done");
   });
@@ -152,10 +152,10 @@ describe("wrapDetached — the typed Cmd→Msg edge", () => {
     const rt = await run(machine, {
       ctx: undefined,
       interpret: {
-        start_graph: async () => ({ type: "graph_finished" }) as const,
+        start_graph: async () => ({ _tag: "graph_finished" }) as const,
       } satisfies Interpret<Msg, Start, undefined>,
     }).ready;
-    await rt.dispatch({ type: "go" });
+    await rt.dispatch({ _tag: "go" });
     await rt.idle();
     expect(rt.getState().phase).toBe("done");
   });

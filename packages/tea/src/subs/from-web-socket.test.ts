@@ -55,15 +55,15 @@ type State = {
   readonly closes: readonly { code: number; reason: string }[];
 };
 type Msg =
-  | { readonly type: "frame"; readonly data: unknown }
-  | { readonly type: "ws_open" }
-  | { readonly type: "ws_error" }
+  | { readonly _tag: "frame"; readonly data: unknown }
+  | { readonly _tag: "ws_open" }
+  | { readonly _tag: "ws_error" }
   | {
-      readonly type: "ws_close";
+      readonly _tag: "ws_close";
       readonly code: number;
       readonly reason: string;
     }
-  | { readonly type: "disarm" };
+  | { readonly _tag: "disarm" };
 
 const update: Reducer<State, Msg, never> = {
   frame: (s, m) => [{ ...s, frames: [...s.frames, m.data] }, []],
@@ -90,17 +90,17 @@ function wsMachine() {
     ],
     update,
     subs: [
-      { type: "ws", deps: (s) => (s.armed ? { wsUrl: "ws://x/ws" } : null) },
+      { _tag: "ws", deps: (s) => (s.armed ? { wsUrl: "ws://x/ws" } : null) },
     ],
   });
 }
 
 const subscribe = {
   ws: fromWebSocket<WsSub, Msg>({
-    onMessage: (data) => (data === "drop-me" ? null : { type: "frame", data }),
-    onOpen: () => ({ type: "ws_open" }),
-    onError: () => ({ type: "ws_error" }),
-    onClose: (code, reason) => ({ type: "ws_close", code, reason }),
+    onMessage: (data) => (data === "drop-me" ? null : { _tag: "frame", data }),
+    onOpen: () => ({ _tag: "ws_open" }),
+    onError: () => ({ _tag: "ws_error" }),
+    onClose: (code, reason) => ({ _tag: "ws_close", code, reason }),
   }),
 };
 
@@ -156,7 +156,7 @@ describe("fromWebSocket — subscribe → deliver → cleanup against a real run
     ws.fireOpen();
     await rt.idle();
 
-    await rt.dispatch({ type: "disarm" });
+    await rt.dispatch({ _tag: "disarm" });
     expect(ws.closedWith).toBe(1000); // RFC 6455 normal closure
     expect(ws.onmessage).toBeNull();
     expect(ws.onopen).toBeNull();

@@ -33,10 +33,10 @@ type State = {
 };
 
 type Msg =
-  | { readonly type: "climb" }
-  | { readonly type: "note" }
-  | { readonly type: "sync" }
-  | { readonly type: "release" }
+  | { readonly _tag: "climb" }
+  | { readonly _tag: "note" }
+  | { readonly _tag: "sync" }
+  | { readonly _tag: "release" }
   | Settled<typeof fetch>;
 
 const FRESH: State = { level: 0, notes: 0, synced: 0, failed: 0, shipped: 0 };
@@ -73,10 +73,10 @@ const defineShip = ({
 const SENT = fetch({ url: "status" });
 
 const msgArb = arbMsg<Msg>({
-  climb: fc.constant({ type: "climb" as const }),
-  note: fc.constant({ type: "note" as const }),
-  sync: fc.constant({ type: "sync" as const }),
-  release: fc.constant({ type: "release" as const }),
+  climb: fc.constant({ _tag: "climb" as const }),
+  note: fc.constant({ _tag: "note" as const }),
+  sync: fc.constant({ _tag: "sync" as const }),
+  release: fc.constant({ _tag: "release" as const }),
   fetch_ok: fc.constant(fetch.ok(SENT, { body: "green" }, 0)),
   fetch_err: fc.constant(fetch.err(SENT, { _tag: "timeout" }, 0)),
 });
@@ -190,7 +190,7 @@ describe("each failure names itself", () => {
       expect(failure.message).not.toContain(LAW_CAP);
       expect(failure.message).not.toContain(LAW_NOTES);
       expect(failure.message).toContain(
-        `Counterexample: [[${JSON.stringify({ type: "release" })}],${JSON.stringify(FRESH)}]`,
+        `Counterexample: [[${JSON.stringify({ _tag: "release" })}],${JSON.stringify(FRESH)}]`,
       );
     });
 
@@ -208,12 +208,12 @@ describe("each failure names itself", () => {
 
     it("an init sending junk names the Cmd", () => {
       const junk = defineShip({
-        initCmds: [{ type: "nope" } as unknown as FetchCmd],
+        initCmds: [{ _tag: "nope" } as unknown as FetchCmd],
       });
       const failure = failureOf(() => run(junk, seed));
 
       expect(failure.message).toContain(
-        `${JSON.stringify({ type: "nope" })} isn't in machine.cmds: [fetch]`,
+        `${JSON.stringify({ _tag: "nope" })} isn't in machine.cmds: [fetch]`,
       );
     });
   });

@@ -65,7 +65,7 @@ export interface EffectHandlers<R> extends HandlerFamily {
 
 /** The `interpret` and `subscribe` options of `run`, for a runtime providing `R`. */
 export type EffectHandlerTables<
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   R,
@@ -79,7 +79,7 @@ export type EffectHandlerTables<
  */
 export type BridgedRun<R> = (<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -130,7 +130,7 @@ export function runIn<R, ER>(
 function host<
   R,
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -158,7 +158,7 @@ type StartRun = (
 ) => Effect.Effect<unknown, never, Scope.Scope>;
 
 /** The run `run` builds: the Effect handle, which also carries the line and the installed State. */
-type Target<S, M extends { type: string }> = EffectRun<S, M> &
+type Target<S, M extends { _tag: string }> = EffectRun<S, M> &
   InstalledStateRead<S>;
 
 /**
@@ -166,10 +166,10 @@ type Target<S, M extends { type: string }> = EffectRun<S, M> &
  * runs, and what a caller does is held. `closed` is a run that will never start,
  * because its Layer failed or it was stopped first.
  */
-type Phase<S, M extends { type: string }> =
-  | { readonly type: "building" }
-  | { readonly type: "live"; readonly target: Target<S, M> }
-  | { readonly type: "closed" };
+type Phase<S, M extends { _tag: string }> =
+  | { readonly _tag: "building" }
+  | { readonly _tag: "live"; readonly target: Target<S, M> }
+  | { readonly _tag: "closed" };
 
 const everyState = (): boolean => true;
 
@@ -178,10 +178,10 @@ const everyState = (): boolean => true;
  * each call to the real run when there is one: a registration or a Msg that
  * comes before is held and made, in order, when the run exists.
  */
-class HostedRun<S, M extends { type: string }>
+class HostedRun<S, M extends { _tag: string }>
   implements BootedRunHandle<S, M>, Postable<S, M>, InstalledStateRead<S>
 {
-  private phase: Phase<S, M> = { type: "building" };
+  private phase: Phase<S, M> = { _tag: "building" };
   private held: M[] = [];
   private waiting: ((target: Target<S, M>) => void)[] = [];
   // The Scope this run runs in. Whoever opened a Scope closes it (ADR 0030).
@@ -213,7 +213,7 @@ class HostedRun<S, M extends { type: string }>
     start: Effect.Effect<EffectBootingRun<S, M>, never, Scope.Scope>,
   ): void {
     const program = Effect.suspend(() =>
-      this.phase.type !== "building"
+      this.phase._tag !== "building"
         ? Effect.void
         : start.pipe(
             Scope.provide(this.scope),
@@ -226,7 +226,7 @@ class HostedRun<S, M extends { type: string }>
   }
 
   private attach(target: Target<S, M>): void {
-    this.phase = { type: "live", target };
+    this.phase = { _tag: "live", target };
     const waiting = this.waiting;
     const held = this.held;
     this.waiting = [];
@@ -237,7 +237,7 @@ class HostedRun<S, M extends { type: string }>
   }
 
   private exited(exit: Exit.Exit<unknown, unknown>): void {
-    if (Exit.isFailure(exit) && this.phase.type === "building") {
+    if (Exit.isFailure(exit) && this.phase._tag === "building") {
       const error = Cause.squash(exit.cause);
       const held = this.close(error);
       this.report(error, { phase: "boot" });
@@ -247,7 +247,7 @@ class HostedRun<S, M extends { type: string }>
 
   /** The run will never start. Returns what was held for it, for {@link discard}. */
   private close(reason: unknown): M[] {
-    this.phase = { type: "closed" };
+    this.phase = { _tag: "closed" };
     this.waiting = [];
     const held = this.held;
     this.held = [];
@@ -257,7 +257,7 @@ class HostedRun<S, M extends { type: string }>
 
   private discard(held: readonly M[]): void {
     for (const msg of held)
-      this.report(new DispatchDiscardedError(msg.type), { phase: "discard" });
+      this.report(new DispatchDiscardedError(msg._tag), { phase: "discard" });
   }
 
   /**
@@ -270,8 +270,8 @@ class HostedRun<S, M extends { type: string }>
     const make = (target: Target<S, M>): void => {
       if (!undone) undo = register(target);
     };
-    if (this.phase.type === "live") make(this.phase.target);
-    else if (this.phase.type === "building") this.waiting.push(make);
+    if (this.phase._tag === "live") make(this.phase.target);
+    else if (this.phase._tag === "building") this.waiting.push(make);
     return () => {
       undone = true;
       undo?.();
@@ -285,7 +285,7 @@ class HostedRun<S, M extends { type: string }>
    * hook's `send` posts it.
    */
   readonly [post] = (msg: M, takes: (state: S) => boolean): TellAnswer => {
-    switch (this.phase.type) {
+    switch (this.phase._tag) {
       case "live":
         return this.phase.target[post](msg, takes);
       case "closed":
@@ -297,13 +297,13 @@ class HostedRun<S, M extends { type: string }>
   };
 
   readonly [installedState] = (): S | undefined =>
-    this.phase.type === "live"
+    this.phase._tag === "live"
       ? readInstalledState<S>(this.phase.target)
       : undefined;
 
   getState(): S {
     return (
-      this.phase.type === "live" ? this.phase.target.getState() : undefined
+      this.phase._tag === "live" ? this.phase.target.getState() : undefined
     ) as S;
   }
 
@@ -344,7 +344,7 @@ class HostedRun<S, M extends { type: string }>
   }
 
   private stopOnce(): Promise<void> {
-    if (this.phase.type === "building")
+    if (this.phase._tag === "building")
       this.discard(
         this.close(
           new Error(

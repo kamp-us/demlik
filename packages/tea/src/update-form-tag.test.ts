@@ -20,7 +20,7 @@ import { run } from "./promise";
 // ───────────────────────────────────────────────────────────────────────────
 
 type CounterState = { readonly count: number };
-type CounterMsg = { readonly type: "bump" };
+type CounterMsg = { readonly _tag: "bump" };
 
 function reducerMachine() {
   const update: Reducer<CounterState, CounterMsg, never> = {
@@ -33,23 +33,23 @@ function reducerMachine() {
   });
 }
 
-type LightState = { readonly type: "red" } | { readonly type: "green" };
-type LightMsg = { readonly type: "go" } | { readonly type: "stop" };
+type LightState = { readonly _tag: "red" } | { readonly _tag: "green" };
+type LightMsg = { readonly _tag: "go" } | { readonly _tag: "stop" };
 
 function transitionsMachine() {
   const update: Transitions<LightState, LightMsg, never> = {
     red: {
-      go: () => [{ type: "green" }, []],
+      go: () => [{ _tag: "green" }, []],
       stop: (s) => [s, []],
     },
     green: {
       go: (s) => [s, []],
-      stop: () => [{ type: "red" }, []],
+      stop: () => [{ _tag: "red" }, []],
     },
   };
   return defineMachine({
     types: { model: {} as LightState, msg: {} as LightMsg, ctx: undefined },
-    init: () => [{ type: "red" }, []],
+    init: () => [{ _tag: "red" }, []],
     update,
   });
 }
@@ -91,7 +91,7 @@ describe("__form is authoritative over the structural heuristic (#57)", () => {
   // prefers the stamped `__form`, the form stays "reducer" regardless of what
   // the cell value's own keys look like.
   type CState = { readonly n: number };
-  type CMsg = { readonly type: "tick" };
+  type CMsg = { readonly _tag: "tick" };
 
   it("a callable-with-keys reducer cell stays 'reducer'", () => {
     const tick = Object.assign((s: CState) => [{ n: s.n + 1 }, []] as const, {
@@ -124,22 +124,22 @@ describe("__form is authoritative over the structural heuristic (#57)", () => {
 describe("run and replay agree on the tagged form (#57)", () => {
   it("run dispatches a tagged Reducer machine correctly", async () => {
     const rt = await run(reducerMachine(), { ctx: undefined }).ready;
-    await rt.dispatch({ type: "bump" });
-    await rt.dispatch({ type: "bump" });
+    await rt.dispatch({ _tag: "bump" });
+    await rt.dispatch({ _tag: "bump" });
     expect(rt.getState().count).toBe(2);
   });
 
   it("run dispatches a tagged Transitions machine correctly", async () => {
     const rt = await run(transitionsMachine(), { ctx: undefined }).ready;
-    await rt.dispatch({ type: "go" });
+    await rt.dispatch({ _tag: "go" });
     expect(rt.getState().type).toBe("green");
-    await rt.dispatch({ type: "stop" });
+    await rt.dispatch({ _tag: "stop" });
     expect(rt.getState().type).toBe("red");
   });
 
   it("replay folds a tagged Transitions machine via the same tag", () => {
     const out = replay(transitionsMachine(), {
-      msgs: [{ type: "go" }, { type: "stop" }, { type: "go" }] as LightMsg[],
+      msgs: [{ _tag: "go" }, { _tag: "stop" }, { _tag: "go" }] as LightMsg[],
     });
     expect(out.state.type).toBe("green");
   });
@@ -147,9 +147,9 @@ describe("run and replay agree on the tagged form (#57)", () => {
   it("replay folds a tagged Reducer machine via the same tag", () => {
     const out = replay(reducerMachine(), {
       msgs: [
-        { type: "bump" },
-        { type: "bump" },
-        { type: "bump" },
+        { _tag: "bump" },
+        { _tag: "bump" },
+        { _tag: "bump" },
       ] as CounterMsg[],
     });
     expect(out.state.count).toBe(3);

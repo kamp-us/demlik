@@ -172,7 +172,7 @@ export type AuthedCmd<I> = RunCmd<I> | RefreshTokenCmd;
  * when a guarded call comes back unauthorized.
  */
 export type Unauthorized = {
-  readonly type: typeof MsgType.Unauthorized;
+  readonly _tag: typeof MsgType.Unauthorized;
   readonly key: string;
   readonly at: number;
 };

@@ -154,7 +154,7 @@ function okFor(
   const answers: Record<string, ItemAnswer<Line>> = {};
   for (const key of Object.keys(request.questions)) answers[key] = answer;
   return {
-    type: MsgType.ResilientOk,
+    _tag: MsgType.ResilientOk,
     cmd,
     value: {
       answers,
@@ -170,7 +170,7 @@ const errFor = (
   cmd: ClassifyBatchCmd<Line>,
   at: number,
 ): ClassifyBatchErrMsg => ({
-  type: MsgType.ResilientErr,
+  _tag: MsgType.ResilientErr,
   cmd,
   error: {
     _tag: "port_rejected",

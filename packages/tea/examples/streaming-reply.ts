@@ -7,9 +7,9 @@ export interface ReplyState {
 }
 
 export type ReplyMsg =
-  | { readonly type: "start" }
-  | { readonly type: "token"; readonly text: string }
-  | { readonly type: "finish" };
+  | { readonly _tag: "start" }
+  | { readonly _tag: "token"; readonly text: string }
+  | { readonly _tag: "finish" };
 
 export const reply = defineMachine({
   types: { model: {} as ReplyState, msg: {} as ReplyMsg },

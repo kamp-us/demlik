@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 import { build } from "vite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-type Message = { readonly type: string } & Record<string, unknown>;
+type Message = { readonly _tag: string } & Record<string, unknown>;
 
 interface Child {
   readonly process: ChildProcess;
@@ -69,10 +69,10 @@ function launch(engine: string, mode: string, dir: string): Child {
   });
   const next = (type: string) =>
     new Promise<Message>((resolve, reject) => {
-      const seen = messages.find((message) => message.type === type);
+      const seen = messages.find((message) => message._tag === type);
       if (seen !== undefined) return resolve(seen);
       child.on("message", (message) => {
-        if ((message as Message).type === type) resolve(message as Message);
+        if ((message as Message)._tag === type) resolve(message as Message);
       });
       void exited.then(({ code }) =>
         reject(new Error(`child exited ${code} before "${type}": ${stderr}`)),
@@ -97,7 +97,7 @@ describe.each(["promise", "effect"] as const)("on the %s engine", (engine) => {
       const takenAt = await countIn(dir, "b");
       expect(takenAt).toBe(2);
 
-      host.process.send({ type: "taken" });
+      host.process.send({ _tag: "taken" });
       const result = await host.next("result");
 
       // The two other runs folded and saved before and after the loss.
@@ -149,8 +149,8 @@ describe.each(["promise", "effect"] as const)("on the %s engine", (engine) => {
       expect(await second.exited).toEqual({ code: 0, signal: null });
       expect(await countIn(dir, "b")).toBe(1);
 
-      host.process.send({ type: "taken" });
-      expect(await host.next("alive")).toEqual({ type: "alive" });
+      host.process.send({ _tag: "taken" });
+      expect(await host.next("alive")).toEqual({ _tag: "alive" });
       expect(await host.exited).toEqual({ code: 0, signal: null });
       expect(host.stderr()).toBe("");
       await expect(readFile(join(dir, "a.json"), "utf8")).rejects.toThrow();
@@ -175,10 +175,10 @@ describe.each(["promise", "effect"] as const)("on the %s engine", (engine) => {
     await mkdir(dir);
     const child = launch(engine, "failing-sub-with-sink", dir);
 
-    expect(await child.next("alive")).toEqual({ type: "alive" });
+    expect(await child.next("alive")).toEqual({ _tag: "alive" });
     expect(await child.exited).toEqual({ code: 0, signal: null });
     expect(child.messages[0]).toEqual({
-      type: "heard",
+      _tag: "heard",
       phase: "sub",
       message: "the sub failed",
     });

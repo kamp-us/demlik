@@ -7,8 +7,8 @@ export interface State {
 }
 
 export type Msg =
-  | { readonly type: "start"; readonly total: number }
-  | { readonly type: "chunk"; readonly size: number };
+  | { readonly _tag: "start"; readonly total: number }
+  | { readonly _tag: "chunk"; readonly size: number };
 
 /** A download that counts the bytes it has received until it has them all. */
 export const downloader = defineMachine({

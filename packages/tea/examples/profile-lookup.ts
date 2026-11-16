@@ -14,8 +14,8 @@ export interface ProfileState {
 }
 
 export type ProfileMsg =
-  | { readonly type: "look_up"; readonly id: string }
-  | { readonly type: "clear" };
+  | { readonly _tag: "look_up"; readonly id: string }
+  | { readonly _tag: "clear" };
 
 export const profile = defineMachine({
   types: { model: {} as ProfileState, msg: {} as ProfileMsg },
@@ -36,9 +36,9 @@ export const profile = defineMachine({
   // A miss clears itself after two seconds. Both engines ship `timer`.
   subs: [
     {
-      type: "timer",
+      _tag: "timer",
       deps: (s) =>
-        s.status === "missing" ? { ms: 2_000, msg: { type: "clear" } } : null,
+        s.status === "missing" ? { ms: 2_000, msg: { _tag: "clear" } } : null,
     },
   ],
 });

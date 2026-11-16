@@ -21,10 +21,10 @@ import { run } from "../promise";
 import { doEventSourcedStore } from "./event-sourced-store";
 
 interface CmdlessState {
-  readonly type: "counting";
+  readonly _tag: "counting";
   readonly count: number;
 }
-type CmdlessMsg = { readonly type: "inc" };
+type CmdlessMsg = { readonly _tag: "inc" };
 type CmdlessCtx = Record<string, never>;
 
 // A cmdless grain: `Cmd = never` — exactly the shape of vortex's
@@ -35,7 +35,7 @@ const cmdlessMachine = defineMachine({
     msg: {} as CmdlessMsg,
     ctx: {} as CmdlessCtx,
   },
-  init: (loaded) => [loaded ?? { type: "counting", count: 0 }, []],
+  init: (loaded) => [loaded ?? { _tag: "counting", count: 0 }, []],
   update: {
     inc: (s) => [{ ...s, count: s.count + 1 }, []],
   },
@@ -64,7 +64,7 @@ export const _assertHandle: _AssertHandle = true;
 // Positive control: a COMMANDFUL grain still type-checks. The store takes no
 // handlers; they go to `run`, which still demands them for real commands —
 // the relaxation is scoped to `Cmd = never`, not a loosening of that guard.
-type CmdfulCmd = { readonly type: "persist"; readonly payload: string };
+type CmdfulCmd = { readonly _tag: "persist"; readonly payload: string };
 const cmdfulMachine = defineMachine({
   types: {
     model: {} as CmdlessState,
@@ -72,11 +72,11 @@ const cmdfulMachine = defineMachine({
     cmd: {} as CmdfulCmd,
     ctx: {} as CmdlessCtx,
   },
-  init: (loaded) => [loaded ?? { type: "counting", count: 0 }, []],
+  init: (loaded) => [loaded ?? { _tag: "counting", count: 0 }, []],
   update: {
     inc: (s) => [
       { ...s, count: s.count + 1 },
-      [{ type: "persist", payload: "x" }],
+      [{ _tag: "persist", payload: "x" }],
     ],
   },
 });

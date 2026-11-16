@@ -58,7 +58,7 @@ export interface UserState {
 }
 
 export interface Load {
-  readonly type: "load";
+  readonly _tag: "load";
   readonly id: string;
   readonly at: number;
 }
@@ -122,7 +122,7 @@ export function userMachine(fetchUser: (id: string) => Promise<User>) {
       },
     },
     // 5. Arm the retry timer. `timer` is built into the engine.
-    subs: [{ type: "timer", deps: (s: UserState) => rc.timer(s.call) }],
+    subs: [{ _tag: "timer", deps: (s: UserState) => rc.timer(s.call) }],
   });
   // 6. Do the work. The handler returns an outcome; it never builds a Msg.
   const interpret: Interpret<UserMsg, UserCmd, undefined> = {
@@ -142,9 +142,9 @@ import { drive } from "@demlik/tea/testing/promise";
 
 const initial: UserState = { call: rc.init(), user: null, error: null };
 const ada: User = { id: "u1", name: "Ada" };
-const load: Load = { type: "load", id: "u1", at: 0 };
+const load: Load = { _tag: "load", id: "u1", at: 0 };
 const retryFires: ResilientTimerMsg = {
-  type: "deadline_exceeded",
+  _tag: "deadline_exceeded",
   id: "resilient:retry:u1",
   atMs: 1_000,
 };

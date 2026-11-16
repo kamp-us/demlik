@@ -220,7 +220,7 @@ const defaultParseEvent = <M>(raw: unknown): M | null =>
   raw !== null &&
   typeof raw === "object" &&
   !Array.isArray(raw) &&
-  typeof (raw as { type?: unknown }).type === "string"
+  typeof (raw as { _tag?: unknown })._tag === "string"
     ? (raw as M)
     : null;
 
@@ -253,7 +253,7 @@ const defaultParseEvent = <M>(raw: unknown): M | null =>
 // definition site.
 export function doEventSourcedStore<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   Ctx,
   C extends Cmd = Cmd,
   U extends Sub = Sub,

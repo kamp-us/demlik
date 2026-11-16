@@ -19,11 +19,11 @@ import { run as runPromise } from "../promise";
 import { type EffectRuntime, run as runEffect } from "./index";
 
 type Model = { readonly phase: "idle" | "working" | "finished" };
-type Msg = { readonly type: "go" } | { readonly type: "finish" };
-type Work = { readonly type: "work" };
+type Msg = { readonly _tag: "go" } | { readonly _tag: "finish" };
+type Work = { readonly _tag: "work" };
 
 const update: Reducer<Model, Msg, Work> = {
-  go: () => [{ phase: "working" }, [{ type: "work" }]],
+  go: () => [{ phase: "working" }, [{ _tag: "work" }]],
   finish: () => [{ phase: "finished" }, []],
 };
 
@@ -95,7 +95,7 @@ const engines: Record<"promise" | "effect", (s: Setup) => Promise<Harness>> = {
         work: async () => {
           log.push("handler");
           setup.onWork?.();
-          return { type: "finish" as const };
+          return { _tag: "finish" as const };
         },
       },
     }).ready;
@@ -124,7 +124,7 @@ const engines: Record<"promise" | "effect", (s: Setup) => Promise<Harness>> = {
                   try: () => {
                     log.push("handler");
                     setup.onWork?.();
-                    return { type: "finish" as const };
+                    return { _tag: "finish" as const };
                   },
                   catch: (error) => error as Error,
                 }),
@@ -150,13 +150,13 @@ describe.each(Object.entries(engines))("on the %s engine", (_name, start) => {
   it("hands observe the Cmds each transition started", async () => {
     const rt = await start({});
     const seen: [string, readonly Cmd[] | undefined][] = [];
-    rt.observe((msg, _state, cmds) => seen.push([msg.type, cmds]));
+    rt.observe((msg, _state, cmds) => seen.push([msg._tag, cmds]));
 
-    await rt.dispatch({ type: "go" });
+    await rt.dispatch({ _tag: "go" });
     await vi.waitFor(() => expect(rt.getState().phase).toBe("finished"));
 
     expect(seen).toEqual([
-      ["go", [{ type: "work" }]],
+      ["go", [{ _tag: "work" }]],
       ["finish", []],
     ]);
     await rt.stop();
@@ -168,7 +168,7 @@ describe.each(Object.entries(engines))("on the %s engine", (_name, start) => {
     rt.subscribe(() => rt.log.push(`listener:${rt.getState().phase}`));
     rt.observe((_msg, state) => rt.log.push(`observer:${state.phase}`));
 
-    await rt.dispatch({ type: "go" });
+    await rt.dispatch({ _tag: "go" });
 
     expect(rt.log).toEqual([
       "saved:working",
@@ -187,7 +187,7 @@ describe.each(Object.entries(engines))("on the %s engine", (_name, start) => {
     const heard: string[] = [];
     rt.subscribe(() => heard.push(rt.getState().phase));
 
-    await rt.dispatch({ type: "go" });
+    await rt.dispatch({ _tag: "go" });
 
     expect(heard).toEqual(["working", "finished"]);
     await rt.stop();
@@ -199,11 +199,11 @@ describe.each(Object.entries(engines))("on the %s engine", (_name, start) => {
     const heard: string[] = [];
     const handled: string[] = [];
     rt.subscribe(() => heard.push(rt.getState().phase));
-    rt.observe((msg) => handled.push(msg.type));
+    rt.observe((msg) => handled.push(msg._tag));
 
     failing = true;
     // The Effect engine wraps the store's error in its own `StoreFailed`.
-    await expect(rt.dispatch({ type: "go" })).rejects.toBeInstanceOf(Error);
+    await expect(rt.dispatch({ _tag: "go" })).rejects.toBeInstanceOf(Error);
 
     expect(heard).toEqual([]);
     expect(handled).toEqual([]);
@@ -221,7 +221,7 @@ describe.each(Object.entries(engines))("on the %s engine", (_name, start) => {
     const heard: string[] = [];
     rt.subscribe(() => heard.push(rt.getState().phase));
 
-    await expect(rt.dispatch({ type: "go" })).rejects.toBe(boom);
+    await expect(rt.dispatch({ _tag: "go" })).rejects.toBe(boom);
 
     expect(heard).toEqual(["working"]);
     await rt.stop();
@@ -237,7 +237,7 @@ describe.each(Object.entries(engines))("on the %s engine", (_name, start) => {
     });
     rt.subscribe(() => later.push(rt.getState().phase));
 
-    await rt.dispatch({ type: "go" });
+    await rt.dispatch({ _tag: "go" });
 
     expect(rt.errors).toEqual([{ phase: "listener", error: bad }]);
     expect(rt.log).toContain("handler");

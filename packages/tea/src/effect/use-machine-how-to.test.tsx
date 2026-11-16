@@ -58,7 +58,7 @@ function Lookup() {
   });
 
   return (
-    <button type="button" onClick={() => send({ type: "look_up", id: "u1" })}>
+    <button type="button" onClick={() => send({ _tag: "look_up", id: "u1" })}>
       {state.status}: {state.name}
     </button>
   );

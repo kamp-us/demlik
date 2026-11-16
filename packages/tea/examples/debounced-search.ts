@@ -13,10 +13,10 @@ interface State {
 }
 
 type Msg =
-  | { type: "query_changed"; query: string }
-  | { type: "search_window_settled"; query: string }
-  | { type: "search_ok"; query: string; hits: readonly string[] }
-  | { type: "drain" };
+  | { _tag: "query_changed"; query: string }
+  | { _tag: "search_window_settled"; query: string }
+  | { _tag: "search_ok"; query: string; hits: readonly string[] }
+  | { _tag: "drain" };
 
 type DoSearch = Cmd<"do_search"> & { query: string };
 
@@ -53,7 +53,7 @@ export const debouncedSearch = defineMachine({
 
     search_window_settled: (s, m) => [
       { ...s, phase: "searching", committedQuery: m.query },
-      [{ type: "do_search", query: m.query }],
+      [{ _tag: "do_search", query: m.query }],
     ],
 
     search_ok: (s, m) =>
@@ -77,7 +77,7 @@ export const debouncedSearch = defineMachine({
 export const debouncedSearchInterpret: Interpret<Msg, DoSearch, Ctx> = {
   do_search: async (cmd, ctx) => {
     const hits = await ctx.search(cmd.query);
-    return { type: "search_ok", query: cmd.query, hits };
+    return { _tag: "search_ok", query: cmd.query, hits };
   },
 };
 
@@ -107,14 +107,14 @@ async function main(): Promise<void> {
 
   const QUIET_MS = 200;
   const fireSettled = debounce((query: string) => {
-    void runtime.dispatch({ type: "search_window_settled", query });
+    void runtime.dispatch({ _tag: "search_window_settled", query });
   }, QUIET_MS);
 
   const burst = ["t", "te", "ter", "terraform"];
 
   console.log("user types a burst; each keystroke arms the debounce window\n");
   for (const query of burst) {
-    await runtime.dispatch({ type: "query_changed", query });
+    await runtime.dispatch({ _tag: "query_changed", query });
     fireSettled(query);
     console.log(
       `keystroke "${query}"  phase=${runtime.getState().phase}  searchesSoFar=${searchLog.length}`,
@@ -127,8 +127,8 @@ async function main(): Promise<void> {
   console.log("quiet window elapses; the debounce releases ONE settled Msg\n");
 
   fireSettled.flush();
-  await runtime.dispatch({ type: "drain" });
-  await runtime.dispatch({ type: "drain" });
+  await runtime.dispatch({ _tag: "drain" });
+  await runtime.dispatch({ _tag: "drain" });
 
   const final = runtime.getState();
   console.log(`committedQuery   ${JSON.stringify(final.committedQuery)}`);

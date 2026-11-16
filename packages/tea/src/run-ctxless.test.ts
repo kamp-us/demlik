@@ -14,7 +14,7 @@ import { defineMachine, type NoCtx, type Reducer } from "./index";
 import { run } from "./promise";
 
 type State = { readonly count: number };
-type Msg = { readonly type: "bump" };
+type Msg = { readonly _tag: "bump" };
 
 function pureMachine() {
   const update: Reducer<State, Msg, never> = {
@@ -31,14 +31,14 @@ describe("run() — pure machine, no ctx (#182)", () => {
   it("boots and dispatches with no ctx passed", async () => {
     const rt = await run(pureMachine(), {}).ready;
     expect(rt.getState().count).toBe(0);
-    await rt.dispatch({ type: "bump" });
-    await rt.dispatch({ type: "bump" });
+    await rt.dispatch({ _tag: "bump" });
+    await rt.dispatch({ _tag: "bump" });
     expect(rt.getState().count).toBe(2);
   });
 
   it("still accepts an explicit ctx (additive — vortex's `ctx: {}` path)", async () => {
     const rt = await run(pureMachine(), { ctx: {} }).ready;
-    await rt.dispatch({ type: "bump" });
+    await rt.dispatch({ _tag: "bump" });
     expect(rt.getState().count).toBe(1);
   });
 
@@ -49,7 +49,7 @@ describe("run() — pure machine, no ctx (#182)", () => {
       terminal: (s) => s.count >= 1,
     }).ready;
     expect(rt.result()).toBeUndefined();
-    await rt.dispatch({ type: "bump" });
+    await rt.dispatch({ _tag: "bump" });
     expect(rt.result()?.count).toBe(1);
   });
 });

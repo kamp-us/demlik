@@ -28,21 +28,21 @@ import { HAS_ERROR_WITH_CAUSE, MAJOR } from "./test-fast-check";
 const SENT_HEAD = "sent";
 
 type State =
-  | { readonly type: "idle" }
+  | { readonly _tag: "idle" }
   | {
-      readonly type: "proving";
+      readonly _tag: "proving";
       readonly head: string;
       readonly proof: string;
     }
-  | { readonly type: "landed"; readonly head: string };
+  | { readonly _tag: "landed"; readonly head: string };
 
-type Msg = { type: "land" } | { type: "wait" } | { type: "abort" };
+type Msg = { _tag: "land" } | { _tag: "wait" } | { _tag: "abort" };
 
 const update: Reducer<State, Msg, never> = {
   land: (s) =>
-    s.type === "proving" ? [{ type: "landed", head: s.proof }, []] : [s, []],
+    s._tag === "proving" ? [{ _tag: "landed", head: s.proof }, []] : [s, []],
   wait: (s) => [s, []],
-  abort: (s) => (s.type === "proving" ? [{ type: "idle" }, []] : [s, []]),
+  abort: (s) => (s._tag === "proving" ? [{ _tag: "idle" }, []] : [s, []]),
 };
 
 const defineShip = (init: (loaded: State | null) => State) =>
@@ -56,39 +56,39 @@ const defineShip = (init: (loaded: State | null) => State) =>
     update,
   });
 
-const trusting = defineShip((loaded) => loaded ?? { type: "idle" });
+const trusting = defineShip((loaded) => loaded ?? { _tag: "idle" });
 
 const guarded = defineShip((loaded) =>
-  loaded?.type === "proving" && loaded.proof !== loaded.head
-    ? { type: "idle" }
-    : (loaded ?? { type: "idle" }),
+  loaded?._tag === "proving" && loaded.proof !== loaded.head
+    ? { _tag: "idle" }
+    : (loaded ?? { _tag: "idle" }),
 );
 
 const msgArb = arbMsg<Msg>({
-  land: fc.constant({ type: "land" as const }),
-  wait: fc.constant({ type: "wait" as const }),
-  abort: fc.constant({ type: "abort" as const }),
+  land: fc.constant({ _tag: "land" as const }),
+  wait: fc.constant({ _tag: "wait" as const }),
+  abort: fc.constant({ _tag: "abort" as const }),
 });
 
 const seqArb = arbMsgSequence(msgArb, { maxLength: 30 });
 
-const BAD_STATE: State = { type: "proving", head: SENT_HEAD, proof: "other" };
+const BAD_STATE: State = { _tag: "proving", head: SENT_HEAD, proof: "other" };
 
 const GOOD_STATE: State = {
-  type: "proving",
+  _tag: "proving",
   head: SENT_HEAD,
   proof: SENT_HEAD,
 };
 
 const savedStates = fc.constantFrom<State>(
-  { type: "idle" },
+  { _tag: "idle" },
   GOOD_STATE,
-  { type: "landed", head: SENT_HEAD },
+  { _tag: "landed", head: SENT_HEAD },
   BAD_STATE,
 );
 
 const landsWhatWasSent = (s: State): boolean =>
-  s.type !== "landed" || s.head === SENT_HEAD;
+  s._tag !== "landed" || s.head === SENT_HEAD;
 
 const SEEDS = [1, 42, 20261101];
 
@@ -150,7 +150,7 @@ const failingRun = (opts: Opts): PropertyRun =>
     trusting,
     {},
     arbMsgSequence(msgArb, { minLength: 5, maxLength: 30 }),
-    (s) => s.type !== "landed",
+    (s) => s._tag !== "landed",
     { loaded: GOOD_STATE, ...opts },
   );
 
@@ -222,7 +222,7 @@ describe("a fixed loaded, null, and no loaded", () => {
       return seen;
     };
 
-    const fresh = new Set([JSON.stringify({ type: "idle" })]);
+    const fresh = new Set([JSON.stringify({ _tag: "idle" })]);
     expect(firstStates({})).toEqual(fresh);
     expect(firstStates({ loaded: null })).toEqual(fresh);
     expect(firstStates({ loaded: GOOD_STATE })).toEqual(
@@ -244,13 +244,13 @@ describe("a fixed loaded, null, and no loaded", () => {
     );
 
     expect(seen).toEqual(
-      new Set([JSON.stringify({ type: "idle" }), JSON.stringify(GOOD_STATE)]),
+      new Set([JSON.stringify({ _tag: "idle" }), JSON.stringify(GOOD_STATE)]),
     );
   });
 
   it("reads a saved state that merely has a generate field as a value", () => {
     const lookalike = {
-      type: "landed",
+      _tag: "landed",
       head: SENT_HEAD,
       generate: "not a function",
     } as State;
@@ -301,7 +301,7 @@ describe("fast-check's parameters", () => {
         arbMsgSequence(msgArb, { minLength: 5, maxLength: 30 }),
         (steps, final) => {
           replayed.push(JSON.stringify(steps.map((step) => step.msg)));
-          return final.type !== "landed";
+          return final._tag !== "landed";
         },
         {
           loaded: GOOD_STATE,
@@ -362,7 +362,7 @@ describe("what the check threw", () => {
   const WHY = "the check said why";
 
   const throwsOnLand = (s: State): void => {
-    if (s.type === "landed") throw new Error(WHY);
+    if (s._tag === "landed") throw new Error(WHY);
   };
 
   const viaAssert = (settings: Opts): Error => {
@@ -455,7 +455,7 @@ describe("what the check threw", () => {
 // second law can break, and it first breaks on the fourth `up`.
 describe("a check that says why", () => {
   type Count = { readonly count: number };
-  type CountMsg = { type: "up" } | { type: "down" } | { type: "reset" };
+  type CountMsg = { _tag: "up" } | { _tag: "down" } | { _tag: "reset" };
 
   const counter = defineMachine({
     types: {
@@ -473,9 +473,9 @@ describe("a check that says why", () => {
 
   const countMsgs = arbMsgSequence(
     arbMsg<CountMsg>({
-      up: fc.constant({ type: "up" as const }),
-      down: fc.constant({ type: "down" as const }),
-      reset: fc.constant({ type: "reset" as const }),
+      up: fc.constant({ _tag: "up" as const }),
+      down: fc.constant({ _tag: "down" as const }),
+      reset: fc.constant({ _tag: "reset" as const }),
     }),
     { maxLength: 30 },
   );
@@ -487,7 +487,7 @@ describe("a check that says why", () => {
   const firstLaw = (s: Count) => (s.count < 0 ? FIRST : null);
   const secondLaw = (s: Count) => (s.count > 3 ? SECOND : null);
   const thirdLaw = (msg: CountMsg, s: Count) =>
-    msg.type === "reset" && s.count !== 0 ? THIRD : null;
+    msg._tag === "reset" && s.count !== 0 ? THIRD : null;
 
   // Declared here rather than taken from fast-check's types: 4 does not know
   // `errorWithCause`, and this file's tests run on both majors.
@@ -530,7 +530,7 @@ describe("a check that says why", () => {
     ["propertyTrace", threeLawsOverTheTrace],
   ] as const;
 
-  const up = JSON.stringify({ type: "up" });
+  const up = JSON.stringify({ _tag: "up" });
   const SHRUNK = `Counterexample: [[${[up, up, up, up].join(",")}]]`;
 
   describe.each(THREE_LAWS)("%s with three laws", (_name, run) => {
@@ -829,7 +829,7 @@ describe("a reporter set through fc.configureGlobal", () => {
   it("failOnNeverActed still fails a run that passed", () => {
     fc.configureGlobal({ reporter: () => {} });
     // Nothing acts from `idle`, and this machine never leaves it.
-    const stuck = defineShip(() => ({ type: "idle" }));
+    const stuck = defineShip(() => ({ _tag: "idle" }));
 
     const failure = failureOf(() =>
       propertyTerminates(stuck, {}, seqArb, () => true, {

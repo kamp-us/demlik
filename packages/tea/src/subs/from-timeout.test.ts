@@ -10,7 +10,7 @@ import { fromTimeout } from "./from-timeout";
 
 type ExpireSub = Sub<"expire", { readonly delayMs: number }>;
 type State = { readonly phase: "waiting" | "expired" | "left" };
-type Msg = { readonly type: "expired" } | { readonly type: "leave" };
+type Msg = { readonly _tag: "expired" } | { readonly _tag: "leave" };
 
 // `expired` transitions unconditionally so a timer that outlives its cleanup
 // is observable: a stray late fire flips a "left" state to "expired" and the
@@ -32,7 +32,7 @@ function timeoutMachine(delayMs: number) {
     update,
     subs: [
       {
-        type: "expire",
+        _tag: "expire",
         deps: (s) => (s.phase === "waiting" ? { delayMs } : null),
       },
     ],
@@ -40,7 +40,7 @@ function timeoutMachine(delayMs: number) {
 }
 
 const subscribe = {
-  expire: fromTimeout<ExpireSub, Msg>(() => ({ type: "expired" })),
+  expire: fromTimeout<ExpireSub, Msg>(() => ({ _tag: "expired" })),
 };
 
 describe("fromTimeout — subscribe → deliver → cleanup against a real runtime", () => {
@@ -68,7 +68,7 @@ describe("fromTimeout — subscribe → deliver → cleanup against a real runti
     // delivers no second Msg (setTimeout, not setInterval).
     await vi.advanceTimersByTimeAsync(10_000);
     await rt.idle();
-    expect(dispatched.filter((m) => m.type === "expired")).toHaveLength(1);
+    expect(dispatched.filter((m) => m._tag === "expired")).toHaveLength(1);
 
     await rt.stop();
   });
@@ -76,7 +76,7 @@ describe("fromTimeout — subscribe → deliver → cleanup against a real runti
   it("cancel on state exit: reconciling out before the delay elapses cancels the pending dispatch", async () => {
     const rt = await run(timeoutMachine(1_000), { subscribe }).ready;
 
-    await rt.dispatch({ type: "leave" }); // drops the Sub → cleanup → clearTimeout
+    await rt.dispatch({ _tag: "leave" }); // drops the Sub → cleanup → clearTimeout
     await vi.advanceTimersByTimeAsync(10_000);
     await rt.idle();
     expect(rt.getState().phase).toBe("left"); // never "expired"

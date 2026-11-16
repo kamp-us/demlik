@@ -44,7 +44,7 @@ type Outputs = { plan: AgentTurn; research: AgentTurn; synthesize: AgentTurn };
 type ToolResult = { readonly snippet: string };
 
 /** The one tool effect Cmd. `toolOf` maps a model's `ToolCall` to this. */
-type RunTool = { readonly type: "run_tool" } & ToolCall;
+type RunTool = { readonly _tag: "run_tool" } & ToolCall;
 
 /** The message shape the (fake) model speaks. We never actually inspect it. */
 type ChatMsg = { readonly role: "system" | "user"; readonly content: string };
@@ -209,7 +209,7 @@ const agent = createAgent<
   // stage (between stages / done) parks on "synthesize" — never actually used.
   turnOf: (stage) => stage ?? "synthesize",
   payloadOf: (stage) => ({ stage }),
-  toolOf: (call): RunTool => ({ type: "run_tool", ...call }),
+  toolOf: (call): RunTool => ({ _tag: "run_tool", ...call }),
   toolConcurrency: 2, // fan-out: up to 2 search calls in flight at once.
   maxTurns: 20, // livelock guard — the loop can never spin forever.
 });
@@ -230,14 +230,14 @@ const toolInterpret: Interpret<Msg, RunTool, Ctx> = {
     if (snippet === undefined) {
       // Errors are data: a miss routes back as a tool error the brain can see.
       return {
-        type: "agent_tool_err",
+        _tag: "agent_tool_err",
         callId: cmd.callId,
         reason: `no result for "${q}"`,
         at: ctx.now(),
       };
     }
     return {
-      type: "agent_tool_ok",
+      _tag: "agent_tool_ok",
       callId: cmd.callId,
       result: { snippet },
       at: ctx.now(),
@@ -264,7 +264,7 @@ function stageBanner(stage: Stage) {
 }
 
 function narrate(msg: Msg) {
-  switch (msg.type) {
+  switch (msg._tag) {
     case "agent_start":
       console.log("start → fire the first brain call");
       break;
@@ -343,7 +343,7 @@ async function main() {
   // re-enters itself via follow-up Msgs (brain settle + tool results) the
   // substrate enqueues on its dispatch tail; we just await the terminal.
   await runtime.dispatch({
-    type: "agent_start",
+    _tag: "agent_start",
     runId: "research-001",
     at: ctx.now(),
   });

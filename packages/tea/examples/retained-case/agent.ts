@@ -53,7 +53,7 @@ export function investigation(ports: Ports) {
     turnOf: () => "investigate",
     payloadOf: (_stage, conversation) => ({ turn: conversation.turnCount }),
     loadMessages: async (call) => [requestSchema.parse(call.payload)],
-    toolOf: (call: ToolCall): Search => ({ type: "search", ...call }),
+    toolOf: (call: ToolCall): Search => ({ _tag: "search", ...call }),
     maxTurns: MAX_MODEL_TURNS,
     rng: () => 0,
     compaction: {
@@ -72,14 +72,14 @@ export function investigation(ports: Ports) {
           const { turn } = searchArgsSchema.parse(cmd.args);
           const result = evidenceSchema.parse(await ctx.search(turn));
           return {
-            type: "agent_tool_ok",
+            _tag: "agent_tool_ok",
             callId: cmd.callId,
             result,
             at: ctx.now(),
           };
         } catch (error) {
           return {
-            type: "agent_tool_err",
+            _tag: "agent_tool_err",
             callId: cmd.callId,
             reason: reason(error),
             at: ctx.now(),
@@ -92,7 +92,7 @@ export function investigation(ports: Ports) {
             await ctx.summarize(cmd.input.payload),
           );
           return {
-            type: "compact_ok",
+            _tag: "compact_ok",
             key: cmd.key,
             result: { key: cmd.key, purpose: cmd.key, output },
             at: ctx.now(),
@@ -100,7 +100,7 @@ export function investigation(ports: Ports) {
         } catch (error) {
           const text = reason(error);
           return {
-            type: "compact_err",
+            _tag: "compact_err",
             key: cmd.key,
             error: {
               key: cmd.key,
@@ -157,7 +157,7 @@ export function investigation(ports: Ports) {
     ],
     update,
     cmds: wired.machine.cmds,
-    subs: [{ type: "deadline", deps: (state) => agent.subs(state.agent) }],
+    subs: [{ _tag: "deadline", deps: (state) => agent.subs(state.agent) }],
   };
   return {
     agent,

@@ -30,13 +30,13 @@ type ReportDone = Cmd<"report_done"> & { results: readonly Result[] };
 const baseConfig = {
   concurrency: 2,
   idOf: (item: Item) => item,
-  of: (item: Item): Crawl => ({ type: "crawl", item }),
+  of: (item: Item): Crawl => ({ _tag: "crawl", item }),
 };
 
 const withJoin = {
   ...baseConfig,
   join: (results: readonly Result[]): ReportDone => ({
-    type: "report_done",
+    _tag: "report_done",
     results,
   }),
 };
@@ -85,8 +85,8 @@ describe("scatter — launch up to concurrency", () => {
     expect(state.pending).toEqual(["c", "d"]);
     // One launch Cmd per running item, in launch order.
     expect(cmds).toEqual([
-      { type: "crawl", item: "a" },
-      { type: "crawl", item: "b" },
+      { _tag: "crawl", item: "a" },
+      { _tag: "crawl", item: "b" },
     ]);
     // The ledger flipped the launched two to running, the rest stay pending.
     expect(
@@ -102,7 +102,7 @@ describe("scatter — launch up to concurrency", () => {
     const [state, cmds] = fan.scatter(initFanOut<Item, Result>(), ["only"]);
     expect(state.running).toEqual(["only"]);
     expect(state.pending).toEqual([]);
-    expect(cmds).toEqual([{ type: "crawl", item: "only" }]);
+    expect(cmds).toEqual([{ _tag: "crawl", item: "only" }]);
   });
 
   it("clamps concurrency < 1 to a serial budget of 1 (never deadlocks)", () => {
@@ -110,7 +110,7 @@ describe("scatter — launch up to concurrency", () => {
     const [state, cmds] = fan.scatter(initFanOut<Item, Result>(), ["a", "b"]);
     expect(state.running).toEqual(["a"]);
     expect(state.pending).toEqual(["b"]);
-    expect(cmds).toEqual([{ type: "crawl", item: "a" }]);
+    expect(cmds).toEqual([{ _tag: "crawl", item: "a" }]);
   });
 
   it("does not mutate the input slice", () => {
@@ -125,7 +125,7 @@ describe("scatter — launch up to concurrency", () => {
   it("scatter never fires join (a batch can't complete on the transition it starts)", () => {
     const fan = createFanOut(withJoin);
     const [, cmds] = fan.scatter(initFanOut<Item, Result>(), ["a"]);
-    expect(cmds).toEqual([{ type: "crawl", item: "a" }]);
+    expect(cmds).toEqual([{ _tag: "crawl", item: "a" }]);
   });
 });
 
@@ -140,7 +140,7 @@ describe("itemOk / itemErr — record + backfill", () => {
     expect(s1.running).toEqual(["b", "c"]); // b stayed, c backfilled
     expect(s1.pending).toEqual([]);
     // The backfill launched exactly c.
-    expect(cmds).toEqual([{ type: "crawl", item: "c" }]);
+    expect(cmds).toEqual([{ _tag: "crawl", item: "c" }]);
   });
 
   it("records an error and backfills symmetrically", () => {
@@ -151,7 +151,7 @@ describe("itemOk / itemErr — record + backfill", () => {
 
     expect(s1.failed).toEqual([{ item: "a", error: err }]);
     expect(s1.running).toEqual(["b", "c"]);
-    expect(cmds).toEqual([{ type: "crawl", item: "c" }]);
+    expect(cmds).toEqual([{ _tag: "crawl", item: "c" }]);
   });
 
   it("a settle for an unknown id is a no-op (no Cmds, slice unchanged)", () => {
@@ -181,7 +181,7 @@ describe("itemOk / itemErr — record + backfill", () => {
     const [s2, cmds2] = fan.itemErr(s1, "b", "nope");
     // Now complete. join receives only the OK results.
     expect(isComplete(s2)).toBe(true);
-    expect(cmds2).toEqual([{ type: "report_done", results: ["A"] }]);
+    expect(cmds2).toEqual([{ _tag: "report_done", results: ["A"] }]);
   });
 
   it("omitting join → no completion Cmd ever", () => {
@@ -227,9 +227,9 @@ interface MachineState {
   readonly report: readonly Result[] | null;
 }
 type Msg =
-  | { type: "start"; items: readonly Item[] }
-  | { type: "crawl_ok"; id: string; result: Result }
-  | { type: "crawl_err"; id: string; error: string }
+  | { _tag: "start"; items: readonly Item[] }
+  | { _tag: "crawl_ok"; id: string; result: Result }
+  | { _tag: "crawl_err"; id: string; error: string }
   | ReportDone;
 
 const machineFan = createFanOut(withJoin);
@@ -270,10 +270,10 @@ describe("machine integration", () => {
 
   it("scatter emits one launch Cmd per item up to concurrency", () => {
     bound.expectCmdSequence(
-      { msgs: [{ type: "start", items: ["a", "b", "c"] }] },
+      { msgs: [{ _tag: "start", items: ["a", "b", "c"] }] },
       [
-        { type: "crawl", item: "a" },
-        { type: "crawl", item: "b" },
+        { _tag: "crawl", item: "a" },
+        { _tag: "crawl", item: "b" },
       ],
     );
   });
@@ -281,11 +281,11 @@ describe("machine integration", () => {
   it("drives a full batch to `done` and folds results via join", () => {
     const { state, cmds } = bound.replay({
       msgs: [
-        { type: "start", items: ["a", "b", "c"] },
-        { type: "crawl_ok", id: "a", result: "A" },
-        { type: "crawl_ok", id: "b", result: "B" },
-        { type: "crawl_ok", id: "c", result: "C" },
-        { type: "report_done", results: ["A", "B", "C"] },
+        { _tag: "start", items: ["a", "b", "c"] },
+        { _tag: "crawl_ok", id: "a", result: "A" },
+        { _tag: "crawl_ok", id: "b", result: "B" },
+        { _tag: "crawl_ok", id: "c", result: "C" },
+        { _tag: "report_done", results: ["A", "B", "C"] },
       ],
       loaded: null,
     });
@@ -294,9 +294,9 @@ describe("machine integration", () => {
     expect(state.report).toEqual(["A", "B", "C"]);
     expect(state.fanOut.done.map((d) => d.result)).toEqual(["A", "B", "C"]);
     // c was launched as a backfill once a or b settled.
-    expect(cmds).toContainEqual({ type: "crawl", item: "c" });
+    expect(cmds).toContainEqual({ _tag: "crawl", item: "c" });
     expect(cmds).toContainEqual({
-      type: "report_done",
+      _tag: "report_done",
       results: ["A", "B", "C"],
     });
   });
@@ -384,7 +384,7 @@ describe("fan-out invariants (property)", () => {
       fc.property(uniqueItems, fc.array(fc.boolean()), (items, oks) => {
         const fan = createFanOut(withJoin);
         let [state, cmds] = fan.scatter(initFanOut<Item, Result>(), items);
-        let joinCount = cmds.filter((c) => c.type === "report_done").length;
+        let joinCount = cmds.filter((c) => c._tag === "report_done").length;
 
         let i = 0;
         const okIds: string[] = [];
@@ -399,7 +399,7 @@ describe("fan-out invariants (property)", () => {
           } else {
             [state, stepCmds] = fan.itemErr(state, id, "e");
           }
-          joinCount += stepCmds.filter((c) => c.type === "report_done").length;
+          joinCount += stepCmds.filter((c) => c._tag === "report_done").length;
           i++;
         }
 
@@ -521,7 +521,7 @@ describe("duplicate ids — settle exactly one running entry per settle", () => 
     concurrency: 4,
     idOf: (item: DupItem) => item.tag,
     of: (item: DupItem): Cmd<"crawl"> & { n: number } => ({
-      type: "crawl",
+      _tag: "crawl",
       n: item.n,
     }),
   };
@@ -571,20 +571,20 @@ describe("cross-wave join — fold only the current wave, fire once per wave", (
     let [s] = fan.scatter(initFanOut<Item, Result>(), ["a", "b"]);
     let cmds: readonly (Crawl | ReportDone)[];
     [s, cmds] = fan.itemOk(s, "a", "A");
-    expect(cmds.filter((c) => c.type === "report_done")).toEqual([]); // not complete
+    expect(cmds.filter((c) => c._tag === "report_done")).toEqual([]); // not complete
     [s, cmds] = fan.itemOk(s, "b", "B");
-    expect(cmds).toContainEqual({ type: "report_done", results: ["A", "B"] });
+    expect(cmds).toContainEqual({ _tag: "report_done", results: ["A", "B"] });
 
     // Wave 2: re-scatter into the SAME drained slice + drain ["c","d"].
     [s] = fan.scatter(s, ["c", "d"]);
     [s, cmds] = fan.itemOk(s, "c", "C");
-    expect(cmds.filter((c) => c.type === "report_done")).toEqual([]); // not complete
+    expect(cmds.filter((c) => c._tag === "report_done")).toEqual([]); // not complete
     [s, cmds] = fan.itemOk(s, "d", "D");
 
     // The wave-2 join must carry ONLY ["C","D"] — NOT the cumulative
     // ["A","B","C","D"] the buggy code folded.
-    const joinCmds = cmds.filter((c) => c.type === "report_done");
-    expect(joinCmds).toEqual([{ type: "report_done", results: ["C", "D"] }]);
+    const joinCmds = cmds.filter((c) => c._tag === "report_done");
+    expect(joinCmds).toEqual([{ _tag: "report_done", results: ["C", "D"] }]);
     // `done` still accumulates the full history (it is the public read surface).
     expect(s.done.map((d) => d.result)).toEqual(["A", "B", "C", "D"]);
   });
@@ -594,7 +594,7 @@ describe("cross-wave join — fold only the current wave, fire once per wave", (
     let [s] = fan.scatter(initFanOut<Item, Result>(), ["a"]);
     let cmds: readonly (Crawl | ReportDone)[];
     [s, cmds] = fan.itemOk(s, "a", "A");
-    expect(cmds).toContainEqual({ type: "report_done", results: ["A"] });
+    expect(cmds).toContainEqual({ _tag: "report_done", results: ["A"] });
     // A second settle for the now-settled id is a no-op — no re-fire.
     [s, cmds] = fan.itemOk(s, "a", "AGAIN");
     expect(cmds).toEqual([]);
@@ -613,8 +613,8 @@ describe("cross-wave join — fold only the current wave, fire once per wave", (
 // not any Msg we hand-fed.
 describe("wired machine — re-entrant interpret drives the real scatter-gather", () => {
   type WiredMsg =
-    | { type: "start"; items: readonly Item[] }
-    | { type: "crawl_ok"; id: string; result: Result }
+    | { _tag: "start"; items: readonly Item[] }
+    | { _tag: "crawl_ok"; id: string; result: Result }
     | ReportDone;
 
   interface WiredState {
@@ -666,7 +666,7 @@ describe("wired machine — re-entrant interpret drives the real scatter-gather"
         // Result is the uppercased item so it is distinguishable from the input.
         crawl: async (cmd) => {
           ctx.runtime?.dispatch({
-            type: "crawl_ok",
+            _tag: "crawl_ok",
             id: cmd.item,
             result: cmd.item.toUpperCase(),
           });
@@ -676,7 +676,7 @@ describe("wired machine — re-entrant interpret drives the real scatter-gather"
         // `reports` — the runtime path that turns the verb's join Cmd into an
         // observable state change.
         report_done: async (cmd) => ({
-          type: "report_done" as const,
+          _tag: "report_done" as const,
           results: cmd.results,
         }),
       },
@@ -702,11 +702,11 @@ describe("wired machine — re-entrant interpret drives the real scatter-gather"
 
     // Wave 1: scatter 3 items (concurrency 2 → c backfills). The crawl handler
     // re-enters with each result; the verbs fold and fire join once.
-    await runtime.dispatch({ type: "start", items: ["a", "b", "c"] });
+    await runtime.dispatch({ _tag: "start", items: ["a", "b", "c"] });
     await settleUntil(runtime, (s) => s.reports.length === 1);
 
     // Wave 2: scatter into the SAME runtime/slice and drain.
-    await runtime.dispatch({ type: "start", items: ["d", "e"] });
+    await runtime.dispatch({ _tag: "start", items: ["d", "e"] });
     await settleUntil(runtime, (s) => s.reports.length >= 2);
 
     const end = runtime.getState();

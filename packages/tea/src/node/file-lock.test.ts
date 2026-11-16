@@ -48,13 +48,13 @@ const parseNotes = (raw: unknown): Notes => raw as Notes;
 const parseRecord = (raw: unknown): { readonly tag: string } =>
   raw as { readonly tag: string };
 
-const update: Reducer<Notes, { type: "note" }, never> = {
+const update: Reducer<Notes, { _tag: "note" }, never> = {
   note: (state) => [{ notes: [...state.notes, "note"] }, []],
 };
 const noteMachine = defineMachine({
   types: {
     model: {} as Notes,
-    msg: {} as { type: "note" },
+    msg: {} as { _tag: "note" },
     ctx: undefined,
   },
   init: (loaded) => [loaded ?? { notes: [] }, []],
@@ -124,7 +124,7 @@ describe("a folder restored from another machine", { timeout: 30_000 }, () => {
         seen.push({ error, phase: context.phase });
       },
     }).ready;
-    await runtime.dispatch({ type: "note" });
+    await runtime.dispatch({ _tag: "note" });
 
     // A live process on this machine and boot holds it past the limit.
     writeFileSync(
@@ -149,7 +149,7 @@ describe("a folder restored from another machine", { timeout: 30_000 }, () => {
       onError: () => {},
     }).ready;
     writeFileSync(`${path}.fence.lock`, fromAnotherHost());
-    await expect(runtime.dispatch({ type: "note" })).rejects.toBeInstanceOf(
+    await expect(runtime.dispatch({ _tag: "note" })).rejects.toBeInstanceOf(
       FileLockTimeoutError,
     );
     rmSync(`${path}.fence.lock`);

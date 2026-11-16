@@ -18,7 +18,7 @@ import { useRuntime, type ViewHandle } from "../react/index";
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 type State = { readonly n: number };
-type Msg = { readonly type: "inc" } | { readonly type: "boom" };
+type Msg = { readonly _tag: "inc" } | { readonly _tag: "boom" };
 const failure = new Error("reducer threw");
 const machine = defineMachine({
   types: { model: {} as State, msg: {} as Msg, ctx: undefined },
@@ -82,7 +82,7 @@ describe.each(["promise", "effect"] as const)("useRuntime on %s", (engine) => {
         <button
           type="button"
           onClick={() => {
-            expect(sender({ type: "inc" })).toBeUndefined();
+            expect(sender({ _tag: "inc" })).toBeUndefined();
           }}
         >
           {state.n}
@@ -114,7 +114,7 @@ describe.each(["promise", "effect"] as const)("useRuntime on %s", (engine) => {
         expect(container.textContent).toBe(String(n));
       }
       await act(async () => {
-        expect(mounted.send({ type: "boom" })).toBeUndefined();
+        expect(mounted.send({ _tag: "boom" })).toBeUndefined();
         await mounted.idle();
       });
       expect(mounted.ownError).toHaveBeenCalledExactlyOnceWith(failure, {
@@ -125,7 +125,7 @@ describe.each(["promise", "effect"] as const)("useRuntime on %s", (engine) => {
 
       await act(async () => {
         expect(
-          mounted.send({ type: "unknown" } as unknown as Msg),
+          mounted.send({ _tag: "unknown" } as unknown as Msg),
         ).toBeUndefined();
         await mounted.idle();
       });
@@ -148,7 +148,7 @@ describe.each(["promise", "effect"] as const)("useRuntime on %s", (engine) => {
       await mounted.render(latest);
       expect(mounted.send).toBe(kept);
       await mounted.stop();
-      expect(kept({ type: "inc" })).toBeUndefined();
+      expect(kept({ _tag: "inc" })).toBeUndefined();
       expect(latest).toHaveBeenCalledExactlyOnceWith(
         expect.any(DispatchDiscardedError),
         { phase: "discard" },
@@ -165,7 +165,7 @@ describe.each(["promise", "effect"] as const)("useRuntime on %s", (engine) => {
     const mounted = await mount();
     try {
       await act(async () => root.render(null));
-      expect(mounted.send({ type: "inc" })).toBeUndefined();
+      expect(mounted.send({ _tag: "inc" })).toBeUndefined();
       await mounted.idle();
       expect(mounted.handle.getState()).toEqual({ n: 1 });
       expect(mounted.first).not.toHaveBeenCalled();
@@ -195,7 +195,7 @@ it.each([
       <button
         type="button"
         onClick={() => {
-          expect(send({ type: "inc" })).toBeUndefined();
+          expect(send({ _tag: "inc" })).toBeUndefined();
         }}
       >
         {snapshot.n}

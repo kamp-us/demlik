@@ -31,7 +31,7 @@ import { run } from "./promise";
 // ───────────────────────────────────────────────────────────────────────────
 
 type State = { readonly n: number };
-type Msg = { readonly type: "inc" } | { readonly type: "boom" };
+type Msg = { readonly _tag: "inc" } | { readonly _tag: "boom" };
 
 const REDUCE_BOOM = new Error("reducer invariant violated");
 
@@ -73,7 +73,7 @@ describe("supervision: stop (the safe default)", () => {
 
     // The throwing dispatch rejects with the reducer error — the halt is
     // observable, never a silent resume.
-    await expect(runtime.dispatch({ type: "boom" })).rejects.toBe(REDUCE_BOOM);
+    await expect(runtime.dispatch({ _tag: "boom" })).rejects.toBe(REDUCE_BOOM);
 
     // Surfaced as data via onError with phase "reduce".
     expect(seen).toHaveLength(1);
@@ -84,7 +84,7 @@ describe("supervision: stop (the safe default)", () => {
     expect(runtime.getState()).toEqual({ n: 0 });
 
     // The runtime is halted: every subsequent dispatch rejects.
-    await expect(runtime.dispatch({ type: "inc" })).rejects.toThrow(
+    await expect(runtime.dispatch({ _tag: "inc" })).rejects.toThrow(
       "runtime stopped",
     );
 
@@ -100,9 +100,9 @@ describe("supervision: stop (the safe default)", () => {
       supervision,
     }).ready;
 
-    await expect(runtime.dispatch({ type: "boom" })).rejects.toBe(REDUCE_BOOM);
+    await expect(runtime.dispatch({ _tag: "boom" })).rejects.toBe(REDUCE_BOOM);
     expect(seen[0]?.context.phase).toBe("reduce");
-    await expect(runtime.dispatch({ type: "inc" })).rejects.toThrow(
+    await expect(runtime.dispatch({ _tag: "inc" })).rejects.toThrow(
       "runtime stopped",
     );
     await runtime.stop();
@@ -119,16 +119,16 @@ describe("supervision: escalate (surface + propagate, runtime stays live)", () =
     }).ready;
 
     // First advance state so we can prove the runtime keeps folding afterward.
-    await runtime.dispatch({ type: "inc" });
+    await runtime.dispatch({ _tag: "inc" });
     expect(runtime.getState()).toEqual({ n: 1 });
 
     // The throwing dispatch surfaces + propagates.
-    await expect(runtime.dispatch({ type: "boom" })).rejects.toBe(REDUCE_BOOM);
+    await expect(runtime.dispatch({ _tag: "boom" })).rejects.toBe(REDUCE_BOOM);
     expect(seen).toHaveLength(1);
     expect(seen[0]?.context.phase).toBe("reduce");
 
     // Runtime is NOT halted — a subsequent dispatch still folds.
-    await runtime.dispatch({ type: "inc" });
+    await runtime.dispatch({ _tag: "inc" });
     expect(runtime.getState()).toEqual({ n: 2 });
 
     await runtime.stop();
@@ -150,7 +150,7 @@ describe("supervision: restart (re-init from host last-known-good, keep folding)
     }).ready;
 
     // The throwing dispatch RESOLVES — restart recovered.
-    await expect(runtime.dispatch({ type: "boom" })).resolves.toBeUndefined();
+    await expect(runtime.dispatch({ _tag: "boom" })).resolves.toBeUndefined();
 
     // The failure was still surfaced as data via onError (phase "reduce").
     expect(seen).toHaveLength(1);
@@ -161,7 +161,7 @@ describe("supervision: restart (re-init from host last-known-good, keep folding)
     expect(rehydrate).toHaveBeenCalledTimes(1);
     expect(rehydrate).toHaveBeenCalledWith(
       { n: 0 },
-      { type: "boom" },
+      { _tag: "boom" },
       REDUCE_BOOM,
     );
 
@@ -169,7 +169,7 @@ describe("supervision: restart (re-init from host last-known-good, keep folding)
     expect(runtime.getState()).toEqual(lastGood);
 
     // The runtime keeps folding from the rehydrated state.
-    await runtime.dispatch({ type: "inc" });
+    await runtime.dispatch({ _tag: "inc" });
     expect(runtime.getState()).toEqual({ n: 43 });
 
     await runtime.stop();
@@ -196,7 +196,7 @@ describe("supervision: restart (re-init from host last-known-good, keep folding)
     }).ready;
     saved.length = 0; // drop the boot save
 
-    await runtime.dispatch({ type: "boom" });
+    await runtime.dispatch({ _tag: "boom" });
     // The rehydrated last-good state was persisted.
     expect(saved).toContainEqual(lastGood);
 
@@ -218,7 +218,7 @@ describe("supervision: restart (re-init from host last-known-good, keep folding)
     }).ready;
 
     // The original reduce failure is still surfaced as data ...
-    await expect(runtime.dispatch({ type: "boom" })).rejects.toBe(
+    await expect(runtime.dispatch({ _tag: "boom" })).rejects.toBe(
       REHYDRATE_FAIL,
     );
     expect(seen).toHaveLength(1);
@@ -242,8 +242,8 @@ describe("supervision: a non-throwing reducer is unaffected", () => {
         onError: () => {},
         supervision,
       }).ready;
-      await runtime.dispatch({ type: "inc" });
-      await runtime.dispatch({ type: "inc" });
+      await runtime.dispatch({ _tag: "inc" });
+      await runtime.dispatch({ _tag: "inc" });
       expect(runtime.getState()).toEqual({ n: 2 });
       await runtime.stop();
     }
@@ -256,19 +256,19 @@ describe("supervision: a non-throwing reducer is unaffected", () => {
 // `NoCellError`, nothing is reported under `"reduce"`, and the run stays live.
 // ───────────────────────────────────────────────────────────────────────────
 
-type Latch = { readonly type: "closed" } | { readonly type: "open" };
-type LatchMsg = { readonly type: "open" } | { readonly type: "close" };
+type Latch = { readonly _tag: "closed" } | { readonly _tag: "open" };
+type LatchMsg = { readonly _tag: "open" } | { readonly _tag: "close" };
 
 // Each phase has a cell for one Msg only, so the other one is refused there.
 const latchUpdate: Transitions<Latch, LatchMsg, never> = {
-  closed: { open: () => [{ type: "open" }, []] },
-  open: { close: () => [{ type: "closed" }, []] },
+  closed: { open: () => [{ _tag: "open" }, []] },
+  open: { close: () => [{ _tag: "closed" }, []] },
 };
 
 function latchMachine() {
   return defineMachine({
     types: { model: {} as Latch, msg: {} as LatchMsg, ctx: undefined },
-    init: (loaded) => [loaded ?? { type: "closed" }, []],
+    init: (loaded) => [loaded ?? { _tag: "closed" }, []],
     update: latchUpdate,
   });
 }
@@ -286,33 +286,33 @@ describe("supervision: a Msg with no cell is refused, not supervised (#310)", ()
       supervision,
     }).ready;
 
-    await expect(runtime.dispatch({ type: "close" })).rejects.toBeInstanceOf(
+    await expect(runtime.dispatch({ _tag: "close" })).rejects.toBeInstanceOf(
       NoCellError,
     );
     expect(seen).toEqual([]);
-    expect(runtime.getState()).toEqual({ type: "closed" });
+    expect(runtime.getState()).toEqual({ _tag: "closed" });
 
-    await runtime.dispatch({ type: "open" });
-    expect(runtime.getState()).toEqual({ type: "open" });
+    await runtime.dispatch({ _tag: "open" });
+    expect(runtime.getState()).toEqual({ _tag: "open" });
 
     await runtime.stop();
   });
 
   it("under restart: does not call rehydrate, and the run keeps its State", async () => {
     const { seen, onError } = collectErrors();
-    const rehydrate = vi.fn((): Latch => ({ type: "open" }));
+    const rehydrate = vi.fn((): Latch => ({ _tag: "open" }));
     const runtime = await run(latchMachine(), {
       ctx: undefined,
       onError,
       supervision: { strategy: "restart", rehydrate },
     }).ready;
 
-    await expect(runtime.dispatch({ type: "close" })).rejects.toBeInstanceOf(
+    await expect(runtime.dispatch({ _tag: "close" })).rejects.toBeInstanceOf(
       NoCellError,
     );
     expect(rehydrate).not.toHaveBeenCalled();
     expect(seen).toEqual([]);
-    expect(runtime.getState()).toEqual({ type: "closed" });
+    expect(runtime.getState()).toEqual({ _tag: "closed" });
 
     await runtime.stop();
   });
@@ -334,19 +334,19 @@ describe("supervision: a Msg with no cell is refused, not supervised (#310)", ()
     const booted = await runtime.ready;
     saved.length = 0; // drop the boot save
 
-    await expect(booted.dispatch({ type: "close" })).rejects.toBeInstanceOf(
+    await expect(booted.dispatch({ _tag: "close" })).rejects.toBeInstanceOf(
       NoCellError,
     );
     expect(saved).toEqual([]);
     expect(observed).toEqual([]);
 
-    await booted.dispatch({ type: "open" });
-    expect(saved).toEqual([{ type: "open" }]);
-    expect(observed).toEqual([{ type: "open" }]);
+    await booted.dispatch({ _tag: "open" });
+    expect(saved).toEqual([{ _tag: "open" }]);
+    expect(observed).toEqual([{ _tag: "open" }]);
 
     // The observed log is what a host journals; folding it does not throw.
-    expect(foldMsgs(latchMachine(), { type: "closed" }, observed)).toEqual({
-      type: "open",
+    expect(foldMsgs(latchMachine(), { _tag: "closed" }, observed)).toEqual({
+      _tag: "open",
     });
 
     await booted.stop();
@@ -358,7 +358,7 @@ describe("supervision: a Msg with no cell is refused, not supervised (#310)", ()
       inc: (s) => [{ n: s.n + 1 }, []],
       // A reducer stepping a child machine by hand, into a Msg it refuses.
       boom: (s) => {
-        applyCell(child, { type: "closed" }, { type: "close" });
+        applyCell(child, { _tag: "closed" }, { _tag: "close" });
         return [s, []];
       },
     };
@@ -375,12 +375,12 @@ describe("supervision: a Msg with no cell is refused, not supervised (#310)", ()
     const { seen, onError } = collectErrors();
     const runtime = await run(parent, { ctx: undefined, onError }).ready;
 
-    await expect(runtime.dispatch({ type: "boom" })).rejects.toBeInstanceOf(
+    await expect(runtime.dispatch({ _tag: "boom" })).rejects.toBeInstanceOf(
       NoCellError,
     );
     expect(seen).toHaveLength(1);
     expect(seen[0]?.context.phase).toBe("reduce");
-    await expect(runtime.dispatch({ type: "inc" })).rejects.toThrow(
+    await expect(runtime.dispatch({ _tag: "inc" })).rejects.toThrow(
       /runtime stopped/,
     );
 

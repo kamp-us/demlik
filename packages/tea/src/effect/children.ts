@@ -51,11 +51,11 @@ import type { EffectRun } from "./handle";
  */
 export const tell = <
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
-  E extends { type: string } = never,
+  E extends { _tag: string } = never,
   Err = never,
 >(
   machine: Machine<S, M, C, U, Ctx>,

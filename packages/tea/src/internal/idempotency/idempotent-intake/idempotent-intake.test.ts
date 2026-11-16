@@ -39,7 +39,7 @@ describe("receive — first sighting of a key", () => {
     });
     // Decision reified: process the new item.
     expect(cmds).toEqual([
-      { type: "intake:process", key: "evt_1", itemId: "q1", payload },
+      { _tag: "intake:process", key: "evt_1", itemId: "q1", payload },
     ]);
   });
 
@@ -80,7 +80,7 @@ describe("receive — duplicate after completion", () => {
     const [s3, cmds] = intake.receive(s2, payload, 20, "q2");
 
     expect(cmds).toEqual([
-      { type: "intake:replay", key: "evt_1", result: { chargedCents: 500 } },
+      { _tag: "intake:replay", key: "evt_1", result: { chargedCents: 500 } },
     ]);
     // No new work: queue still holds only the original item.
     expect(s3.queue).toHaveLength(1);
@@ -121,13 +121,13 @@ describe("ttl expiry — a key replayed past the window is re-processed", () => 
     // Inside the window — duplicate replays the cached result.
     const [, withinCmds] = intake.receive(s2, payload, 999, "q2");
     expect(withinCmds).toEqual([
-      { type: "intake:replay", key: "evt_1", result: { chargedCents: 500 } },
+      { _tag: "intake:replay", key: "evt_1", result: { chargedCents: 500 } },
     ]);
 
     // At/after ttlMs — the cached key has aged out; the payload is re-accepted.
     const [s4, pastCmds] = intake.receive(s2, payload, 1000, "q3");
     expect(pastCmds).toEqual([
-      { type: "intake:process", key: "evt_1", itemId: "q3", payload },
+      { _tag: "intake:process", key: "evt_1", itemId: "q3", payload },
     ]);
     expect(s4.queue).toHaveLength(2); // original + the re-accepted one
   });
@@ -196,7 +196,7 @@ describe("boot — resume after eviction", () => {
     [s] = intake.boot(s);
     const [, cmds] = intake.receive(s, payload, 2, "q2");
     expect(cmds).toEqual([
-      { type: "intake:replay", key: "a", result: { chargedCents: 100 } },
+      { _tag: "intake:replay", key: "a", result: { chargedCents: 100 } },
     ]);
   });
 });
@@ -210,18 +210,18 @@ describe("boot — resume after eviction", () => {
 
 type IntakeMsg =
   | {
-      readonly type: "receive";
+      readonly _tag: "receive";
       readonly payload: Hook;
       readonly at: number;
       readonly id: string;
     }
   | {
-      readonly type: "complete";
+      readonly _tag: "complete";
       readonly key: string;
       readonly result: Charged;
       readonly at: number;
     }
-  | { readonly type: "boot" };
+  | { readonly _tag: "boot" };
 
 describe("machine wiring (replay through testing helpers)", () => {
   const intake = createIntake<Hook, Charged>({ keyOf });
@@ -246,8 +246,8 @@ describe("machine wiring (replay through testing helpers)", () => {
   it("emits intake:process for a fresh key", () => {
     const payload: Hook = { id: "evt_1", amount: 5 };
     h.expectCmdEmitted(
-      { msgs: [{ type: "receive", payload, at: 0, id: "q1" }] },
-      { type: "intake:process", key: "evt_1", itemId: "q1", payload },
+      { msgs: [{ _tag: "receive", payload, at: 0, id: "q1" }] },
+      { _tag: "intake:process", key: "evt_1", itemId: "q1", payload },
     );
   });
 
@@ -256,19 +256,19 @@ describe("machine wiring (replay through testing helpers)", () => {
     h.expectCmdSequence(
       {
         msgs: [
-          { type: "receive", payload, at: 0, id: "q1" },
+          { _tag: "receive", payload, at: 0, id: "q1" },
           {
-            type: "complete",
+            _tag: "complete",
             key: "evt_1",
             result: { chargedCents: 500 },
             at: 10,
           },
-          { type: "receive", payload, at: 20, id: "q2" },
+          { _tag: "receive", payload, at: 20, id: "q2" },
         ],
       },
       [
-        { type: "intake:process", key: "evt_1", itemId: "q1", payload },
-        { type: "intake:replay", key: "evt_1", result: { chargedCents: 500 } },
+        { _tag: "intake:process", key: "evt_1", itemId: "q1", payload },
+        { _tag: "intake:replay", key: "evt_1", result: { chargedCents: 500 } },
       ],
     );
   });
@@ -321,7 +321,7 @@ describe("property: a never-completed key is processed at most once", () => {
             );
             state = next;
             for (const cmd of cmds) {
-              if (cmd.type === "intake:process") {
+              if (cmd._tag === "intake:process") {
                 processCount.set(cmd.key, (processCount.get(cmd.key) ?? 0) + 1);
               }
             }
@@ -375,7 +375,7 @@ describe("property: post-completion duplicates always replay the original result
             const cmd = cmds[0];
             const ok =
               cmds.length === 1 &&
-              cmd?.type === "intake:replay" &&
+              cmd?._tag === "intake:replay" &&
               cmd.result.chargedCents === chargedCents;
             if (!ok) return false;
           }
@@ -525,7 +525,7 @@ describe("durability: every reachable terminal slice round-trips through JSON", 
 // Sanity: the Cmd union is a proper `Cmd` (compile-time anchor — keeps the
 // `Cmd` import load-bearing and documents the emitted-type shape at a glance).
 const _processShape: IntakeCmd<Hook, Charged> & Cmd = {
-  type: "intake:process",
+  _tag: "intake:process",
   key: "k",
   itemId: "i",
   payload: { id: "k", amount: 0 },
@@ -562,26 +562,26 @@ void noop;
 // fully reproducible (and survives the "crash" with stable ids).
 type WiredMsg =
   | {
-      readonly type: "receive";
+      readonly _tag: "receive";
       readonly payload: Hook;
       readonly at: number;
       readonly id: string;
     }
-  | { readonly type: "claim"; readonly at: number }
+  | { readonly _tag: "claim"; readonly at: number }
   | {
-      readonly type: "work";
+      readonly _tag: "work";
       readonly key: string;
       readonly payload: Hook;
       readonly at: number;
     }
   | {
-      readonly type: "complete";
+      readonly _tag: "complete";
       readonly key: string;
       readonly result: Charged;
       readonly at: number;
     }
-  | { readonly type: "boot" }
-  | { readonly type: "nop" };
+  | { readonly _tag: "boot" }
+  | { readonly _tag: "nop" };
 
 interface WorkCmd extends Cmd<"intake:work"> {
   readonly key: string;
@@ -640,7 +640,7 @@ function wiredMachine(intake: ReturnType<typeof createIntake<Hook, Charged>>) {
           claimed.state,
           [
             {
-              type: "intake:work",
+              _tag: "intake:work",
               key: keyOf(claimed.claimed.input),
               payload: claimed.claimed.input,
             },
@@ -658,13 +658,13 @@ function wiredMachine(intake: ReturnType<typeof createIntake<Hook, Charged>>) {
 const wiredInterpret: Interpret<WiredMsg, WiredCmd, WiredCtx> = {
   // A fresh key was accepted — kick the drain (re-enters via `claim`).
   "intake:process": async (cmd) =>
-    ({ type: "claim", at: cmd.itemId.length }) as WiredMsg,
+    ({ _tag: "claim", at: cmd.itemId.length }) as WiredMsg,
   // The worker. THE side effect. Counts the run, then re-enters via
   // `complete` to cache the result. This is the only place "work" happens.
   "intake:work": async (cmd, ctx) => {
     ctx.processed.set(cmd.key, (ctx.processed.get(cmd.key) ?? 0) + 1);
     return {
-      type: "complete",
+      _tag: "complete",
       key: cmd.key,
       result: { chargedCents: cmd.payload.amount * 100 },
       at: ctx.clock.value,
@@ -686,7 +686,7 @@ async function settle(
   let guard = 0;
   while (guard++ < 50) {
     const before = [...ctx.processed.values()].reduce((a, b) => a + b, 0);
-    await runtime.dispatch({ type: "nop" });
+    await runtime.dispatch({ _tag: "nop" });
     const after = [...ctx.processed.values()].reduce((a, b) => a + b, 0);
     if (after === before && after === prev) return;
     prev = after;
@@ -716,7 +716,7 @@ describe("WIRED machine — end-to-end receive-once guarantee", () => {
             claimed.state,
             [
               {
-                type: "intake:work",
+                _tag: "intake:work",
                 key: keyOf(claimed.claimed.input),
                 payload: claimed.claimed.input,
               },
@@ -745,11 +745,11 @@ describe("WIRED machine — end-to-end receive-once guarantee", () => {
 
     const payload: Hook = { id: "evt_1", amount: 5 };
     // First receive at t=0 → enqueued, worker "starts" (pending), never done.
-    await runtime.dispatch({ type: "receive", payload, at: 0, id: "q1" });
+    await runtime.dispatch({ _tag: "receive", payload, at: 0, id: "q1" });
     await settle(runtime, ctx);
     // Duplicate FAR past ttlMs (2000 > 1000) while the original is STILL in
     // flight. A correct intake never ages a pending key out.
-    await runtime.dispatch({ type: "receive", payload, at: 2000, id: "q2" });
+    await runtime.dispatch({ _tag: "receive", payload, at: 2000, id: "q2" });
     await settle(runtime, ctx);
 
     // END STATE: exactly one queue item, the side effect attempted exactly
@@ -773,7 +773,7 @@ describe("WIRED machine — end-to-end receive-once guarantee", () => {
       interpret: wiredInterpret,
     }).ready;
     const payload: Hook = { id: "evt_1", amount: 5 };
-    await r1.dispatch({ type: "receive", payload, at: 0, id: "q1" });
+    await r1.dispatch({ _tag: "receive", payload, at: 0, id: "q1" });
     await settle(r1, ctx);
 
     // Invariant after the first life: worker ran exactly once; the item is
@@ -796,9 +796,9 @@ describe("WIRED machine — end-to-end receive-once guarantee", () => {
       store,
       interpret: wiredInterpret,
     }).ready;
-    await r2.dispatch({ type: "boot" });
+    await r2.dispatch({ _tag: "boot" });
     await settle(r2, ctx);
-    await r2.dispatch({ type: "claim", at: 100 }); // resume drain
+    await r2.dispatch({ _tag: "claim", at: 100 }); // resume drain
     await settle(r2, ctx);
 
     // END STATE: the worker count is STILL 1. Pre-fix, boot re-armed the

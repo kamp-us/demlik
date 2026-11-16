@@ -46,7 +46,7 @@ function driveOrder(failure?: "out_of_stock" | "declined" | "no_carrier") {
   return drive(
     order,
     newOrder,
-    { type: "place", sku: "TEA-001", cents: 4200 },
+    { _tag: "place", sku: "TEA-001", cents: 4200 },
     {
       reserve_stock: async (_cmd, { ok, err }) =>
         failure === "out_of_stock"

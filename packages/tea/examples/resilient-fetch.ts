@@ -75,10 +75,10 @@ interface State {
 
 // === Msgs: note `at` rides on every time-driven Msg ===
 type Msg =
-  | { type: "fetch"; url: string; at: number }
-  | { type: "fetch_ok"; url: string; body: string; at: number }
-  | { type: "fetch_err"; url: string; error: string; at: number }
-  | { type: "retry_due"; atMs: number }; // the retry timer fired
+  | { _tag: "fetch"; url: string; at: number }
+  | { _tag: "fetch_ok"; url: string; body: string; at: number }
+  | { _tag: "fetch_err"; url: string; error: string; at: number }
+  | { _tag: "retry_due"; atMs: number }; // the retry timer fired
 
 // === Cmd: the one effect, as data ===
 type DoFetch = Cmd<"do_fetch"> & { url: string };
@@ -151,7 +151,7 @@ function attempt(
   // 4) All gates passed — emit the effect as data.
   return [
     { ...state, circuit, bucket, phase: "fetching", url, error: null },
-    [{ type: "do_fetch", url }],
+    [{ _tag: "do_fetch", url }],
   ];
 }
 
@@ -229,12 +229,12 @@ export const resilientFetch = defineMachine({
   // phase changes, the engine stops it automatically — no manual clearTimeout.
   subs: [
     {
-      type: "timer",
+      _tag: "timer",
       deps: (s: State) =>
         s.phase === "waiting_retry"
           ? {
               ms: s.retryInMs,
-              msg: { type: "retry_due", atMs: s.retryAtMs } as const,
+              msg: { _tag: "retry_due", atMs: s.retryAtMs } as const,
             }
           : null,
     },
@@ -247,9 +247,9 @@ export const resilientFetch = defineMachine({
 export const resilientFetchInterpret: Interpret<Msg, DoFetch, Ctx> = {
   do_fetch: tryInterpret<DoFetch, string, Msg, Ctx>(
     (cmd, ctx) => ctx.http(cmd.url),
-    (body, cmd) => ({ type: "fetch_ok", url: cmd.url, body, at: Date.now() }),
+    (body, cmd) => ({ _tag: "fetch_ok", url: cmd.url, body, at: Date.now() }),
     (err, cmd) => ({
-      type: "fetch_err",
+      _tag: "fetch_err",
       url: cmd.url,
       error: String(err),
       at: Date.now(),

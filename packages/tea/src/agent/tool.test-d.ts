@@ -86,7 +86,7 @@ tool(
 // The settled `_err` arm is exhaustive over declared + `thrown` + the kernel's
 // `malformed_result`; dropping one leaves `absurd` a non-`never`.
 type SearchSettled = Settled<typeof search>;
-function reasonOf(msg: Extract<SearchSettled, { type: "search_err" }>): string {
+function reasonOf(msg: Extract<SearchSettled, { _tag: "search_err" }>): string {
   const error = msg.error;
   switch (error._tag) {
     case "not_found":
@@ -101,7 +101,7 @@ function reasonOf(msg: Extract<SearchSettled, { type: "search_err" }>): string {
 void reasonOf;
 
 function missingThrown(
-  msg: Extract<SearchSettled, { type: "search_err" }>,
+  msg: Extract<SearchSettled, { _tag: "search_err" }>,
 ): string {
   const error = msg.error;
   switch (error._tag) {
@@ -117,7 +117,7 @@ function missingThrown(
 void missingThrown;
 
 // The `_ok` arm carries the parsed `ok` value and the Cmd that produced it.
-function snippetOf(msg: Extract<SearchSettled, { type: "search_ok" }>): string {
+function snippetOf(msg: Extract<SearchSettled, { _tag: "search_ok" }>): string {
   const q: string = msg.cmd.args.q;
   const callId: string = msg.cmd.callId;
   void q;

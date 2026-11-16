@@ -27,19 +27,19 @@ import { useMachine } from "./index";
 type Phase = "idle" | "reading" | "thinking" | "writing" | "done";
 type State = { readonly phase: Phase };
 type Msg =
-  | { readonly type: "go" }
-  | { readonly type: "read" }
-  | { readonly type: "thought" }
-  | { readonly type: "wrote" };
+  | { readonly _tag: "go" }
+  | { readonly _tag: "read" }
+  | { readonly _tag: "thought" }
+  | { readonly _tag: "wrote" };
 type Step =
-  | { readonly type: "read" }
-  | { readonly type: "think" }
-  | { readonly type: "write" };
+  | { readonly _tag: "read" }
+  | { readonly _tag: "think" }
+  | { readonly _tag: "write" };
 
 const update: Reducer<State, Msg, Step> = {
-  go: () => [{ phase: "reading" }, [{ type: "read" }]],
-  read: () => [{ phase: "thinking" }, [{ type: "think" }]],
-  thought: () => [{ phase: "writing" }, [{ type: "write" }]],
+  go: () => [{ phase: "reading" }, [{ _tag: "read" }]],
+  read: () => [{ phase: "thinking" }, [{ _tag: "think" }]],
+  thought: () => [{ phase: "writing" }, [{ _tag: "write" }]],
   wrote: () => [{ phase: "done" }, []],
 };
 
@@ -66,7 +66,7 @@ const startedByInit = defineMachine({
   init: (loaded) =>
     loaded !== null
       ? [loaded, []]
-      : [{ phase: "reading" }, [{ type: "read" as const }]],
+      : [{ phase: "reading" }, [{ _tag: "read" as const }]],
   update,
 });
 
@@ -83,7 +83,7 @@ const resumedByInit = defineMachine({
   },
   init: (loaded) =>
     loaded?.phase === "reading"
-      ? [loaded, [{ type: "read" as const }]]
+      ? [loaded, [{ _tag: "read" as const }]]
       : [loaded ?? { phase: "idle" }, []],
   update,
 });
@@ -93,20 +93,20 @@ type PhaseRun = EngineRun<State, Msg, Step, Sub<never>, undefined>;
 
 /** Handlers the test releases one at a time. */
 function heldHandlers() {
-  const releases = new Map<Step["type"], () => void>();
+  const releases = new Map<Step["_tag"], () => void>();
   const hold =
-    <T extends Msg>(cmd: Step["type"], then: T) =>
+    <T extends Msg>(cmd: Step["_tag"], then: T) =>
     () =>
       new Promise<T>((resolve) => {
         releases.set(cmd, () => resolve(then));
       });
   return {
     interpret: {
-      read: hold("read", { type: "read" }),
-      think: hold("think", { type: "thought" }),
-      write: hold("write", { type: "wrote" }),
+      read: hold("read", { _tag: "read" }),
+      think: hold("think", { _tag: "thought" }),
+      write: hold("write", { _tag: "wrote" }),
     },
-    release(cmd: Step["type"]) {
+    release(cmd: Step["_tag"]) {
       const release = releases.get(cmd);
       if (release === undefined) throw new Error(`${cmd} is not held`);
       release();
@@ -168,7 +168,7 @@ describe.each(Object.keys(stores))("useMachine %s", (kind) => {
       dispatch = send;
       return <p>{state.phase}</p>;
     }
-    return { Page, handlers, go: () => dispatch?.({ type: "go" }) };
+    return { Page, handlers, go: () => dispatch?.({ _tag: "go" }) };
   }
 
   it("shows each phase while its Cmd is held, when a Msg starts them", async () => {

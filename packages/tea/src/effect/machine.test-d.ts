@@ -28,7 +28,7 @@ expectTypeOf(desk).toEqualTypeOf<
 >();
 expectTypeOf(desk.msg.Type).toEqualTypeOf<typeof DeskMsg.Type>();
 const Count = Schema.Struct({ count: Schema.Number });
-const Incremented = Schema.Struct({ type: Schema.Literal("UserIncremented") });
+const Incremented = Schema.Struct({ _tag: Schema.Literal("UserIncremented") });
 const plainSpec = {
   model: Count,
   msg: Incremented,
@@ -55,7 +55,7 @@ expectTypeOf(plain).toEqualTypeOf<
 >();
 expectTypeOf(plain.model.Type).toEqualTypeOf<{ readonly count: number }>();
 expectTypeOf(plain.msg.Type).toEqualTypeOf<{
-  readonly type: "UserIncremented";
+  readonly _tag: "UserIncremented";
 }>();
 // @ts-expect-error the returned model schema cannot be reassigned
 plain.model = Count;
@@ -63,7 +63,7 @@ plain.model = Count;
 plain.msg = Incremented;
 void run(plain, {});
 void PromiseEntry.run(plain, {});
-const plainMessages = [{ type: "UserIncremented" }] as const;
+const plainMessages = [{ _tag: "UserIncremented" }] as const;
 void Core.replay(plain, { msgs: plainMessages, ctx: {} });
 
 const { model: _model, ...withoutModel } = plainSpec;
@@ -152,7 +152,7 @@ const fetchFile = Cmd.make("fetch_file", {
   ok: Schema.String,
   err: ["offline"],
 });
-const Go = Schema.Struct({ type: Schema.Literal("Go") });
+const Go = Schema.Struct({ _tag: Schema.Literal("Go") });
 const answers = {
   model: Count,
   cmds: [fetchFile] as const,
@@ -168,7 +168,7 @@ const sameName = Machine.make({
   ...answers,
   msg: Schema.Union([
     Go,
-    Schema.Struct({ type: Schema.Literal("fetch_file") }),
+    Schema.Struct({ _tag: Schema.Literal("fetch_file") }),
   ]),
   update: {
     Go: (state) => [state, []],
@@ -177,7 +177,7 @@ const sameName = Machine.make({
   },
 });
 expectTypeOf(sameName.msg.Type).toEqualTypeOf<
-  { readonly type: "Go" } | { readonly type: "fetch_file" }
+  { readonly _tag: "Go" } | { readonly _tag: "fetch_file" }
 >();
 Machine.make({
   ...answers,
@@ -185,7 +185,7 @@ Machine.make({
   msg: Schema.Union([
     Go,
     Schema.Struct({
-      type: Schema.Literal("fetch_file_ok"),
+      _tag: Schema.Literal("fetch_file_ok"),
       who: Schema.String,
     }),
   ]),
@@ -196,7 +196,7 @@ Machine.make({
   // @ts-expect-error the `_err` name is a settled Msg name too
   msg: Schema.Union([
     Go,
-    Schema.Struct({ type: Schema.Literal("fetch_file_err") }),
+    Schema.Struct({ _tag: Schema.Literal("fetch_file_err") }),
   ]),
   update: { Go: (state) => [state, []], ...settledCells },
 });
@@ -204,14 +204,14 @@ Machine.make({
   ...answers,
   cmds: [],
   // @ts-expect-error a lone open string tag lets every cell name compile
-  msg: Schema.Struct({ type: Schema.String }),
+  msg: Schema.Struct({ _tag: Schema.String }),
   update: { Go: (state) => [state, []], Anything: (state) => [state, []] },
 });
 Machine.make({
   ...answers,
   cmds: [],
   // @ts-expect-error one open string tag among literal ones does the same
-  msg: Schema.Union([Go, Schema.Struct({ type: Schema.String })]),
+  msg: Schema.Union([Go, Schema.Struct({ _tag: Schema.String })]),
   update: { Go: (state) => [state, []] },
 });
 Machine.make({
@@ -219,7 +219,7 @@ Machine.make({
   cmds: [],
   // @ts-expect-error a template literal tag is open too
   msg: Schema.Struct({
-    type: Schema.TemplateLiteral([Schema.String, "_ok"]),
+    _tag: Schema.TemplateLiteral([Schema.String, "_ok"]),
   }),
   update: { Anything_ok: (state) => [state, []] },
 });
@@ -235,14 +235,14 @@ const contextual = Machine.make({
   },
   init: (loaded, ctx) => [loaded ?? { count: ctx.start }, []],
   update: { UserIncremented: (state) => [{ count: state.count + 1 }, []] },
-  subs: [{ type: "ticker", deps: (state) => ({ every: state.count + 1 }) }],
+  subs: [{ _tag: "ticker", deps: (state) => ({ every: state.count + 1 }) }],
 });
 const options = {
   ctx: { start: 1 },
   subscribe: {
     ticker: (sub: Tick) =>
       Stream.fromEffect(
-        Effect.succeed({ type: "UserIncremented" as const }).pipe(
+        Effect.succeed({ _tag: "UserIncremented" as const }).pipe(
           Effect.delay(sub.deps.every),
         ),
       ),
@@ -264,7 +264,7 @@ Machine.make({
   ...plainSpec,
   types: { sub: {} as Tick },
   // @ts-expect-error the declared sub still determines its dependencies
-  subs: [{ type: "ticker", deps: () => ({ every: "wrong" }) }],
+  subs: [{ _tag: "ticker", deps: () => ({ every: "wrong" }) }],
 });
 
 // @ts-expect-error the neutral entry still exports Machine as a type only

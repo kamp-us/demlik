@@ -79,7 +79,7 @@ interface DeskState {
   readonly log: readonly string[];
 }
 
-type DeskMsg = { readonly type: "open"; readonly id: string };
+type DeskMsg = { readonly _tag: "open"; readonly id: string };
 
 type DeskCmds = readonly [
   typeof readTicket,
@@ -223,7 +223,7 @@ const openAll = (machine: typeof desk) =>
       const handle = yield* run(machine, { interpret });
       const runtime = yield* handle.ready;
       for (const id of ["t1", "t2", "t3", "t4"]) {
-        yield* runtime.dispatch({ type: "open", id });
+        yield* runtime.dispatch({ _tag: "open", id });
       }
       yield* runtime.idle();
       return runtime.getState().log;
@@ -264,12 +264,12 @@ describe("a machine whose Cmds are defined from plain Effect schemas (runtime)",
   it("names the rejected field in `malformed_result`, as the hand-wrapped twin does", () => {
     const settle = (machine: typeof desk) =>
       Effect.runPromise(
-        drive(machine, { log: [] }, { type: "open", id: "t3" }, interpret, {
+        drive(machine, { log: [] }, { _tag: "open", id: "t3" }, interpret, {
           clock: () => 0,
         }).pipe(backend),
       ).then((result) =>
         result.trace.flatMap((entry) =>
-          entry.kind === "msg" && entry.msg.type === "ticket_thread_err"
+          entry.kind === "msg" && entry.msg._tag === "ticket_thread_err"
             ? [entry.msg.error]
             : [],
         ),
@@ -326,7 +326,7 @@ describe("the def is the hand-wrapped twin's def (types)", () => {
       .toEqualTypeOf<{ readonly id: string; readonly limit: number }>();
     type RateOk = Extract<
       Settled<typeof rateTicket>,
-      { type: "ticket_rate_ok" }
+      { _tag: "ticket_rate_ok" }
     >;
     expectTypeOf<RateOk["value"]>().toEqualTypeOf<"low" | "mid" | "high">();
   });
@@ -398,7 +398,7 @@ describe("a schema whose two sides differ does not compile", () => {
     const counter = defineMachine({
       types: {
         model: {} as { readonly seen: readonly string[] },
-        msg: {} as { readonly type: "go"; readonly id: typeof Id.Type },
+        msg: {} as { readonly _tag: "go"; readonly id: typeof Id.Type },
       },
       cmds: [mintId],
       init: () => [{ seen: [] }, []],
@@ -416,7 +416,7 @@ describe("a schema whose two sides differ does not compile", () => {
         drive(
           counter,
           { seen: [] },
-          { type: "go", id: Id.make("t1") },
+          { _tag: "go", id: Id.make("t1") },
           { mint_id: () => Effect.succeed({ count: count as number }) },
         ),
       ).then((result) => result.state.seen);
@@ -436,7 +436,7 @@ describe("a schema whose two sides differ does not compile", () => {
     const counter = defineMachine({
       types: {
         model: {} as { readonly seen: readonly string[] },
-        msg: {} as { readonly type: "go" },
+        msg: {} as { readonly _tag: "go" },
       },
       cmds: [count],
       init: () => [{ seen: [] }, []],
@@ -450,7 +450,7 @@ describe("a schema whose two sides differ does not compile", () => {
       drive(
         counter,
         { seen: [] },
-        { type: "go" },
+        { _tag: "go" },
         { count: () => Effect.succeed(3) },
       ),
     );
@@ -498,7 +498,7 @@ describe("a schema whose validation needs a Promise is refused when the Cmd sett
     const machine = defineMachine({
       types: {
         model: {} as { readonly title: string | null },
-        msg: {} as { readonly type: "go" },
+        msg: {} as { readonly _tag: "go" },
       },
       cmds: [def],
       init: () => [{ title: null }, []],
@@ -512,7 +512,7 @@ describe("a schema whose validation needs a Promise is refused when the Cmd sett
       drive(
         machine,
         { title: null },
-        { type: "go" },
+        { _tag: "go" },
         { slow_read: () => Effect.succeed({ title: "Login fails" }) },
       ),
     );

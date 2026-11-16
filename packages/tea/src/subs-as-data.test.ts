@@ -23,10 +23,10 @@ import { run } from "./promise";
 
 type State = { readonly runId: string | null; readonly phase: "idle" | "live" };
 type Msg =
-  | { readonly type: "start"; readonly runId: string }
-  | { readonly type: "rekey"; readonly runId: string }
-  | { readonly type: "stop" }
-  | { readonly type: "noop" };
+  | { readonly _tag: "start"; readonly runId: string }
+  | { readonly _tag: "rekey"; readonly runId: string }
+  | { readonly _tag: "stop" }
+  | { readonly _tag: "noop" };
 type RunSub = Sub<"run", { readonly runId: string | null }>;
 
 const idle: State = { runId: null, phase: "idle" };
@@ -44,7 +44,7 @@ const machine = defineMachine({
   update,
   subs: [
     {
-      type: "run",
+      _tag: "run",
       deps: (s) => (s.phase === "live" ? { runId: s.runId } : null),
     },
   ],
@@ -69,10 +69,10 @@ describe("subs as data — the reconcile contract", () => {
     const rt = await run(machine, { subscribe: recording(log) }).ready;
     expect(log).toEqual([]);
 
-    await rt.dispatch({ type: "start", runId: "r1" });
+    await rt.dispatch({ _tag: "start", runId: "r1" });
     expect(log).toEqual(["start:r1"]);
 
-    await rt.dispatch({ type: "stop" });
+    await rt.dispatch({ _tag: "stop" });
     expect(log).toEqual(["start:r1", "stop:r1"]);
   });
 
@@ -80,9 +80,9 @@ describe("subs as data — the reconcile contract", () => {
     const log: string[] = [];
     const rt = await run(machine, { subscribe: recording(log) }).ready;
 
-    await rt.dispatch({ type: "start", runId: "r1" });
-    await rt.dispatch({ type: "noop" });
-    await rt.dispatch({ type: "rekey", runId: "r1" });
+    await rt.dispatch({ _tag: "start", runId: "r1" });
+    await rt.dispatch({ _tag: "noop" });
+    await rt.dispatch({ _tag: "rekey", runId: "r1" });
 
     expect(log).toEqual(["start:r1"]);
   });
@@ -91,8 +91,8 @@ describe("subs as data — the reconcile contract", () => {
     const log: string[] = [];
     const rt = await run(machine, { subscribe: recording(log) }).ready;
 
-    await rt.dispatch({ type: "start", runId: "r1" });
-    await rt.dispatch({ type: "rekey", runId: "r2" });
+    await rt.dispatch({ _tag: "start", runId: "r1" });
+    await rt.dispatch({ _tag: "rekey", runId: "r2" });
 
     expect(log).toEqual(["start:r1", "stop:r1", "start:r2"]);
   });
@@ -101,7 +101,7 @@ describe("subs as data — the reconcile contract", () => {
     const log: string[] = [];
     const rt = await run(machine, { subscribe: recording(log) }).ready;
 
-    await rt.dispatch({ type: "start", runId: "r1" });
+    await rt.dispatch({ _tag: "start", runId: "r1" });
     await rt.stop();
     expect(log).toEqual(["start:r1", "stop:r1"]);
 
@@ -120,11 +120,11 @@ describe("subs as data — the reconcile contract", () => {
       },
     }).ready;
 
-    await rt.dispatch({ type: "start", runId: "r1" });
+    await rt.dispatch({ _tag: "start", runId: "r1" });
     expect(seen).toEqual([
       {
         id: subIdOf("run", { runId: "r1" }),
-        type: "run",
+        _tag: "run",
         deps: { runId: "r1" },
       },
     ]);
@@ -138,7 +138,7 @@ describe("subs as data — the reconcile contract", () => {
       types: { model: {} as State, msg: {} as Msg, sub: {} as Beat },
       init: () => [idle, []],
       update,
-      subs: [{ type: "beat", deps: () => ({ name: "main" }) }],
+      subs: [{ _tag: "beat", deps: () => ({ name: "main" }) }],
     });
     const rt = await run(beating, {
       subscribe: {
@@ -151,8 +151,8 @@ describe("subs as data — the reconcile contract", () => {
       },
     }).ready;
 
-    await rt.dispatch({ type: "start", runId: "r1" });
-    await rt.dispatch({ type: "stop" });
+    await rt.dispatch({ _tag: "start", runId: "r1" });
+    await rt.dispatch({ _tag: "stop" });
     expect(log).toEqual(["start:main"]);
 
     await rt.stop();
@@ -162,8 +162,8 @@ describe("subs as data — the reconcile contract", () => {
   it("`undefined` deps mean off, exactly like null", async () => {
     type OptState = { readonly runId?: string };
     type OptMsg =
-      | { readonly type: "set"; readonly runId: string }
-      | { readonly type: "clear" };
+      | { readonly _tag: "set"; readonly runId: string }
+      | { readonly _tag: "clear" };
     type OptSub = Sub<"opt", string>;
     const log: string[] = [];
     const opt = defineMachine({
@@ -173,7 +173,7 @@ describe("subs as data — the reconcile contract", () => {
         set: (_s, m) => [{ runId: m.runId }, []],
         clear: () => [{}, []],
       } satisfies Reducer<OptState, OptMsg, never>,
-      subs: [{ type: "opt", deps: (s) => s.runId }],
+      subs: [{ _tag: "opt", deps: (s) => s.runId }],
     });
     const rt = await run(opt, {
       subscribe: {
@@ -187,8 +187,8 @@ describe("subs as data — the reconcile contract", () => {
     }).ready;
     expect(log).toEqual([]);
 
-    await rt.dispatch({ type: "set", runId: "r1" });
-    await rt.dispatch({ type: "clear" });
+    await rt.dispatch({ _tag: "set", runId: "r1" });
+    await rt.dispatch({ _tag: "clear" });
     expect(log).toEqual(["start:r1", "stop:r1"]);
   });
 });
@@ -200,7 +200,7 @@ describe("subs as data — a runner's dispatch", () => {
       subscribe: {
         run: (sub, _ctx, dispatch) => {
           if (sub.deps.runId === "r1") {
-            dispatch({ type: "rekey", runId: "r2" });
+            dispatch({ _tag: "rekey", runId: "r2" });
             order.push("runner returned");
           }
           return () => {};
@@ -208,10 +208,10 @@ describe("subs as data — a runner's dispatch", () => {
       },
     }).ready;
     rt.observe((msg) => {
-      if (msg.type === "rekey") order.push("rekey applied");
+      if (msg._tag === "rekey") order.push("rekey applied");
     });
 
-    await rt.dispatch({ type: "start", runId: "r1" });
+    await rt.dispatch({ _tag: "start", runId: "r1" });
     await rt.idle();
     expect(order).toEqual(["runner returned", "rekey applied"]);
     expect(rt.getState().runId).toBe("r2");
@@ -223,14 +223,14 @@ describe("subs as data — a runner's dispatch", () => {
     const rt = await run(machine, {
       subscribe: {
         run: (_sub, _ctx, dispatch) => {
-          fire = () => dispatch({ type: "noop" });
+          fire = () => dispatch({ _tag: "noop" });
           return () => {};
         },
       },
       onError: (error, context) =>
         reports.push({ error, phase: context.phase }),
     }).ready;
-    await rt.dispatch({ type: "start", runId: "r1" });
+    await rt.dispatch({ _tag: "start", runId: "r1" });
 
     const stopping = rt.stop();
     fire?.();
@@ -250,9 +250,9 @@ describe("subs as data — failures are isolated and surfaced", () => {
       init: () => [idle, []],
       update,
       subs: [
-        { type: "other", deps },
+        { _tag: "other", deps },
         {
-          type: "run",
+          _tag: "run",
           deps: (s) => (s.phase === "live" ? { runId: s.runId } : null),
         },
       ],
@@ -273,7 +273,7 @@ describe("subs as data — failures are isolated and surfaced", () => {
       },
     }).ready;
 
-    await expect(rt.dispatch({ type: "start", runId: "r1" })).rejects.toThrow(
+    await expect(rt.dispatch({ _tag: "start", runId: "r1" })).rejects.toThrow(
       "runner failed",
     );
     // The sibling started in the same pass; the failure then stopped the run
@@ -292,7 +292,7 @@ describe("subs as data — failures are isolated and surfaced", () => {
       { subscribe: { ...recording(log), other: () => () => {} } },
     ).ready;
 
-    await expect(rt.dispatch({ type: "start", runId: "r1" })).rejects.toThrow(
+    await expect(rt.dispatch({ _tag: "start", runId: "r1" })).rejects.toThrow(
       "deps failed",
     );
     expect(log).toEqual(["start:r1"]);
@@ -313,8 +313,8 @@ describe("subs as data — failures are isolated and surfaced", () => {
       onError,
     }).ready;
 
-    await rt.dispatch({ type: "start", runId: "r1" });
-    await rt.dispatch({ type: "rekey", runId: "r2" });
+    await rt.dispatch({ _tag: "start", runId: "r1" });
+    await rt.dispatch({ _tag: "rekey", runId: "r2" });
 
     expect(onError).toHaveBeenCalledWith(expect.any(Error), {
       phase: "sub-cleanup",
@@ -326,14 +326,14 @@ describe("subs as data — failures are isolated and surfaced", () => {
     const rt = await run(machine, {
       subscribe: {} as Subscribe<Msg, RunSub, unknown>,
     }).ready;
-    await expect(rt.dispatch({ type: "start", runId: "r1" })).rejects.toThrow(
+    await expect(rt.dispatch({ _tag: "start", runId: "r1" })).rejects.toThrow(
       /no subscribe runner for Sub type "run"/,
     );
   });
 
   it("a non-plain `deps` value is refused rather than collapsed onto one id", async () => {
     type ClockState = { readonly startedAt: Date | null };
-    type ClockMsg = { readonly type: "restart"; readonly startedAt: Date };
+    type ClockMsg = { readonly _tag: "restart"; readonly startedAt: Date };
     type ClockSub = Sub<"clock", Date>;
     const clock = defineMachine({
       types: {
@@ -343,7 +343,7 @@ describe("subs as data — failures are isolated and surfaced", () => {
       },
       init: () => [{ startedAt: null }, []],
       update: { restart: (_s, m) => [{ startedAt: m.startedAt }, []] },
-      subs: [{ type: "clock", deps: (s) => s.startedAt }],
+      subs: [{ _tag: "clock", deps: (s) => s.startedAt }],
     });
     const log: string[] = [];
     const rt = await run(clock, {
@@ -356,7 +356,7 @@ describe("subs as data — failures are isolated and surfaced", () => {
     }).ready;
 
     await expect(
-      rt.dispatch({ type: "restart", startedAt: new Date(1_000) }),
+      rt.dispatch({ _tag: "restart", startedAt: new Date(1_000) }),
     ).rejects.toThrow(/non-plain object/);
     expect(log).toEqual([]);
   });
@@ -367,7 +367,7 @@ describe("subs as data — failures are isolated and surfaced", () => {
 // ───────────────────────────────────────────────────────────────────────────
 
 type TState = { readonly waiting: boolean; readonly fired: number };
-type TMsg = { readonly type: "wait" } | { readonly type: "fire" };
+type TMsg = { readonly _tag: "wait" } | { readonly _tag: "fire" };
 
 const timed = defineMachine({
   types: { model: {} as TState, msg: {} as TMsg },
@@ -378,9 +378,9 @@ const timed = defineMachine({
   },
   subs: [
     {
-      type: "timer",
+      _tag: "timer",
       deps: (s) =>
-        s.waiting ? { ms: 1_000, msg: { type: "fire" } as const } : null,
+        s.waiting ? { ms: 1_000, msg: { _tag: "fire" } as const } : null,
     },
   ],
 });
@@ -395,7 +395,7 @@ describe("the built-in `timer`", () => {
 
   it("dispatches `msg` after `ms` with no user runner", async () => {
     const rt = await run(timed, {}).ready;
-    await rt.dispatch({ type: "wait" });
+    await rt.dispatch({ _tag: "wait" });
 
     await vi.advanceTimersByTimeAsync(999);
     expect(rt.getState().fired).toBe(0);
@@ -408,7 +408,7 @@ describe("the built-in `timer`", () => {
 
   it("is cleared when its Sub goes off before it fires", async () => {
     const rt = await run(timed, {}).ready;
-    await rt.dispatch({ type: "wait" });
+    await rt.dispatch({ _tag: "wait" });
     await rt.stop();
 
     await vi.advanceTimersByTimeAsync(5_000);
@@ -451,7 +451,7 @@ describe("a user `subscribe.timer` replaces the built-in", () => {
     try {
       const clock = fakeClock();
       const rt = await run(timed, { subscribe: { timer: clock.timer } }).ready;
-      await rt.dispatch({ type: "wait" });
+      await rt.dispatch({ _tag: "wait" });
 
       expect(vi.getTimerCount()).toBe(0);
       expect(clock.pending).toHaveLength(1);
@@ -477,13 +477,13 @@ describe("replay — the desired Subs, without running a runner", () => {
     expect(idle.subs).toEqual([]);
 
     const live = replay(machine, {
-      msgs: [{ type: "start", runId: "r1" }],
+      msgs: [{ _tag: "start", runId: "r1" }],
       ctx: undefined,
     });
     expect(live.subs).toEqual([
       {
         id: subIdOf("run", { runId: "r1" }),
-        type: "run",
+        _tag: "run",
         deps: { runId: "r1" },
       },
     ]);

@@ -11,16 +11,16 @@ import { arbMsgSequence } from "./sequence";
 const TICKS_TO_DEEP = 20;
 
 type State =
-  | { readonly type: "climbing"; readonly ticks: number }
-  | { readonly type: "deep" };
+  | { readonly _tag: "climbing"; readonly ticks: number }
+  | { readonly _tag: "deep" };
 
-type Msg = { type: "tick" } | { type: "wait" };
+type Msg = { _tag: "tick" } | { _tag: "wait" };
 
 const update: Reducer<State, Msg, never> = {
   tick: (s) => {
-    if (s.type === "deep") return [s, []];
+    if (s._tag === "deep") return [s, []];
     const ticks = s.ticks + 1;
-    return [ticks === TICKS_TO_DEEP ? { type: "deep" } : { ...s, ticks }, []];
+    return [ticks === TICKS_TO_DEEP ? { _tag: "deep" } : { ...s, ticks }, []];
   },
   wait: (s) => [s, []],
 };
@@ -31,13 +31,13 @@ const machine = defineMachine({
     msg: {} as Msg,
     ctx: {} as Record<string, never>,
   },
-  init: (loaded) => [loaded ?? { type: "climbing", ticks: 0 }, []],
+  init: (loaded) => [loaded ?? { _tag: "climbing", ticks: 0 }, []],
   update,
 });
 
 const msgArb = arbMsg<Msg>({
-  tick: fc.constant({ type: "tick" as const }),
-  wait: fc.constant({ type: "wait" as const }),
+  tick: fc.constant({ _tag: "tick" as const }),
+  wait: fc.constant({ _tag: "wait" as const }),
 });
 
 const SEEDS = [1, 42, 20261101];
@@ -47,7 +47,7 @@ const draw = <T>(arb: fc.Arbitrary<T>, seed: number): readonly T[] =>
   fc.sample(arb, { seed, numRuns: RUNS });
 
 const reachesDeep = (msgs: readonly Msg[]): boolean =>
-  foldEvents(machine, {}, null, msgs).finalState.type === "deep";
+  foldEvents(machine, {}, null, msgs).finalState._tag === "deep";
 
 const longest = (lists: readonly (readonly Msg[])[]): number =>
   Math.max(...lists.map((list) => list.length));
@@ -73,7 +73,7 @@ describe("arbMsgSequence size", () => {
   });
 
   it("works with minLength and prefix, and prefix stays out of the length", () => {
-    const prefix: readonly Msg[] = [{ type: "wait" }, { type: "tick" }];
+    const prefix: readonly Msg[] = [{ _tag: "wait" }, { _tag: "tick" }];
     const lists = draw(
       arbMsgSequence(msgArb, {
         minLength: 5,

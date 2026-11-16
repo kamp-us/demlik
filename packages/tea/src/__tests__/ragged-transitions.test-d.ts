@@ -24,15 +24,15 @@ import {
 import { run } from "../promise";
 
 type State =
-  | { readonly type: "idle" }
-  | { readonly type: "brewing"; readonly ms: number }
-  | { readonly type: "done"; readonly cups: number };
+  | { readonly _tag: "idle" }
+  | { readonly _tag: "brewing"; readonly ms: number }
+  | { readonly _tag: "done"; readonly cups: number };
 
 type Msg =
-  | { readonly type: "insert_coin" }
-  | { readonly type: "brew" }
-  | { readonly type: "tick" }
-  | { readonly type: "collect" };
+  | { readonly _tag: "insert_coin" }
+  | { readonly _tag: "brew" }
+  | { readonly _tag: "tick" }
+  | { readonly _tag: "collect" };
 
 // ── 1. the ragged table: only the cells this machine needs ──────────────────
 //
@@ -42,28 +42,28 @@ type Msg =
 
 const ragged: Transitions<State, Msg, never> = {
   idle: {
-    insert_coin: () => [{ type: "brewing", ms: 0 }, []],
+    insert_coin: () => [{ _tag: "brewing", ms: 0 }, []],
   },
   brewing: {
     tick: (s) =>
       s.ms >= 900
-        ? [{ type: "done", cups: 1 }, []]
-        : [{ type: "brewing", ms: s.ms + 100 }, []],
+        ? [{ _tag: "done", cups: 1 }, []]
+        : [{ _tag: "brewing", ms: s.ms + 100 }, []],
   },
   done: {
-    collect: () => [{ type: "idle" }, []],
+    collect: () => [{ _tag: "idle" }, []],
   },
 };
 
 defineMachine<State, Msg, never, never, unknown>({
-  init: (loaded) => [loaded ?? { type: "idle" }, []],
+  init: (loaded) => [loaded ?? { _tag: "idle" }, []],
   update: ragged,
 });
 
 // ── 2. an EMPTY row is how a state that accepts nothing is declared ─────────
 
 const terminal: Transitions<State, Msg, never> = {
-  idle: { insert_coin: () => [{ type: "brewing", ms: 0 }, []] },
+  idle: { insert_coin: () => [{ _tag: "brewing", ms: 0 }, []] },
   brewing: { tick: (s) => [s, []] },
   // Reachable, and it takes no message at all.
   done: {},
@@ -77,7 +77,7 @@ void terminal;
 
 // @ts-expect-error — `done` has no row; a phase must say what it does.
 const rowless: Transitions<State, Msg, never> = {
-  idle: { insert_coin: () => [{ type: "brewing", ms: 0 }, []] },
+  idle: { insert_coin: () => [{ _tag: "brewing", ms: 0 }, []] },
   brewing: {},
 };
 void rowless;
@@ -87,7 +87,7 @@ void rowless;
 const typo: Transitions<State, Msg, never> = {
   // @ts-expect-error — `insert_token` is not a Msg type; optional cells do not
   // make the key set open.
-  idle: { insert_token: () => [{ type: "idle" as const }, []] },
+  idle: { insert_token: () => [{ _tag: "idle" as const }, []] },
   brewing: {},
   done: {},
 };
@@ -109,11 +109,11 @@ type GrindSettled = Settled<typeof grind>;
 
 const withCmds: Transitions<State, Msg | GrindSettled, GrindCmd> = {
   idle: {
-    insert_coin: () => [{ type: "brewing", ms: 0 }, [grind({ beans: 12 })]],
+    insert_coin: () => [{ _tag: "brewing", ms: 0 }, [grind({ beans: 12 })]],
   },
   brewing: {
-    grind_ok: (_s, msg) => [{ type: "done", cups: msg.value.grams }, []],
-    grind_err: () => [{ type: "idle" }, []],
+    grind_ok: (_s, msg) => [{ _tag: "done", cups: msg.value.grams }, []],
+    grind_err: () => [{ _tag: "idle" }, []],
   },
   done: {},
 };
@@ -121,7 +121,7 @@ const withCmds: Transitions<State, Msg | GrindSettled, GrindCmd> = {
 const grinder = defineMachine({
   types: { model: {} as State, msg: {} as Msg },
   cmds: [grind],
-  init: (loaded: State | null) => [loaded ?? { type: "idle" as const }, []],
+  init: (loaded: State | null) => [loaded ?? { _tag: "idle" as const }, []],
   update: withCmds,
 });
 void run(grinder, {
@@ -134,7 +134,7 @@ void run(grinder, {
 
 const full: ExhaustiveTransitions<State, Msg, never> = {
   idle: {
-    insert_coin: () => [{ type: "brewing", ms: 0 }, []],
+    insert_coin: () => [{ _tag: "brewing", ms: 0 }, []],
     brew: (s) => [s, []],
     tick: (s) => [s, []],
     collect: (s) => [s, []],
@@ -149,20 +149,20 @@ const full: ExhaustiveTransitions<State, Msg, never> = {
     insert_coin: (s) => [s, []],
     brew: (s) => [s, []],
     tick: (s) => [s, []],
-    collect: () => [{ type: "idle" }, []],
+    collect: () => [{ _tag: "idle" }, []],
   },
 };
 
 // An exhaustive table is an ordinary transitions table to `defineMachine` —
 // the annotation is the author's floor, not a second form.
 defineMachine<State, Msg, never, never, unknown>({
-  init: (loaded) => [loaded ?? { type: "idle" }, []],
+  init: (loaded) => [loaded ?? { _tag: "idle" }, []],
   update: full,
 });
 
 const holed: ExhaustiveTransitions<State, Msg, never> = {
   idle: {
-    insert_coin: () => [{ type: "brewing", ms: 0 }, []],
+    insert_coin: () => [{ _tag: "brewing", ms: 0 }, []],
     brew: (s) => [s, []],
     tick: (s) => [s, []],
     collect: (s) => [s, []],
@@ -189,10 +189,10 @@ void holed;
 // flat reducer table must still bind the reducer form — every cell required,
 // narrowed against the whole Msg union rather than a row.
 
-type Flat = { readonly type: "counting"; readonly n: number };
+type Flat = { readonly _tag: "counting"; readonly n: number };
 type FlatMsg =
-  | { readonly type: "bump"; readonly by: number }
-  | { readonly type: "reset" };
+  | { readonly _tag: "bump"; readonly by: number }
+  | { readonly _tag: "reset" };
 
 const reducer: Reducer<Flat, FlatMsg, never> = {
   bump: (s, m) => [{ ...s, n: s.n + m.by }, []],
@@ -200,7 +200,7 @@ const reducer: Reducer<Flat, FlatMsg, never> = {
 };
 
 defineMachine<Flat, FlatMsg, never, never, unknown>({
-  init: (loaded) => [loaded ?? { type: "counting", n: 0 }, []],
+  init: (loaded) => [loaded ?? { _tag: "counting", n: 0 }, []],
   update: reducer,
 });
 

@@ -83,7 +83,7 @@ describe("fileStore", () => {
   it("persists across two real runs — the round-trip tracer", async () => {
     const path = join(dir, "counter.json");
     type S = { readonly n: number };
-    type M = { readonly type: "inc" };
+    type M = { readonly _tag: "inc" };
     const update: Reducer<S, M, never> = {
       inc: (s) => [{ n: s.n + 1 }, []],
     };
@@ -97,8 +97,8 @@ describe("fileStore", () => {
       ctx: undefined,
       store: fileStore(path, parseCounter),
     }).ready;
-    await first.dispatch({ type: "inc" });
-    await first.dispatch({ type: "inc" });
+    await first.dispatch({ _tag: "inc" });
+    await first.dispatch({ _tag: "inc" });
     await first.stop();
 
     // Second life reads what the first persisted through the file.
@@ -120,9 +120,9 @@ type TickState = {
   readonly ticks: number;
 };
 type TickMsg =
-  | { readonly type: "arm" }
-  | { readonly type: "disarm" }
-  | { readonly type: "tick" };
+  | { readonly _tag: "arm" }
+  | { readonly _tag: "disarm" }
+  | { readonly _tag: "tick" };
 
 function timerMachine(delayMs: number, repeat: boolean) {
   const update: Reducer<TickState, TickMsg, never> = {
@@ -141,10 +141,10 @@ function timerMachine(delayMs: number, repeat: boolean) {
     update,
     subs: [
       {
-        type: "node_timer",
+        _tag: "node_timer",
         deps: (s) =>
           s.phase === "armed"
-            ? { delayMs, msg: { type: "tick" }, repeat }
+            ? { delayMs, msg: { _tag: "tick" }, repeat }
             : null,
       },
     ],
@@ -163,7 +163,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 describe("nodeSubscribe: node_timer", () => {
   it("a one-shot timer dispatches its msg once after delayMs", async () => {
     const runtime = await runTimer(5, false);
-    await runtime.dispatch({ type: "arm" });
+    await runtime.dispatch({ _tag: "arm" });
     await sleep(30);
     await runtime.idle();
     expect(runtime.getState().ticks).toBe(1);
@@ -172,9 +172,9 @@ describe("nodeSubscribe: node_timer", () => {
 
   it("a repeating timer keeps firing while on, and cleanup stops it", async () => {
     const runtime = await runTimer(5, true);
-    await runtime.dispatch({ type: "arm" });
+    await runtime.dispatch({ _tag: "arm" });
     await sleep(40);
-    await runtime.dispatch({ type: "disarm" });
+    await runtime.dispatch({ _tag: "disarm" });
     await runtime.idle();
     const ticksAtDisarm = runtime.getState().ticks;
     expect(ticksAtDisarm).toBeGreaterThanOrEqual(2);
@@ -188,8 +188,8 @@ describe("nodeSubscribe: node_timer", () => {
 
   it("leaving the phase before a one-shot fires cancels it", async () => {
     const runtime = await runTimer(30, false);
-    await runtime.dispatch({ type: "arm" });
-    await runtime.dispatch({ type: "disarm" }); // cleanup clears the pending timeout
+    await runtime.dispatch({ _tag: "arm" });
+    await runtime.dispatch({ _tag: "disarm" }); // cleanup clears the pending timeout
     await sleep(60);
     expect(runtime.getState().ticks).toBe(0);
     await runtime.stop();
@@ -199,9 +199,9 @@ describe("nodeSubscribe: node_timer", () => {
 describe("nodeSubscribe: node_signal", () => {
   type SigState = { readonly phase: "idle" | "armed"; readonly caught: number };
   type SigMsg =
-    | { readonly type: "arm" }
-    | { readonly type: "disarm" }
-    | { readonly type: "sig" };
+    | { readonly _tag: "arm" }
+    | { readonly _tag: "disarm" }
+    | { readonly _tag: "sig" };
 
   function signalMachine() {
     const update: Reducer<SigState, SigMsg, never> = {
@@ -220,10 +220,10 @@ describe("nodeSubscribe: node_signal", () => {
       update,
       subs: [
         {
-          type: "node_signal",
+          _tag: "node_signal",
           deps: (s) =>
             s.phase === "armed"
-              ? { signal: "SIGUSR2", msg: { type: "sig" } }
+              ? { signal: "SIGUSR2", msg: { _tag: "sig" } }
               : null,
         },
       ],
@@ -241,13 +241,13 @@ describe("nodeSubscribe: node_signal", () => {
     await runtime.idle();
     expect(runtime.getState().caught).toBe(0);
 
-    await runtime.dispatch({ type: "arm" });
+    await runtime.dispatch({ _tag: "arm" });
     process.emit("SIGUSR2");
     await runtime.idle();
     expect(runtime.getState().caught).toBe(1);
 
     // Disarm → cleanup ran `process.off` — a later signal is not observed.
-    await runtime.dispatch({ type: "disarm" });
+    await runtime.dispatch({ _tag: "disarm" });
     process.emit("SIGUSR2");
     await runtime.idle();
     expect(runtime.getState().caught).toBe(1);
@@ -267,11 +267,11 @@ type WsState = {
   readonly closedWith: number | null;
 };
 type WsMsg =
-  | { readonly type: "connect" }
-  | { readonly type: "hangup" }
-  | { readonly type: "ws_open" }
-  | { readonly type: "ws_frame"; readonly data: string }
-  | { readonly type: "ws_closed"; readonly code: number };
+  | { readonly _tag: "connect" }
+  | { readonly _tag: "hangup" }
+  | { readonly _tag: "ws_open" }
+  | { readonly _tag: "ws_frame"; readonly data: string }
+  | { readonly _tag: "ws_closed"; readonly code: number };
 
 function wsMachine(url: string) {
   const update: Reducer<WsState, WsMsg, never> = {
@@ -295,7 +295,7 @@ function wsMachine(url: string) {
     update,
     subs: [
       {
-        type: "node_ws",
+        _tag: "node_ws",
         deps: (s) => (s.phase === "connected" ? { key: "ws1", url } : null),
       },
     ],
@@ -304,11 +304,11 @@ function wsMachine(url: string) {
 
 const wsSubscribe = nodeSubscribe<WsMsg, NodeSubscribeCtx>({
   ws: {
-    onOpen: () => ({ type: "ws_open" }),
+    onOpen: () => ({ _tag: "ws_open" }),
     // Frames prefixed "drop:" exercise the null-drop seam.
     onMessage: (data) =>
-      data.startsWith("drop:") ? null : { type: "ws_frame", data },
-    onClose: (code) => ({ type: "ws_closed", code }),
+      data.startsWith("drop:") ? null : { _tag: "ws_frame", data },
+    onClose: (code) => ({ _tag: "ws_closed", code }),
   },
 });
 
@@ -351,7 +351,7 @@ describe("nodeSubscribe: node_ws through a real run", () => {
 
     const runtime = await run(wsMachine(url), { subscribe: wsSubscribe, ctx })
       .ready;
-    await runtime.dispatch({ type: "connect" });
+    await runtime.dispatch({ _tag: "connect" });
 
     const peer = await serverSide;
     // Wait for the client's open handshake to have dispatched ws_open.
@@ -367,7 +367,7 @@ describe("nodeSubscribe: node_ws through a real run", () => {
 
     // Teardown: leaving the phase reconciles the sub out. Socket is OPEN, so
     // the cleanup closes gracefully with 1000 and empties the registry.
-    await runtime.dispatch({ type: "hangup" });
+    await runtime.dispatch({ _tag: "hangup" });
     await expect(peer.closed).resolves.toBe(1000);
     expect(ctx.wsRegistry.has("ws1")).toBe(false);
     await runtime.stop();
@@ -387,7 +387,7 @@ describe("nodeSubscribe: node_ws through a real run", () => {
     // Nothing registered yet — a write is a boolean no-op, never a throw.
     expect(sendToWebSocket(ctx, "ws1", "too early")).toBe(false);
 
-    await runtime.dispatch({ type: "connect" });
+    await runtime.dispatch({ _tag: "connect" });
     await expect
       .poll(() => runtime.getState().opened, { timeout: 2000 })
       .toBe(true);
@@ -398,7 +398,7 @@ describe("nodeSubscribe: node_ws through a real run", () => {
     // Unknown key — false.
     expect(sendToWebSocket(ctx, "nope", "x")).toBe(false);
 
-    await runtime.dispatch({ type: "hangup" });
+    await runtime.dispatch({ _tag: "hangup" });
     expect(sendToWebSocket(ctx, "ws1", "after teardown")).toBe(false);
     await runtime.stop();
   });
@@ -413,9 +413,9 @@ describe("nodeSubscribe: node_ws through a real run", () => {
       ctx,
     }).ready;
 
-    await runtime.dispatch({ type: "connect" });
+    await runtime.dispatch({ _tag: "connect" });
     expect(ctx.wsRegistry.has("ws1")).toBe(true);
-    await runtime.dispatch({ type: "hangup" }); // cleanup while CONNECTING
+    await runtime.dispatch({ _tag: "hangup" }); // cleanup while CONNECTING
     expect(ctx.wsRegistry.has("ws1")).toBe(false);
 
     // Give the refused connection time to error out — the swallowed listener
@@ -449,14 +449,14 @@ describe("nodeSubscribe: node_ws through a real run", () => {
       } satisfies Reducer<WsState, WsMsg, never>,
       subs: [
         {
-          type: "node_ws",
+          _tag: "node_ws",
           deps: (s) =>
             s.phase === "connected"
               ? { key: "ws1", url: "ws://127.0.0.1:1/a" }
               : null,
         },
         {
-          type: "node_ws",
+          _tag: "node_ws",
           deps: (s) =>
             s.phase === "connected"
               ? { key: "ws1", url: "ws://127.0.0.1:1/b" }
@@ -474,7 +474,7 @@ describe("nodeSubscribe: node_ws through a real run", () => {
       onError: (_error, context) => phases.push(context.phase),
     }).ready;
 
-    await expect(runtime.dispatch({ type: "connect" })).rejects.toThrow(
+    await expect(runtime.dispatch({ _tag: "connect" })).rejects.toThrow(
       /already registered under key "ws1"/,
     );
     expect(phases).toEqual(["sub"]);

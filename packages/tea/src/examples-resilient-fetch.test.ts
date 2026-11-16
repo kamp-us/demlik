@@ -35,7 +35,7 @@ describe("examples/resilient-fetch.ts — it runs", () => {
       ctx: { http },
     }).ready;
 
-    await runtime.dispatch({ type: "fetch", url: "/a", at: Date.now() });
+    await runtime.dispatch({ _tag: "fetch", url: "/a", at: Date.now() });
     await until(() => runtime.getState().phase === "succeeded");
 
     expect(calls).toBe(2);

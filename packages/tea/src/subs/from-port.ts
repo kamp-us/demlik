@@ -57,7 +57,7 @@ export function fromPort<
   Ctx,
   T,
   RS = unknown,
-  RM extends { type: string } = { type: string },
+  RM extends { _tag: string } = { _tag: string },
 >(
   selectRuntime: (ctx: Ctx) => Runtime<RS, RM>,
   port: Port<T>,

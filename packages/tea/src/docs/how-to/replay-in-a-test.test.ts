@@ -24,10 +24,10 @@ const ctx = { http: () => Promise.resolve("ok") };
 import { replay } from "@demlik/tea";
 
 const msgs: Msg[] = [
-  { type: "start", total: 3 },
-  { type: "chunk", size: 1 },
-  { type: "chunk", size: 1 },
-  { type: "chunk", size: 1 },
+  { _tag: "start", total: 3 },
+  { _tag: "chunk", size: 1 },
+  { _tag: "chunk", size: 1 },
+  { _tag: "chunk", size: 1 },
 ];
 
 const { state, cmds } = replay(downloader, { msgs, ctx: undefined });
@@ -47,8 +47,8 @@ expectFinalState(
 
 expectCmdEmitted(
   resilientFetch,
-  { msgs: [{ type: "fetch", url: "/x", at: 1000 }], ctx },
-  { type: "do_fetch", url: "/x" },
+  { msgs: [{ _tag: "fetch", url: "/x", at: 1000 }], ctx },
+  { _tag: "do_fetch", url: "/x" },
 );
 // #endregion assertions
 

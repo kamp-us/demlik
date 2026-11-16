@@ -21,7 +21,7 @@ import { createPoller, type PollerState } from "./index";
 type Status = { readonly status: "pending" | "ready"; readonly etag?: string };
 
 // The Cmd the poller's `onTick` emits — the consumer's "go observe" effect.
-const FETCH: Cmd<"fetch_status"> = { type: "fetch_status" };
+const FETCH: Cmd<"fetch_status"> = { _tag: "fetch_status" };
 
 // A no-jitter, low-attempt policy so backoff delays are exactly predictable and
 // the give-up edge is reachable in a couple of failures.
@@ -43,7 +43,7 @@ const tickSub = (atMs: number) => deadlineSub(`poller:tick:${atMs}`, atMs);
 // The running `deadline` Sub `replay` reports while one tick is armed.
 const tickDeadlines = (atMs: number): DeadlinesSub => {
   const deps = [tickSub(atMs)];
-  return { id: subIdOf("deadline", deps), type: "deadline", deps };
+  return { id: subIdOf("deadline", deps), _tag: "deadline", deps };
 };
 
 // A poller keyed on the result status. `until` holds once we observe "ready".
@@ -359,14 +359,14 @@ describe("createPoller — subs", () => {
 
 type AppState = { readonly poll: PollerState<Status> };
 type AppMsg =
-  | { readonly type: "begin"; readonly at: number }
+  | { readonly _tag: "begin"; readonly at: number }
   | {
-      readonly type: "deadline_exceeded";
+      readonly _tag: "deadline_exceeded";
       readonly id: string;
       readonly atMs: number;
     }
-  | { readonly type: "tick_ok"; readonly result: Status; readonly at: number }
-  | { readonly type: "tick_err"; readonly error: unknown; readonly at: number };
+  | { readonly _tag: "tick_ok"; readonly result: Status; readonly at: number }
+  | { readonly _tag: "tick_err"; readonly error: unknown; readonly at: number };
 
 const poll = makePoller({
   until: (s) => (s as AppState).poll.lastResult?.status === "ready",
@@ -427,13 +427,13 @@ describe("createPoller — wired into a machine (pure fold)", () => {
     t.expectCmdSequence(
       {
         msgs: [
-          { type: "begin", at: BASE },
+          { _tag: "begin", at: BASE },
           {
-            type: "deadline_exceeded",
+            _tag: "deadline_exceeded",
             id: "poller:tick:1005000",
             atMs: BASE + 5_000,
           },
-          { type: "tick_ok", result: { status: "pending" }, at: BASE + 5_000 },
+          { _tag: "tick_ok", result: { status: "pending" }, at: BASE + 5_000 },
         ],
       },
       [FETCH],
@@ -444,19 +444,19 @@ describe("createPoller — wired into a machine (pure fold)", () => {
     t.expectCmdSequence(
       {
         msgs: [
-          { type: "begin", at: BASE },
+          { _tag: "begin", at: BASE },
           {
-            type: "deadline_exceeded",
+            _tag: "deadline_exceeded",
             id: "poller:tick:1005000",
             atMs: BASE + 5_000,
           },
-          { type: "tick_ok", result: { status: "pending" }, at: BASE + 5_000 },
+          { _tag: "tick_ok", result: { status: "pending" }, at: BASE + 5_000 },
           {
-            type: "deadline_exceeded",
+            _tag: "deadline_exceeded",
             id: "poller:tick:1010000",
             atMs: BASE + 10_000,
           },
-          { type: "tick_ok", result: { status: "ready" }, at: BASE + 10_000 },
+          { _tag: "tick_ok", result: { status: "ready" }, at: BASE + 10_000 },
         ],
       },
       // Two deadline fires → two fetches; the ready result terminates (no fetch).
@@ -468,13 +468,13 @@ describe("createPoller — wired into a machine (pure fold)", () => {
     t.expectActiveSubs(
       {
         msgs: [
-          { type: "begin", at: BASE },
+          { _tag: "begin", at: BASE },
           {
-            type: "deadline_exceeded",
+            _tag: "deadline_exceeded",
             id: "poller:tick:1005000",
             atMs: BASE + 5_000,
           },
-          { type: "tick_ok", result: { status: "pending" }, at: BASE + 5_000 },
+          { _tag: "tick_ok", result: { status: "pending" }, at: BASE + 5_000 },
         ],
       },
       [tickDeadlines(BASE + 10_000)],
@@ -483,13 +483,13 @@ describe("createPoller — wired into a machine (pure fold)", () => {
     t.expectActiveSubs(
       {
         msgs: [
-          { type: "begin", at: BASE },
+          { _tag: "begin", at: BASE },
           {
-            type: "deadline_exceeded",
+            _tag: "deadline_exceeded",
             id: "poller:tick:1005000",
             atMs: BASE + 5_000,
           },
-          { type: "tick_ok", result: { status: "ready" }, at: BASE + 5_000 },
+          { _tag: "tick_ok", result: { status: "ready" }, at: BASE + 5_000 },
         ],
       },
       [], // done → timer disarmed
@@ -597,7 +597,7 @@ describe("createPoller — wired into a REAL runtime (timer-driven cadence)", ()
         // Perform the observation and re-enter the machine with the result Msg
         // the substrate dispatches onto its tail (the runtime's dispatch).
         fetch_status: async (): Promise<AppMsg> => ({
-          type: "tick_ok",
+          _tag: "tick_ok",
           result: readSource(),
           at: Date.now(),
         }),
@@ -606,7 +606,7 @@ describe("createPoller — wired into a REAL runtime (timer-driven cadence)", ()
 
     // Kick the poller off. `start` arms the first deadline at BASE + 5_000 and
     // emits NOTHING — so no read has happened yet.
-    await runtime.dispatch({ type: "begin", at: Date.now() });
+    await runtime.dispatch({ _tag: "begin", at: Date.now() });
     await flush();
     expect(reads).toBe(0); // cadence not yet due — the timer has not fired
 
@@ -973,14 +973,14 @@ describe("createPoller — wired into a REAL runtime (duration-bounded outage)",
         fetch_status: async (): Promise<AppMsg> => {
           readAt.push(Date.now());
           return {
-            type: "tick_err",
+            _tag: "tick_err",
             error: "peer_unreachable",
             at: Date.now(),
           };
         },
       },
     }).ready;
-    await runtime.dispatch({ type: "begin", at: Date.now() });
+    await runtime.dispatch({ _tag: "begin", at: Date.now() });
     await flush();
     expect(readAt).toEqual([]); // the timer is the only next-tick mechanism
 

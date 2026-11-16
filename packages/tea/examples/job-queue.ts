@@ -49,11 +49,11 @@ type DeadLetter = Cmd<"dead_letter"> & {
 type JobCmd = ClaimNext | RunJob | Complete | Requeue | DeadLetter;
 
 type Msg =
-  | { type: "tick" }
-  | { type: "claimed"; item: QueueItem<Job> | null }
-  | { type: "ran_ok"; id: string; name: string }
-  | { type: "ran_err"; id: string; name: string; error: string }
-  | { type: "settled" };
+  | { _tag: "tick" }
+  | { _tag: "claimed"; item: QueueItem<Job> | null }
+  | { _tag: "ran_ok"; id: string; name: string }
+  | { _tag: "ran_err"; id: string; name: string; error: string }
+  | { _tag: "settled" };
 
 interface Ctx {
   readonly queue: ReturnType<typeof createQueue<Job>>;
@@ -101,12 +101,12 @@ export const jobQueue = defineMachine({
             deadLettered: [],
             log: [],
           },
-          [{ type: "claim_next" }],
+          [{ _tag: "claim_next" }],
         ],
 
   update: {
     tick: (s) =>
-      s.phase === "drained" ? [s, []] : [s, [{ type: "claim_next" }]],
+      s.phase === "drained" ? [s, []] : [s, [{ _tag: "claim_next" }]],
 
     claimed: (s, m) => {
       if (m.item === null) {
@@ -126,7 +126,7 @@ export const jobQueue = defineMachine({
         },
         [
           {
-            type: "run_job",
+            _tag: "run_job",
             id: item.id,
             name: item.input.name,
             payload: item.input.payload,
@@ -142,7 +142,7 @@ export const jobQueue = defineMachine({
         done: [...s.done, m.name],
         log: [...s.log, `done ${m.name}`],
       },
-      [{ type: "complete", id: m.id, name: m.name }],
+      [{ _tag: "complete", id: m.id, name: m.name }],
     ],
 
     ran_err: (s, m) => {
@@ -154,7 +154,7 @@ export const jobQueue = defineMachine({
             running: null,
             log: [...s.log, `retry ${m.name} (${m.error})`],
           },
-          [{ type: "requeue", id: m.id, name: m.name, attempt }],
+          [{ _tag: "requeue", id: m.id, name: m.name, attempt }],
         ];
       }
       return [
@@ -164,12 +164,12 @@ export const jobQueue = defineMachine({
           deadLettered: [...s.deadLettered, m.name],
           log: [...s.log, `dead-letter ${m.name} after ${attempt} attempts`],
         },
-        [{ type: "dead_letter", id: m.id, name: m.name, error: m.error }],
+        [{ _tag: "dead_letter", id: m.id, name: m.name, error: m.error }],
       ];
     },
 
     settled: (s) =>
-      s.phase === "drained" ? [s, []] : [s, [{ type: "claim_next" }]],
+      s.phase === "drained" ? [s, []] : [s, [{ _tag: "claim_next" }]],
   },
 });
 
@@ -177,14 +177,14 @@ export const jobQueue = defineMachine({
 export const jobQueueInterpret: Interpret<Msg, JobCmd, Ctx> = {
   claim_next: async (_cmd, ctx) => {
     const item = await ctx.queue.claimNext();
-    return { type: "claimed", item };
+    return { _tag: "claimed", item };
   },
 
   run_job: tryInterpret<RunJob, string, Msg, Ctx>(
     (cmd, ctx) => ctx.worker({ name: cmd.name, payload: cmd.payload }),
-    (_value, cmd) => ({ type: "ran_ok", id: cmd.id, name: cmd.name }),
+    (_value, cmd) => ({ _tag: "ran_ok", id: cmd.id, name: cmd.name }),
     (error, cmd) => ({
-      type: "ran_err",
+      _tag: "ran_err",
       id: cmd.id,
       name: cmd.name,
       error: error instanceof Error ? error.message : String(error),
@@ -193,17 +193,17 @@ export const jobQueueInterpret: Interpret<Msg, JobCmd, Ctx> = {
 
   complete: async (cmd, ctx) => {
     await ctx.queue.markDone(cmd.id);
-    return { type: "settled" };
+    return { _tag: "settled" };
   },
 
   requeue: async (cmd, ctx) => {
     await ctx.queue.retryItem(cmd.id);
-    return { type: "settled" };
+    return { _tag: "settled" };
   },
 
   dead_letter: async (cmd, ctx) => {
     await ctx.queue.markFailed(cmd.id, cmd.error);
-    return { type: "settled" };
+    return { _tag: "settled" };
   },
 };
 

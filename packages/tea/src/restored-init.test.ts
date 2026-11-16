@@ -2,13 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 import { defineMachine, type Reducer, replay, type Transitions } from "./index";
 import { bindMachine, step } from "./testing/index";
 
-type State = { readonly type: "ready"; readonly count: number };
-type Msg = { readonly type: "add"; readonly by: number };
-type Cmd = { readonly type: "resume" | "added" };
-const loaded: State = { type: "ready", count: 4 };
+type State = { readonly _tag: "ready"; readonly count: number };
+type Msg = { readonly _tag: "add"; readonly by: number };
+type Cmd = { readonly _tag: "resume" | "added" };
+const loaded: State = { _tag: "ready", count: 4 };
 const add: Reducer<State, Msg, Cmd>["add"] = (state, msg) => [
   { ...state, count: state.count + msg.by },
-  [{ type: "added" }],
+  [{ _tag: "added" }],
 ];
 
 describe("restored initialization", () => {
@@ -17,17 +17,17 @@ describe("restored initialization", () => {
       types: { model: {} as State, msg: {} as Msg, cmd: {} as Cmd },
       init: (saved) => [
         { ...(saved ?? loaded), count: (saved ?? loaded).count + 10 },
-        [{ type: "resume" }],
+        [{ _tag: "resume" }],
       ],
       update: { add },
     });
     const result = replay(machine, {
       loaded,
       ctx: {},
-      msgs: [{ type: "add" as const, by: 2 }],
+      msgs: [{ _tag: "add" as const, by: 2 }],
     });
-    expect(result.state).toEqual({ type: "ready", count: 16 });
-    expect(result.cmds).toEqual([{ type: "resume" }, { type: "added" }]);
+    expect(result.state).toEqual({ _tag: "ready", count: 16 });
+    expect(result.cmds).toEqual([{ _tag: "resume" }, { _tag: "added" }]);
   });
 
   it.each([
@@ -35,7 +35,7 @@ describe("restored initialization", () => {
     "transitions",
   ])("%s steps an existing state without initializing it", (form) => {
     const init = vi.fn((): readonly [State, readonly Cmd[]] => [
-      { type: "ready", count: 999 },
+      { _tag: "ready", count: 999 },
       [],
     ]);
     const reducer: Reducer<State, Msg, Cmd> = { add };
@@ -45,10 +45,10 @@ describe("restored initialization", () => {
       init,
       update: form === "reducer" ? reducer : transitions,
     });
-    const expected = [{ type: "ready", count: 6 }, [{ type: "added" }]];
-    expect(step(machine, loaded, { type: "add", by: 2 }, {})).toEqual(expected);
+    const expected = [{ _tag: "ready", count: 6 }, [{ _tag: "added" }]];
+    expect(step(machine, loaded, { _tag: "add", by: 2 }, {})).toEqual(expected);
     expect(
-      bindMachine(machine, {}).step(loaded, { type: "add", by: 2 }),
+      bindMachine(machine, {}).step(loaded, { _tag: "add", by: 2 }),
     ).toEqual(expected);
     expect(init).not.toHaveBeenCalled();
   });

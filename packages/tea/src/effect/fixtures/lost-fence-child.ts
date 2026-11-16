@@ -38,7 +38,7 @@ const [engine, mode, dir] = z
 
 const model = z.object({ count: z.number().int().nonnegative() });
 type Model = z.infer<typeof model>;
-type Msg = { readonly type: "bump" };
+type Msg = { readonly _tag: "bump" };
 type Poke = Sub<"poke", Record<string, never>>;
 
 const machine = defineMachine({
@@ -50,10 +50,10 @@ const machine = defineMachine({
   },
   init: (loaded) => [loaded ?? { count: 0 }, []],
   update: { bump: (state) => [{ count: state.count + 1 }, []] },
-  subs: [{ type: "poke", deps: () => ({}) }],
+  subs: [{ _tag: "poke", deps: () => ({}) }],
 });
 
-const bumpMsg: Msg = { type: "bump" };
+const bumpMsg: Msg = { _tag: "bump" };
 const fileOf = (name: string) => join(dir, `${name}.json`);
 const storeOf = (name: string) =>
   fileStore(fileOf(name), (raw) => (raw === null ? null : model.parse(raw)), {
@@ -162,7 +162,7 @@ async function host(): Promise<void> {
 
   const taken = deferred();
   process.once("message", taken.fire);
-  process.send?.({ type: "ready" });
+  process.send?.({ _tag: "ready" });
   await taken.at;
 
   const others = [a, c];
@@ -183,7 +183,7 @@ async function host(): Promise<void> {
   await aLaterTurn();
 
   process.send?.({
-    type: "result",
+    _tag: "result",
     before,
     after,
     msgBeforeStop,
@@ -237,7 +237,7 @@ async function failingSub(onError: OnReport | undefined): Promise<void> {
   }
   await aLaterTurn();
   await aLaterTurn();
-  process.send?.({ type: "alive" });
+  process.send?.({ _tag: "alive" });
   process.disconnect();
 }
 
@@ -299,13 +299,13 @@ async function widenedHost(): Promise<void> {
   const taken = deferred();
   process.once("message", taken.fire);
   process.send?.({
-    type: "refused",
+    _tag: "refused",
     refusals: runs.map((run) => run.refused ?? "started"),
   });
   await taken.at;
   for (const run of runs) if (run.refused === undefined) await run.stop();
   await aLaterTurn();
-  process.send?.({ type: "alive" });
+  process.send?.({ _tag: "alive" });
   process.disconnect();
 }
 
@@ -316,7 +316,7 @@ else if (mode === "failing-sub") await failingSub(undefined);
 else
   await failingSub((error, context) => {
     process.send?.({
-      type: "heard",
+      _tag: "heard",
       phase: context.phase,
       message: (error as Error).message,
     });

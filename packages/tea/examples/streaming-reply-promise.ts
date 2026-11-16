@@ -16,9 +16,9 @@ export async function streamReply(
     store: skipSaving(store, isStreaming),
   }).ready;
   try {
-    await runtime.dispatch({ type: "start" });
-    for (const text of tokens) await runtime.dispatch({ type: "token", text });
-    await runtime.dispatch({ type: "finish" });
+    await runtime.dispatch({ _tag: "start" });
+    for (const text of tokens) await runtime.dispatch({ _tag: "token", text });
+    await runtime.dispatch({ _tag: "finish" });
     return runtime.getState();
   } finally {
     await runtime.stop();

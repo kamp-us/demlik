@@ -155,7 +155,7 @@ export const nextSeq = <T>(buffer: readonly SeqTagged<T>[]): Seq =>
  */
 export function reconcile<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,

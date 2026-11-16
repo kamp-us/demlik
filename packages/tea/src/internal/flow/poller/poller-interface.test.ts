@@ -35,7 +35,7 @@ import {
 type Status = { readonly status: "pending" | "ready" };
 type Slice = { readonly poll: PollerState<Status> };
 
-const FETCH: Cmd<"fetch_status"> = { type: "fetch_status" };
+const FETCH: Cmd<"fetch_status"> = { _tag: "fetch_status" };
 const BASE = 1_000_000;
 
 const empty = (): PollerPolling<Status> => ({

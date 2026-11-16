@@ -94,8 +94,8 @@ const turnOf = (stage: Stage | undefined): Purpose =>
 // The per-tool effect, as data — the consumer's own interpret performs it. A
 // CLOSED discriminated Cmd variant (`ToolCmd`) so the agent's `TC` type param
 // stays precise and the wired interpret merge type-checks per key.
-type ToolCmd = { readonly type: "run_tool" } & ToolCall;
-const toolOf = (call: ToolCall): ToolCmd => ({ type: "run_tool", ...call });
+type ToolCmd = { readonly _tag: "run_tool" } & ToolCall;
+const toolOf = (call: ToolCall): ToolCmd => ({ _tag: "run_tool", ...call });
 
 // rng pinned to 0 → "full" jitter delay collapses to 0, so retryAtMs == at.
 const rngZero = () => 0;
@@ -145,7 +145,7 @@ const tool = (callId: string, name = "navigate"): ToolCall => ({
 // literal flows into the closed `AgentCmd<Purpose, ToolCmd>` expectations with no
 // widened `type: string`.
 const brainRunCmd = (purpose: Purpose): LlmRunCmd<Purpose> => ({
-  type: "resilient_run",
+  _tag: "resilient_run",
   key: purpose,
   input: { purpose, model: null, payload: null },
 });
@@ -157,7 +157,7 @@ const brainErr = (
   cause: unknown,
   at: number,
 ): AgentLlmErrMsg<Purpose> => ({
-  type: "resilient_run_err",
+  _tag: "resilient_run_err",
   cmd: brainRunCmd(purpose),
   error: { _tag: "port_rejected", cause },
   at,
@@ -382,7 +382,7 @@ describe("createAgent — full loop through the wired machine (replay)", () => {
     purpose: Purpose,
     output: AgentTurn,
   ): AgentLlmOkMsg<Purpose, Outputs> => ({
-    type: "resilient_run_ok",
+    _tag: "resilient_run_ok",
     cmd: brainRunCmd(purpose),
     value: { key: purpose, purpose, output },
     at: 0,
@@ -390,7 +390,7 @@ describe("createAgent — full loop through the wired machine (replay)", () => {
 
   it("start fires the plan brain call through the reducer", () => {
     bound.expectCmdSequence(
-      { msgs: [{ type: "agent_start", runId: "r", at: 0 }] },
+      { msgs: [{ _tag: "agent_start", runId: "r", at: 0 }] },
       [brainRunCmd("plan_turn")],
     );
   });
@@ -398,12 +398,12 @@ describe("createAgent — full loop through the wired machine (replay)", () => {
   it("plan turn with a tool → tool settle → fold → next plan brain call", () => {
     const { state, cmds } = bound.replay({
       msgs: [
-        { type: "agent_start", runId: "r", at: 0 },
+        { _tag: "agent_start", runId: "r", at: 0 },
         // The minted brain-call success — `succeed` resets retry AND folds the
         // parsed turn (one tool) in ONE Msg.
         ok("plan_turn", turnWith(tool("c1"))),
         // The tool resolves.
-        { type: "agent_tool_ok", callId: "c1", result: "r1", at: 20 },
+        { _tag: "agent_tool_ok", callId: "c1", result: "r1", at: 20 },
       ],
     });
     // After the batch drained the loop re-fired the SAME stage's brain call.
@@ -422,7 +422,7 @@ describe("createAgent — full loop through the wired machine (replay)", () => {
   it("an empty-tool turn on each stage walks plan → act → done", () => {
     const { state } = bound.replay({
       msgs: [
-        { type: "agent_start", runId: "r", at: 0 },
+        { _tag: "agent_start", runId: "r", at: 0 },
         ok("plan_turn", turnWith()), // plan done → act (minted settle)
         ok("act_turn", turnWith()), // act done → done
       ],
@@ -501,7 +501,7 @@ describe("createAgent — WIRED machine drives the full loop to terminal done", 
         // (returned, not awaited — awaiting `dispatch` here would deadlock the
         // serial tail, since the current step holds it).
         return {
-          type: "agent_tool_ok",
+          _tag: "agent_tool_ok",
           callId: cmd.callId,
           result: `done:${cmd.callId}`,
           at: 0,
@@ -526,7 +526,7 @@ describe("createAgent — WIRED machine drives the full loop to terminal done", 
       }
     });
 
-    await runtime.dispatch({ type: "agent_start", runId: "run-1", at: 0 });
+    await runtime.dispatch({ _tag: "agent_start", runId: "run-1", at: 0 });
     await reachedDone;
     // Drain the tail so the final transition's effects all settle.
     await runtime.stop();
@@ -568,7 +568,7 @@ describe("createAgent — plain-function model drives the wired machine", () => 
     object
   > = {
     run_tool: async (cmd) => ({
-      type: "agent_tool_ok",
+      _tag: "agent_tool_ok",
       callId: cmd.callId,
       result: `done:${cmd.callId}`,
       at: 0,
@@ -610,7 +610,7 @@ describe("createAgent — plain-function model drives the wired machine", () => 
     const off = runtime.observe((_msg, state) => {
       if (agent.isSettled(state)) resolveDone();
     });
-    await runtime.dispatch({ type: "agent_start", runId: "run-1", at: 0 });
+    await runtime.dispatch({ _tag: "agent_start", runId: "run-1", at: 0 });
     await reachedDone;
     await runtime.stop();
     off();
@@ -692,7 +692,7 @@ describe("createAgent — guards", () => {
     expect(safety).toBeDefined();
     // Firing the matching timer fails the run.
     const [failed] = agent.onTimer(s, {
-      type: "deadline_exceeded",
+      _tag: "deadline_exceeded",
       id: safety?.id ?? "",
       atMs: 2000,
     });
@@ -798,7 +798,7 @@ describe("createAgent — guards", () => {
     // Bump progress so the live alarm id changes.
     [s] = agent.turn(s, turnWith(tool("c1")), 200);
     const [same] = agent.onTimer(s, {
-      type: "deadline_exceeded",
+      _tag: "deadline_exceeded",
       id: "monitored:safety:r:0", // the pre-bump seq
       atMs: 3000,
     });
@@ -958,7 +958,7 @@ describe("createAgent — payloadOf threads the conversation into the brain call
     const [, cmds] = agent.start(agent.init(), "r", 0);
     expect(cmds).toEqual([
       {
-        type: "resilient_run",
+        _tag: "resilient_run",
         key: "plan_turn",
         input: {
           purpose: "plan_turn",
@@ -1035,7 +1035,7 @@ describe("createAgent — properties", () => {
         let [s] = agent.start(agent.init(), "r", 0);
         let at = 1;
         for (const a of actions) {
-          let cmds: readonly { type: string }[] = [];
+          let cmds: readonly { _tag: string }[] = [];
           if (a.kind === "empty_turn") {
             [s, cmds] = agent.turn(s, turnWith(), at++);
           } else if (a.kind === "tool_turn") {
@@ -1046,7 +1046,7 @@ describe("createAgent — properties", () => {
             [s, cmds] = agent.toolOk(s, running.callId, "x", at++);
           }
           // A brain-call run cmd is keyed `resilient_run`. At most one per verb.
-          const brainCmds = cmds.filter((c) => c.type === "resilient_run");
+          const brainCmds = cmds.filter((c) => c._tag === "resilient_run");
           if (brainCmds.length > 1) return false;
         }
         return true;
@@ -1131,7 +1131,7 @@ describe("createAgent — properties", () => {
               .find((sub) => sub.id.startsWith("monitored:safety:"));
             if (safety !== undefined) {
               [s] = durable.onTimer(s, {
-                type: "deadline_exceeded",
+                _tag: "deadline_exceeded",
                 id: safety.id,
                 atMs: now,
               });
@@ -1196,7 +1196,7 @@ describe("createAgent — properties", () => {
         .find((sub) => sub.id.startsWith("monitored:safety:"));
       expect(safety).toBeDefined();
       const [s] = a.onTimer(s0, {
-        type: "deadline_exceeded",
+        _tag: "deadline_exceeded",
         id: safety?.id ?? "",
         atMs: 2000,
       });
@@ -1351,7 +1351,7 @@ describe("createAgent — status (the typed lifecycle channel, #49)", () => {
       .subs(s0)
       .find((sub) => sub.id.startsWith("monitored:safety:"));
     const [s] = agent.onTimer(s0, {
-      type: "deadline_exceeded",
+      _tag: "deadline_exceeded",
       id: safety?.id ?? "",
       atMs: 2000,
     });

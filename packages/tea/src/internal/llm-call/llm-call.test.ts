@@ -77,7 +77,7 @@ const makeLlm = (withRetry = true) =>
 
 // The run Cmd the knob emits for a call keyed by its purpose.
 const runCmd = (input: LlmCall<Purpose>, key: string = input.purpose) =>
-  ({ type: "resilient_run", key, input }) as LlmRunCmd<Purpose>;
+  ({ _tag: "resilient_run", key, input }) as LlmRunCmd<Purpose>;
 
 // The engine-minted success / failure Msgs for a run Cmd.
 const okMsg = (
@@ -86,7 +86,7 @@ const okMsg = (
   at: number,
   key: string = input.purpose,
 ): LlmSucceedMsg<Purpose, Outputs> => ({
-  type: "resilient_run_ok",
+  _tag: "resilient_run_ok",
   cmd: runCmd(input, key),
   value: { key, purpose: input.purpose, output },
   at,
@@ -97,7 +97,7 @@ const errMsg = (
   at: number,
   key: string = input.purpose,
 ): LlmFailMsg<Purpose> => ({
-  type: "resilient_run_err",
+  _tag: "resilient_run_err",
   cmd: runCmd(input, key),
   error: { _tag: "port_rejected", cause },
   at,
@@ -119,7 +119,7 @@ describe("createLlmCall — slice + verbs are resilient-call's (composition)", (
       payload: "j",
     };
     const [s, cmds] = llm.attempt(llm.init(), call, 0);
-    expect(cmds).toEqual([{ type: "resilient_run", key: "plan", input: call }]);
+    expect(cmds).toEqual([{ _tag: "resilient_run", key: "plan", input: call }]);
     expect(s.calls.plan).toEqual({
       phase: "running",
       input: call,
@@ -203,7 +203,7 @@ describe("createLlmCall — slice + verbs are resilient-call's (composition)", (
     expect(llm.timer(s)).toEqual({
       ms: 0,
       msg: {
-        type: "deadline_exceeded",
+        _tag: "deadline_exceeded",
         id: "resilient:retry:report",
         atMs: 50,
       },
@@ -222,12 +222,12 @@ describe("createLlmCall — slice + verbs are resilient-call's (composition)", (
     [s] = llm.fail(s, errMsg(call, "e", 0));
     expect(s.calls.plan?.phase).toBe("waiting_retry");
     const timer: LlmTimerMsg = {
-      type: "deadline_exceeded",
+      _tag: "deadline_exceeded",
       id: "resilient:retry:plan",
       atMs: 0,
     };
     const [s2, cmds] = llm.onTimer(s, timer);
-    expect(cmds).toEqual([{ type: "resilient_run", key: "plan", input: call }]);
+    expect(cmds).toEqual([{ _tag: "resilient_run", key: "plan", input: call }]);
     expect(s2.calls.plan?.phase).toBe("running");
   });
 });
@@ -300,13 +300,13 @@ interface HostState {
     LlmOk<Purpose, Outputs>
   >;
 }
-type CallLlm = { type: "call_llm"; input: LlmCall<Purpose>; at: number };
+type CallLlm = { _tag: "call_llm"; input: LlmCall<Purpose>; at: number };
 
 function hostMachine(llm: ReturnType<typeof makeLlm>) {
   return defineMachine({
     types: {
       model: {} as HostState,
-      msg: {} as CallLlm | { type: "nop" } | LlmTimerMsg,
+      msg: {} as CallLlm | { _tag: "nop" } | LlmTimerMsg,
       ctx: {} as object,
     },
     cmds: [llm.run],
@@ -331,7 +331,7 @@ function hostMachine(llm: ReturnType<typeof makeLlm>) {
       },
       nop: (s) => [s, []],
     },
-    subs: [{ type: "timer", deps: (s: HostState) => llm.timer(s.resilience) }],
+    subs: [{ _tag: "timer", deps: (s: HostState) => llm.timer(s.resilience) }],
   });
 }
 
@@ -345,8 +345,8 @@ describe("createLlmCall — wired in a machine (replay)", () => {
       model: null,
       payload: "j",
     };
-    bound.expectCmdSequence({ msgs: [{ type: "call_llm", input, at: 0 }] }, [
-      { type: "resilient_run", key: "plan", input },
+    bound.expectCmdSequence({ msgs: [{ _tag: "call_llm", input, at: 0 }] }, [
+      { _tag: "resilient_run", key: "plan", input },
     ]);
   });
 
@@ -358,7 +358,7 @@ describe("createLlmCall — wired in a machine (replay)", () => {
     };
     const { state, subs } = bound.replay({
       msgs: [
-        { type: "call_llm", input, at: 0 },
+        { _tag: "call_llm", input, at: 0 },
         okMsg(input, { steps: ["s"] }, 0),
       ],
     });
@@ -376,12 +376,12 @@ describe("createLlmCall — wired in a machine (replay)", () => {
       payload: "r",
     };
     const { subs } = bound.replay({
-      msgs: [{ type: "call_llm", input, at: 0 }, errMsg(input, "e", 0)],
+      msgs: [{ _tag: "call_llm", input, at: 0 }, errMsg(input, "e", 0)],
     });
-    expect(subs.map((sub) => sub.type)).toEqual(["timer"]);
+    expect(subs.map((sub) => sub._tag)).toEqual(["timer"]);
     expect(subs[0]?.deps).toEqual({
       ms: 0,
-      msg: { type: "deadline_exceeded", id: "resilient:retry:report", atMs: 0 },
+      msg: { _tag: "deadline_exceeded", id: "resilient:retry:report", atMs: 0 },
     });
   });
 });
@@ -420,7 +420,7 @@ describe("createLlmCall — wired end-to-end: retry loop drives to a terminal ph
 
   async function drain(
     runtime: {
-      dispatch(m: CallLlm | { type: "nop" } | LlmTimerMsg): Promise<void>;
+      dispatch(m: CallLlm | { _tag: "nop" } | LlmTimerMsg): Promise<void>;
       getState(): HostState;
     },
     ledger: Ledger,
@@ -429,11 +429,11 @@ describe("createLlmCall — wired end-to-end: retry loop drives to a terminal ph
     let guard = 0;
     while (guard++ < 50) {
       const before = ledger.calls.count;
-      await runtime.dispatch({ type: "nop" });
+      await runtime.dispatch({ _tag: "nop" });
       const call = runtime.getState().resilience.calls[key];
       if (call?.phase === "waiting_retry") {
         await runtime.dispatch({
-          type: "deadline_exceeded",
+          _tag: "deadline_exceeded",
           id: `resilient:retry:${key}`,
           atMs: call.retryAtMs,
         });
@@ -451,7 +451,7 @@ describe("createLlmCall — wired end-to-end: retry loop drives to a terminal ph
       model: null,
       payload: "j",
     };
-    await runtime.dispatch({ type: "call_llm", input, at: 0 });
+    await runtime.dispatch({ _tag: "call_llm", input, at: 0 });
     await drain(runtime, ledger, "plan");
 
     expect(runtime.getState().resilience.calls.plan).toEqual({
@@ -474,7 +474,7 @@ describe("createLlmCall — wired end-to-end: retry loop drives to a terminal ph
       model: null,
       payload: "r",
     };
-    await runtime.dispatch({ type: "call_llm", input, at: 0 });
+    await runtime.dispatch({ _tag: "call_llm", input, at: 0 });
     await drain(runtime, ledger, "report");
 
     const call = runtime.getState().resilience.calls.report;
@@ -544,13 +544,13 @@ describe("createLlmCall — properties", () => {
         return k.fail(s, errMsg(input, cause, a.at));
       case "deadline":
         return k.onTimer(s, {
-          type: "deadline_exceeded",
+          _tag: "deadline_exceeded",
           id: `resilient:deadline:${a.purpose}`,
           atMs: a.at,
         });
       case "retry":
         return k.onTimer(s, {
-          type: "deadline_exceeded",
+          _tag: "deadline_exceeded",
           id: `resilient:retry:${a.purpose}`,
           atMs: a.at,
         });

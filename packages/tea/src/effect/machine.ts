@@ -14,14 +14,14 @@ import { defineMachine, type MachineTypes } from "../runtime-types";
  * an object with one required key per colliding tag, so `msg: Schema.Schema<M>`
  * is refused on its own line with each tag named in the diagnostic.
  */
-type NoSettledTag<M extends { type: string }, D extends AnyCmdDef> = [
-  Extract<M["type"], Settled<D>["type"]>,
+type NoSettledTag<M extends { _tag: string }, D extends AnyCmdDef> = [
+  Extract<M["_tag"], Settled<D>["_tag"]>,
 ] extends [never]
   ? unknown
   : {
       readonly [Tag in `msg tag "${Extract<
-        M["type"],
-        Settled<D>["type"]
+        M["_tag"],
+        Settled<D>["_tag"]
       >}" is a settled Msg name of a listed Cmd`]: never;
     };
 
@@ -47,7 +47,7 @@ type LiteralTags<Tag extends string> = [OpenTag<Tag>] extends [never]
 
 function make<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   D extends AnyCmdDef,
   U extends Sub = Sub<never>,
   Ctx = unknown,
@@ -58,7 +58,7 @@ function make<
     readonly model: Schema.Schema<S>;
     readonly msg: Schema.Schema<M> &
       NoSettledTag<M, D> &
-      LiteralTags<M["type"]>;
+      LiteralTags<M["_tag"]>;
     readonly cmds: readonly D[];
     readonly types?: Pick<MachineTypes<S, M, never, U, Ctx>, "sub" | "ctx">;
   },
@@ -77,7 +77,7 @@ function make<
 /** A core tea machine, with the same init, update and engine contracts. */
 export type Machine<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,

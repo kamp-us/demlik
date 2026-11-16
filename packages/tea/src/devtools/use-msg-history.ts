@@ -35,7 +35,7 @@ export function useMsgHistory<M>(
     ((msg: M): MsgLogEntry => {
       const tag =
         msg && typeof msg === "object" && "type" in msg
-          ? String((msg as { type: unknown }).type)
+          ? String((msg as { _tag: unknown })._tag)
           : String(msg);
       return { ts: now(), kind: "msg", text: tag };
     });

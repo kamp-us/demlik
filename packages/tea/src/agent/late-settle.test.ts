@@ -45,7 +45,7 @@ type Purpose = "act_turn";
 interface Outputs extends Record<Purpose, AgentTurn> {
   readonly act_turn: AgentTurn;
 }
-type ToolCmd = { readonly type: "run_tool" } & ToolCall;
+type ToolCmd = { readonly _tag: "run_tool" } & ToolCall;
 type M = AgentMachineMsg<Purpose, Outputs, string>;
 
 const turnSchema: Schema<AgentTurn> = { parse: (v) => v as AgentTurn };
@@ -68,7 +68,7 @@ function makeAgent(turns: readonly AgentTurn[]) {
     model,
     schemas: { act_turn: turnSchema },
     turnOf: () => "act_turn",
-    toolOf: (c) => ({ type: "run_tool", ...c }),
+    toolOf: (c) => ({ _tag: "run_tool", ...c }),
     toolConcurrency: 2,
     rng: () => 0,
   });
@@ -87,7 +87,7 @@ describe("#145 — the projector refuses a settled call's late success", () => {
     const project = agentEvents<Stage, Purpose, Outputs, string>();
     const base = startedRun();
     const lateOk: M = {
-      type: "agent_tool_ok",
+      _tag: "agent_tool_ok",
       callId: "c1",
       result: "late",
       at: 2,
@@ -96,7 +96,7 @@ describe("#145 — the projector refuses a settled call's late success", () => {
     // Same Msg, two states: the only difference is whether this call's public
     // outcome is already a failure.
     expect(project(lateOk, { ...base, refusedCalls: [] })).toEqual([
-      { type: "ToolSettled", runId: "r", at: 2, callId: "c1", result: "late" },
+      { _tag: "ToolSettled", runId: "r", at: 2, callId: "c1", result: "late" },
     ] satisfies AgentEvent<string>[]);
     expect(project(lateOk, { ...base, refusedCalls: ["c1"] })).toEqual([]);
   });
@@ -122,7 +122,7 @@ describe("#145 — the projector refuses a settled call's late success", () => {
     >({ tools: router });
     const base = startedRun() as never as Parameters<typeof project>[1];
     const okMsg = {
-      type: navigate.okType,
+      _tag: navigate.okType,
       cmd: { callId: "c1", args: {} },
       value: { at: "home" },
       at: 2,
@@ -132,7 +132,7 @@ describe("#145 — the projector refuses a settled call's late success", () => {
     // outcome is already a failure.
     expect(project(okMsg, { ...base, refusedCalls: [] })).toEqual([
       {
-        type: "ToolSettled",
+        _tag: "ToolSettled",
         runId: "r",
         at: 2,
         callId: "c1",
@@ -204,7 +204,7 @@ describe("#145 — onToolError and onEvent never disagree for one callId", () =>
     await agent.run("go", {
       store: memoryStore(),
       onEvent: (e) => {
-        if (e.type === "ToolSettled") succeeded.push(e.callId);
+        if (e._tag === "ToolSettled") succeeded.push(e.callId);
       },
     });
 

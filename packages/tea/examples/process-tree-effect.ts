@@ -16,7 +16,7 @@ export interface ProcessState {
   readonly written: number;
 }
 
-export type ProcessMsg = { readonly type: "input"; readonly text: string };
+export type ProcessMsg = { readonly _tag: "input"; readonly text: string };
 
 export const proc = defineMachine({
   types: { model: {} as ProcessState, msg: {} as ProcessMsg },
@@ -88,7 +88,7 @@ export const spawnProcess = <E>(
       }),
     enrol: (process) => Effect.sync(() => processes.set(id, process)),
     remove: Effect.sync(() => processes.delete(id)),
-    notify: tell(parent, parentRun, { type: "child_stopped", id }),
+    notify: tell(parent, parentRun, { _tag: "child_stopped", id }),
   });
 
 /** Stop one running process. Any other id is a no-op. */

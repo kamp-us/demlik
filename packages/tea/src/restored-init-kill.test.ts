@@ -39,7 +39,7 @@ describe("restored init with a fast Sub", () => {
     const writesFile = join(dir, "writes.log");
     await writeFile(
       stateFile,
-      JSON.stringify({ type: "pending", life: 0, pulses: 0 }),
+      JSON.stringify({ _tag: "pending", life: 0, pulses: 0 }),
     );
     for (let life = 1; life <= 3; life++) {
       let output = "";
@@ -66,8 +66,8 @@ describe("restored init with a fast Sub", () => {
         );
       });
       try {
-        const state = { type: "working", life, pulses: 1 };
-        expect(await ready).toEqual({ type: "settled", state });
+        const state = { _tag: "working", life, pulses: 1 };
+        expect(await ready).toEqual({ _tag: "settled", state });
         expect(JSON.parse(await readFile(stateFile, "utf8"))).toEqual(state);
         expect((await readFile(writesFile, "utf8")).trim().split("\n")).toEqual(
           Array.from({ length: life }, (_, i) => String(i + 1)),

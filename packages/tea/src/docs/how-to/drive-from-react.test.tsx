@@ -41,10 +41,10 @@ function Downloader() {
       <p>
         {state.phase}: {state.received}/{state.total}
       </p>
-      <button type="button" onClick={() => send({ type: "start", total: 3 })}>
+      <button type="button" onClick={() => send({ _tag: "start", total: 3 })}>
         Start
       </button>
-      <button type="button" onClick={() => send({ type: "chunk", size: 1 })}>
+      <button type="button" onClick={() => send({ _tag: "chunk", size: 1 })}>
         Receive chunk
       </button>
     </div>
@@ -68,7 +68,7 @@ function Fetcher() {
   return (
     <button
       type="button"
-      onClick={() => send({ type: "fetch", url: "/a", at: 0 })}
+      onClick={() => send({ _tag: "fetch", url: "/a", at: 0 })}
     >
       {state.phase}: {state.body}
     </button>
@@ -82,8 +82,8 @@ interface JobState {
   readonly polls: number;
 }
 type JobMsg =
-  | { readonly type: "watch"; readonly jobId: string }
-  | { readonly type: "poll_due"; readonly jobId: string };
+  | { readonly _tag: "watch"; readonly jobId: string }
+  | { readonly _tag: "poll_due"; readonly jobId: string };
 
 const jobWatcher = defineMachine({
   types: { model: {} as JobState, msg: {} as JobMsg, sub: {} as JobPoll },
@@ -94,7 +94,7 @@ const jobWatcher = defineMachine({
   },
   subs: [
     {
-      type: "job_poll",
+      _tag: "job_poll",
       deps: (s) => (s.jobId === null ? null : { jobId: s.jobId }),
     },
   ],
@@ -109,7 +109,7 @@ function JobWatcher() {
     subscribe: {
       job_poll: (sub, _ctx, dispatch) => {
         const timer = setInterval(
-          () => dispatch({ type: "poll_due", jobId: sub.deps.jobId }),
+          () => dispatch({ _tag: "poll_due", jobId: sub.deps.jobId }),
           2_000,
         );
         return () => clearInterval(timer);
@@ -119,7 +119,7 @@ function JobWatcher() {
   // #endregion subscribe
 
   return (
-    <button type="button" onClick={() => send({ type: "watch", jobId: "j1" })}>
+    <button type="button" onClick={() => send({ _tag: "watch", jobId: "j1" })}>
       {state.polls}
     </button>
   );
@@ -141,7 +141,7 @@ function SavedDownloader() {
   // #endregion store
 
   return (
-    <button type="button" onClick={() => send({ type: "chunk", size: 1 })}>
+    <button type="button" onClick={() => send({ _tag: "chunk", size: 1 })}>
       {state.phase}
     </button>
   );
@@ -167,7 +167,7 @@ function Progress() {
       <p>
         {state.received}/{state.total}
       </p>
-      <button type="button" onClick={() => send({ type: "chunk", size: 1 })}>
+      <button type="button" onClick={() => send({ _tag: "chunk", size: 1 })}>
         Receive chunk
       </button>
     </div>
@@ -192,12 +192,12 @@ const finished = finish(runtime);
 import type { ViewHandle } from "@demlik/tea/react";
 
 type TileId = "inbox" | "notes" | "timer";
-type TileMsg = { readonly type: "increment" };
+type TileMsg = { readonly _tag: "increment" };
 type DeskModel = {
   readonly views: Readonly<Record<TileId, { readonly n: number }>>;
 };
 type DeskMsg = {
-  readonly type: "tile";
+  readonly _tag: "tile";
   readonly id: TileId;
   readonly msg: TileMsg;
 };
@@ -205,10 +205,10 @@ type DeskRun = ViewHandle<DeskModel, DeskMsg>;
 
 function Tile({ run, id }: { run: DeskRun; id: TileId }) {
   const [view, send] = useRuntime(run, (m) => m.views[id]);
-  const sendToTile = (msg: TileMsg) => send({ type: "tile", id, msg });
+  const sendToTile = (msg: TileMsg) => send({ _tag: "tile", id, msg });
 
   return (
-    <button type="button" onClick={() => sendToTile({ type: "increment" })}>
+    <button type="button" onClick={() => sendToTile({ _tag: "increment" })}>
       {id}: {view.n}
     </button>
   );
@@ -246,9 +246,9 @@ interface EndingState {
   readonly watching: boolean;
 }
 type EndingMsg =
-  | { readonly type: "reach" }
-  | { readonly type: "watch" }
-  | { readonly type: "explode" };
+  | { readonly _tag: "reach" }
+  | { readonly _tag: "watch" }
+  | { readonly _tag: "explode" };
 
 const reducerThrew = new Error("reducer threw");
 const subFailed = new Error("sub failed");
@@ -265,7 +265,7 @@ const ending = defineMachine({
   },
   subs: [
     {
-      type: "watch",
+      _tag: "watch",
       deps: (s) => (s.watching ? { on: true as const } : null),
     },
   ],
@@ -352,7 +352,7 @@ describe("docs/how-to/drive-from-react.md — it renders", () => {
     expect(container.querySelector("p")?.textContent).toBe("0/0");
 
     await act(async () => {
-      await runtime.dispatch({ type: "start", total: 1 });
+      await runtime.dispatch({ _tag: "start", total: 1 });
     });
     await click("Receive chunk");
     expect(container.querySelector("p")?.textContent).toBe("1/1");
@@ -442,7 +442,7 @@ describe("docs/how-to/drive-from-react.md — `finish` and `send` in a host with
   }
 
   it("a terminal State: `stop()` ran and `finished` holds the State", async () => {
-    const { answer, logged, onError } = await endRun({ type: "reach" });
+    const { answer, logged, onError } = await endRun({ _tag: "reach" });
 
     expect(answer?.reached).toBe(true);
     expect(logged).not.toHaveBeenCalled();
@@ -451,7 +451,7 @@ describe("docs/how-to/drive-from-react.md — `finish` and `send` in a host with
   });
 
   it("a Sub failure: `stop()` ran, `done()` reports `SubFailedError`, and the sink hears the Sub's throw once", async () => {
-    const { answer, logged, onError } = await endRun({ type: "watch" });
+    const { answer, logged, onError } = await endRun({ _tag: "watch" });
 
     expect(answer).toBeUndefined();
     const [, error] =
@@ -465,7 +465,7 @@ describe("docs/how-to/drive-from-react.md — `finish` and `send` in a host with
   });
 
   it("a reducer throw: `stop()` ran, `done()` reports the failure, and the sink hears it once", async () => {
-    const { answer, logged, onError } = await endRun({ type: "explode" });
+    const { answer, logged, onError } = await endRun({ _tag: "explode" });
 
     expect(answer).toBeUndefined();
     expect(logged).toHaveBeenCalledWith("run failed", reducerThrew);

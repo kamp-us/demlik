@@ -88,7 +88,7 @@ export interface Fold<S, M, C> {
  */
 export function foldEvents<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,

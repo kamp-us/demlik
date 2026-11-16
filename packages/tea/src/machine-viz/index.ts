@@ -94,7 +94,7 @@ type Edge =
  */
 export function toMermaid<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -186,7 +186,7 @@ interface TransitionsCtx<S, M> {
  */
 function emitTransitions<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -209,7 +209,7 @@ function emitTransitions<
   // (invariant 2: fresh-boot branch returns a starting state). Read `next.type`.
   if (ctx.hasCtx) {
     const [initState] = machine.init(null, ctx.ctx as Ctx);
-    const initType = (initState as unknown as { type: string }).type;
+    const initType = (initState as unknown as { _tag: string })._tag;
     lines.push(`  [*] --> ${safeId(initType)}`);
   } else {
     lines.push(
@@ -258,7 +258,7 @@ function emitTransitions<
  * the cell) degrades to structural rather than crashing the whole diagram —
  * the diagram is a best-effort visualization, not a correctness gate.
  */
-function resolveEdge<S, M extends { type: string }, C extends Cmd>(
+function resolveEdge<S, M extends { _tag: string }, C extends Cmd>(
   row: Record<string, (state: S, msg: M) => readonly [S, readonly C[]]>,
   stateType: string,
   msgType: string,
@@ -279,7 +279,7 @@ function resolveEdge<S, M extends { type: string }, C extends Cmd>(
   }
   try {
     const [next] = cell(sampleState, sampleMsg);
-    const to = (next as unknown as { type: string }).type;
+    const to = (next as unknown as { _tag: string })._tag;
     return { kind: "resolved", from: stateType, to, msg: msgType };
   } catch {
     // Mismatched sample → cannot resolve. Fall back to structural.
@@ -298,7 +298,7 @@ function resolveEdge<S, M extends { type: string }, C extends Cmd>(
  */
 function emitSubscriptions<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -317,7 +317,7 @@ function emitSubscriptions<
     if (sample === undefined) continue;
     const subTypes = entries.flatMap((entry) => {
       const sub = desiredSub(entry, sample);
-      return sub === null ? [] : [sub.type];
+      return sub === null ? [] : [sub._tag];
     });
     const body =
       subTypes.length === 0

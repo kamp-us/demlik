@@ -23,7 +23,7 @@ import { run } from "./promise";
 // ───────────────────────────────────────────────────────────────────────────
 
 type NoteState = { readonly notes: readonly string[] };
-type NoteMsg = { readonly type: "note"; readonly text: string };
+type NoteMsg = { readonly _tag: "note"; readonly text: string };
 
 function parseNotes(raw: unknown): NoteState | null {
   if (typeof raw !== "object" || raw === null) return null;
@@ -111,7 +111,7 @@ describe.each(factories)("$name — delete()", (factory) => {
       const onError = () => {};
       const first = await run(noteMachine, { ctx: undefined, store, onError })
         .ready;
-      await first.dispatch({ type: "note", text: "old" });
+      await first.dispatch({ _tag: "note", text: "old" });
       await first.stop();
 
       await store.delete();
@@ -129,12 +129,12 @@ describe.each(factories)("$name — delete()", (factory) => {
       store,
       onError: () => {},
     }).ready;
-    await live.dispatch({ type: "note", text: "one" });
+    await live.dispatch({ _tag: "note", text: "one" });
 
     await store.delete();
 
     await expect(
-      live.dispatch({ type: "note", text: "two" }),
+      live.dispatch({ _tag: "note", text: "two" }),
     ).rejects.toBeInstanceOf(StoreConflictError);
   });
 });

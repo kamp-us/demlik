@@ -61,10 +61,10 @@ type State = {
   readonly opens: number;
 };
 type Msg =
-  | { readonly type: "frame"; readonly data: string }
-  | { readonly type: "stream_error" }
-  | { readonly type: "stream_open" }
-  | { readonly type: "disarm" };
+  | { readonly _tag: "frame"; readonly data: string }
+  | { readonly _tag: "stream_error" }
+  | { readonly _tag: "stream_open" }
+  | { readonly _tag: "disarm" };
 
 const update: Reducer<State, Msg, never> = {
   frame: (s, m) => [{ ...s, frames: [...s.frames, m.data] }, []],
@@ -85,7 +85,7 @@ function streamMachine() {
     update,
     subs: [
       {
-        type: "stream",
+        _tag: "stream",
         deps: (s) => (s.armed ? { url: "https://x/sse" } : null),
       },
     ],
@@ -94,9 +94,9 @@ function streamMachine() {
 
 const subscribe = {
   stream: fromEventSource<StreamSub, Msg>({
-    onMessage: (data) => (data === "drop-me" ? null : { type: "frame", data }),
-    onError: () => ({ type: "stream_error" }),
-    onOpen: () => ({ type: "stream_open" }),
+    onMessage: (data) => (data === "drop-me" ? null : { _tag: "frame", data }),
+    onError: () => ({ _tag: "stream_error" }),
+    onOpen: () => ({ _tag: "stream_open" }),
   }),
 };
 
@@ -149,7 +149,7 @@ describe("fromEventSource — subscribe → deliver → cleanup against a real r
     const rt = await run(streamMachine(), {
       subscribe: {
         stream: fromEventSource<StreamSub, Msg>({
-          onMessage: (data) => ({ type: "frame", data }),
+          onMessage: (data) => ({ _tag: "frame", data }),
         }),
       },
     }).ready;
@@ -172,7 +172,7 @@ describe("fromEventSource — subscribe → deliver → cleanup against a real r
     const rt = await run(streamMachine(), { subscribe }).ready;
     const source = FakeEventSource.instances[0];
 
-    await rt.dispatch({ type: "disarm" });
+    await rt.dispatch({ _tag: "disarm" });
     expect(source.listenerCount("message")).toBe(0);
     expect(source.listenerCount("error")).toBe(0);
     expect(source.listenerCount("open")).toBe(0);

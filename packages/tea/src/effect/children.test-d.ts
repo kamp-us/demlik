@@ -18,7 +18,7 @@ import {
 } from "./index";
 
 type ParentState = { readonly stopped: readonly string[] };
-type ParentMsg = { readonly type: "child_stopped"; readonly id: string };
+type ParentMsg = { readonly _tag: "child_stopped"; readonly id: string };
 const parent = defineMachine({
   types: { model: {} as ParentState, msg: {} as ParentMsg },
   init: (loaded) => [loaded ?? { stopped: [] }, []],
@@ -31,7 +31,7 @@ declare const parentRun: EffectRun<ParentState, ParentMsg>;
 declare const fromRun: EffectBootingRun<ParentState, ParentMsg>;
 declare const handBuilt: EffectRuntime<ParentState, ParentMsg>;
 declare const handBuiltBooting: EffectBootingRuntime<ParentState, ParentMsg>;
-const msg = { type: "child_stopped", id: "a" } as const;
+const msg = { _tag: "child_stopped", id: "a" } as const;
 
 const rest = {
   start: () => Effect.void,

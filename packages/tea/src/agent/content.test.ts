@@ -129,12 +129,12 @@ describe("ContentPart — the provider-neutral part shape", () => {
   });
 
   it("contentParts reads a string as one text part and passes parts through", () => {
-    expect(contentParts(INPUT)).toEqual([{ type: "text", text: INPUT }]);
+    expect(contentParts(INPUT)).toEqual([{ _tag: "text", text: INPUT }]);
     expect(contentParts(SHOT_PARTS)).toBe(SHOT_PARTS);
   });
 
   it("omitMedia turns images and files into placeholders and leaves text alone", () => {
-    const text = { type: "text", text: "keep me" } as const;
+    const text = { _tag: "text", text: "keep me" } as const;
     const out = omitMedia([
       text,
       SHOT_PARTS[1] as ContentPart,
@@ -146,8 +146,8 @@ describe("ContentPart — the provider-neutral part shape", () => {
     ]);
     expect(out).toEqual([
       text,
-      { type: "text", text: IMAGE_OMITTED },
-      { type: "text", text: FILE_OMITTED },
+      { _tag: "text", text: IMAGE_OMITTED },
+      { _tag: "text", text: FILE_OMITTED },
     ]);
     expect(out[0]).toBe(text);
     expect(IMAGE_OMITTED).toBe("[image omitted]");
@@ -328,7 +328,7 @@ describe("back-compat: a Model persisted with string content (#330)", () => {
     const user = second.brain[0]?.find((m) => m.role === "user");
     expect(user).toEqual({ role: "user", content: INPUT });
     expect(user?.role === "user" && contentParts(user.content)).toEqual([
-      { type: "text", text: INPUT },
+      { _tag: "text", text: INPUT },
     ]);
   });
 });
@@ -349,8 +349,8 @@ describe("compaction folds images and files to placeholders (#330)", () => {
     expect(tools).toHaveLength(2);
     for (const m of tools) {
       expect(m.role === "tool" && m.parts).toEqual([
-        { type: "text", text: "A 1280px-wide capture." },
-        { type: "text", text: IMAGE_OMITTED },
+        { _tag: "text", text: "A 1280px-wide capture." },
+        { _tag: "text", text: IMAGE_OMITTED },
       ]);
     }
     // The live brain call before the fold still saw the image.

@@ -53,7 +53,7 @@ interface BoundOpts<S, M> {
  */
 export interface BoundMachine<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   // `Ctx` is a phantom-style parameter — present for consumers that want to
@@ -116,7 +116,7 @@ export interface BoundMachine<
  */
 export function bindMachine<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,

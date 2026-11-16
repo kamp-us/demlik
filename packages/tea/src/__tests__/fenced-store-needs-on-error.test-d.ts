@@ -32,7 +32,7 @@ import { run } from "../promise";
 import { useMachine } from "../react/index";
 
 type State = { readonly count: number };
-type Msg = { readonly type: "bump" };
+type Msg = { readonly _tag: "bump" };
 
 const machine = defineMachine({
   types: { model: {} as State, msg: {} as Msg, ctx: undefined },

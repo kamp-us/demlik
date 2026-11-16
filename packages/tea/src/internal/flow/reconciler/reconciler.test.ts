@@ -99,7 +99,7 @@ const diff = (d: Desired, actual: readonly Node[]): readonly Change[] => {
 const baseConfig = {
   desired,
   diff,
-  apply: (change: Change): ApplyCmd => ({ type: "apply_change", change }),
+  apply: (change: Change): ApplyCmd => ({ _tag: "apply_change", change }),
   idOf: (change: Change): string => change.nodeId,
   firstPage: 0,
   nextCursor: (p: Page): number | null => (p.last ? null : p.offset + 1),
@@ -139,12 +139,12 @@ const errMsg = (cause: unknown, at: number): PageErrMsg =>
     at,
   );
 const fetchCmd = (offset: number): ScanPageCmd<number> => ({
-  type: "resilient_run",
+  _tag: "resilient_run",
   key: PAGE_KEY,
   input: offset,
 });
 const applyCmd = (nodeId: string, to: number): ApplyCmd => ({
-  type: "apply_change",
+  _tag: "apply_change",
   change: { nodeId, to },
 });
 
@@ -422,7 +422,7 @@ describe("createReconciler — scan resilience", () => {
     [s] = rec.scan(s, 0);
     [s] = rec.pageErr(s, errMsg("boom", 0));
     const [s2, cmds] = rec.onTimer(s, {
-      type: "deadline_exceeded",
+      _tag: "deadline_exceeded",
       id: `resilient:retry:${PAGE_KEY}`,
       atMs: 0,
     });
@@ -437,7 +437,7 @@ describe("createReconciler — scan resilience", () => {
     // maxAttempts 3 → attempts 0,1,2 retry; the 3rd recorded failure gives up.
     for (let i = 0; i < 3; i++) {
       [s] = rec.onTimer(s, {
-        type: "deadline_exceeded",
+        _tag: "deadline_exceeded",
         id: `resilient:retry:${PAGE_KEY}`,
         atMs: 0,
       });
@@ -455,7 +455,7 @@ describe("createReconciler — scan resilience", () => {
     [s] = rec.pageOk(s, okMsg(page(0, [node("a", 1)], true), 0)); // scan done → applying
     const before = s;
     const [after, cmds] = rec.onTimer(s, {
-      type: "deadline_exceeded",
+      _tag: "deadline_exceeded",
       id: `resilient:retry:${PAGE_KEY}`,
       atMs: 0,
     });
@@ -494,10 +494,10 @@ interface HostState {
   readonly rec: ReconcilerState<Node, Change, Page>;
 }
 type HostMsg =
-  | { type: "reconcile"; at: number }
+  | { _tag: "reconcile"; at: number }
   | PageOkMsg<Page>
   | PageErrMsg
-  | { type: "change_done"; change: Change; at: number }
+  | { _tag: "change_done"; change: Change; at: number }
   | ReconcilerTimerMsg;
 type HostCmd = ScanPageCmd<number> | ApplyCmd;
 
@@ -538,7 +538,7 @@ function makeMachine(
         return [{ rec: slice }, cmds];
       },
     },
-    subs: [{ type: "timer", deps: (s: HostState) => rec.timer(s.rec) }],
+    subs: [{ _tag: "timer", deps: (s: HostState) => rec.timer(s.rec) }],
   });
   return { rec, machine };
 }
@@ -559,7 +559,7 @@ describe("createReconciler — wired in a machine (replay)", () => {
     bound.expectCmdSequence(
       {
         msgs: [
-          { type: "reconcile", at: 0 },
+          { _tag: "reconcile", at: 0 },
           okMsg(page(0, [node("a", 1), node("c", 0)], true), 0),
         ],
       },
@@ -570,11 +570,11 @@ describe("createReconciler — wired in a machine (replay)", () => {
   it("a full reconcile: scan two pages, plan, apply each change, finish done", () => {
     const { state, cmds } = bound.replay({
       msgs: [
-        { type: "reconcile", at: 0 },
+        { _tag: "reconcile", at: 0 },
         okMsg(page(0, [node("a", 1)], false), 0),
         okMsg(page(1, [node("b", 2), node("c", 0)], true), 0),
-        { type: "change_done", change: { nodeId: "a", to: 2 }, at: 0 },
-        { type: "change_done", change: { nodeId: "c", to: 2 }, at: 0 },
+        { _tag: "change_done", change: { nodeId: "a", to: 2 }, at: 0 },
+        { _tag: "change_done", change: { nodeId: "c", to: 2 }, at: 0 },
       ],
     });
     expect(state.rec.phase).toBe("done");
@@ -589,7 +589,7 @@ describe("createReconciler — wired in a machine (replay)", () => {
 
   it("reconcile → scan err leaves a retry + deadline timer desired", () => {
     const { state, subs } = bound.replay({
-      msgs: [{ type: "reconcile", at: 0 }, errMsg("e", 0)],
+      msgs: [{ _tag: "reconcile", at: 0 }, errMsg("e", 0)],
     });
     expect(rec.deadlines(state.rec)).toEqual([
       deadlineSub(`resilient:retry:${PAGE_KEY}`, 0),
@@ -598,11 +598,11 @@ describe("createReconciler — wired in a machine (replay)", () => {
     // The built-in `timer` Sub arms the soonest of them — the retry.
     expect(subs).toEqual([
       expect.objectContaining({
-        type: "timer",
+        _tag: "timer",
         deps: {
           ms: 0,
           msg: {
-            type: "deadline_exceeded",
+            _tag: "deadline_exceeded",
             id: `resilient:retry:${PAGE_KEY}`,
             atMs: 0,
           },
@@ -641,7 +641,7 @@ describe("createReconciler — wired in a machine (replay)", () => {
 
 type RePlanHostMsg =
   | HostMsg
-  | { type: "re_plan"; at: number; changes: readonly Change[] };
+  | { _tag: "re_plan"; at: number; changes: readonly Change[] };
 
 function makeRePlanMachine() {
   // NOTE: NO `idOf` — exercises the DEFAULT change-id. Position-keyed default
@@ -684,7 +684,7 @@ function makeRePlanMachine() {
         return [{ rec: slice }, cmds];
       },
     },
-    subs: [{ type: "timer", deps: (s: HostState) => rec.timer(s.rec) }],
+    subs: [{ _tag: "timer", deps: (s: HostState) => rec.timer(s.rec) }],
   });
   return { rec, machine };
 }
@@ -696,14 +696,14 @@ describe("createReconciler — wired re-plan keeps the ledger change-identity-ke
   it("a re-plan applies a NEW change that lands at an already-applied slot (no silent drop)", () => {
     const { state, cmds } = bound.replay({
       msgs: [
-        { type: "reconcile", at: 0 },
+        { _tag: "reconcile", at: 0 },
         // a@1 lags → plan [a]; b & c at target.
         okMsg(page(0, [node("a", 1), node("b", 2), node("c", 2)], true), 0),
         // confirm a → ledger holds a's identity; reconcile would be done.
-        { type: "change_done", change: { nodeId: "a", to: 2 }, at: 0 },
+        { _tag: "change_done", change: { nodeId: "a", to: 2 }, at: 0 },
         // DESIRED change → re-plan with a brand-new, never-applied change `b→3`
         // that now sits at plan index 0 (the slot `a` occupied).
-        { type: "re_plan", at: 0, changes: [{ nodeId: "b", to: 3 }] },
+        { _tag: "re_plan", at: 0, changes: [{ nodeId: "b", to: 3 }] },
       ],
     });
 
@@ -718,12 +718,12 @@ describe("createReconciler — wired re-plan keeps the ledger change-identity-ke
   it("after the re-plan's change confirms, the reconcile reaches done with both changes in the ledger", () => {
     const { state } = bound.replay({
       msgs: [
-        { type: "reconcile", at: 0 },
+        { _tag: "reconcile", at: 0 },
         okMsg(page(0, [node("a", 1), node("b", 2), node("c", 2)], true), 0),
-        { type: "change_done", change: { nodeId: "a", to: 2 }, at: 0 },
-        { type: "re_plan", at: 0, changes: [{ nodeId: "b", to: 3 }] },
+        { _tag: "change_done", change: { nodeId: "a", to: 2 }, at: 0 },
+        { _tag: "re_plan", at: 0, changes: [{ nodeId: "b", to: 3 }] },
         // confirm the re-planned change → reconcile settles done.
-        { type: "change_done", change: { nodeId: "b", to: 3 }, at: 0 },
+        { _tag: "change_done", change: { nodeId: "b", to: 3 }, at: 0 },
       ],
     });
 
@@ -826,7 +826,7 @@ describe("createReconciler — properties", () => {
               break;
             case "retry":
               [s, cmds] = rec.onTimer(s, {
-                type: "deadline_exceeded",
+                _tag: "deadline_exceeded",
                 id: `resilient:retry:${PAGE_KEY}`,
                 atMs: a.at,
               });
@@ -834,8 +834,8 @@ describe("createReconciler — properties", () => {
           }
           // A single scan-fetch, OR a single apply — never a fan-out. (The two
           // never co-occur: scan emits fetches, the apply loop emits applies.)
-          const fetches = cmds.filter((c) => c.type === "resilient_run").length;
-          const applies = cmds.filter((c) => c.type === "apply_change").length;
+          const fetches = cmds.filter((c) => c._tag === "resilient_run").length;
+          const applies = cmds.filter((c) => c._tag === "apply_change").length;
           if (fetches > 1 || applies > 1) return false;
           if (fetches + applies > 1) return false;
         }
@@ -875,7 +875,7 @@ describe("createReconciler — properties", () => {
           // Drive the apply loop to completion.
           let guard = 0;
           while (s.phase === "applying" && guard++ < 10) {
-            const next = cmds.find((c) => c.type === "apply_change") as
+            const next = cmds.find((c) => c._tag === "apply_change") as
               | ApplyCmd
               | undefined;
             if (!next) break;
@@ -900,7 +900,7 @@ describe("createReconciler — properties", () => {
     const msgArb = fc.array(
       fc.oneof(
         fc.record({
-          type: fc.constant("reconcile" as const),
+          _tag: fc.constant("reconcile" as const),
           at: fc.nat(10_000),
         }),
         fc
@@ -914,7 +914,7 @@ describe("createReconciler — properties", () => {
           })
           .map(({ result, at }) => okMsg(result, at)),
         fc.record({
-          type: fc.constant("change_done" as const),
+          _tag: fc.constant("change_done" as const),
           change: fc.constant({ nodeId: "a", to: 2 } as const),
           at: fc.nat(10_000),
         }),
@@ -980,7 +980,7 @@ describe("createReconciler — properties", () => {
           );
           let guard = 0;
           while (done.phase === "applying" && guard++ < 10) {
-            const next = cmds.find((c) => c.type === "apply_change") as
+            const next = cmds.find((c) => c._tag === "apply_change") as
               | ApplyCmd
               | undefined;
             if (!next) break;
@@ -996,7 +996,7 @@ describe("createReconciler — properties", () => {
           [failed] = rec.scan(failed, at);
           for (let i = 0; i < 3; i++) {
             [failed] = rec.onTimer(failed, {
-              type: "deadline_exceeded",
+              _tag: "deadline_exceeded",
               id: `resilient:retry:${PAGE_KEY}`,
               atMs: at,
             });
