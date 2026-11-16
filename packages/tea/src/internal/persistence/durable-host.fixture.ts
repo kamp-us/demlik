@@ -1,5 +1,6 @@
 /** Shared crash contract: engines translate only their handler and handle doors. */
-import { expect } from "vitest";
+import fc from "fast-check";
+import { expect, test } from "vitest";
 import { z } from "zod";
 import type { DispatchOptions, LoggedStore } from "../../index";
 import { appliedEffects, defineMachine, idempotentEffect } from "../../index";
@@ -85,20 +86,21 @@ class Disk extends Map<string, string> {
 /** Crash after a selected acknowledged-or-uncertain physical write, including birth. */
 export async function execute(
   driver: Driver,
-  cut?: number,
+  cut?: number | readonly number[],
   messageCount = 200,
 ) {
   let disk: Disk;
   let writes = 0;
-  let crashed = false;
+  const cuts = new Set(typeof cut === "number" ? [cut] : cut);
+  const crashedAt = new Set<number>();
   const attempts = new Map<string, number>();
   const effects = new Map<string, number>();
   const receipts = new Set<string>();
   let receiver = appliedEffects();
   const write = () => {
     writes += 1;
-    if (!crashed && cut === writes) {
-      crashed = true;
+    if (cuts.has(writes)) {
+      crashedAt.add(writes);
       return true;
     }
     return false;
@@ -135,15 +137,17 @@ export async function execute(
   let live = await boot();
   for (let index = 0; index < messageCount; index += 1) {
     const msg: Msg = { _tag: "picked", file: `file-${index}.png` };
-    try {
-      await live.dispatch(msg, { id: msg.file });
-      if (disk.closed) throw new Dropped();
-    } catch (error) {
-      if (!disk.closed) throw error;
-      disk = new Disk(new Map(disk), write);
-      receiver = appliedEffects();
-      live = await boot();
-      await live.dispatch(msg, { id: msg.file });
+    for (;;) {
+      try {
+        await live.dispatch(msg, { id: msg.file });
+        if (disk.closed) throw new Dropped();
+        break;
+      } catch (error) {
+        if (!disk.closed) throw error;
+        disk = new Disk(new Map(disk), write);
+        receiver = appliedEffects();
+        live = await boot();
+      }
     }
   }
   const final = live.getState();
@@ -176,5 +180,37 @@ export async function execute(
     expect(attempts.get(key)).toBeGreaterThanOrEqual(1);
     expect(effects.get(key)).toBe(1);
   }
-  return { state: final, writes, crashed };
+  expect([...crashedAt]).toEqual([...cuts].sort((a, b) => a - b));
+  return { state: final, writes, crashed: crashedAt.size > 0 };
+}
+
+/** The same independent oracle on both engines: 100 long scripts plus a short exhaustive sweep. */
+export function crashContract(engine: string, driver: Driver): void {
+  let reference: ReturnType<typeof execute> | undefined;
+  // Ten independently seeded batches keep each default-timeout test small; all 100 runs still drive 200 messages.
+  test.each(
+    Array.from({ length: 10 }, (_, index) => index),
+  )(`T2 ${engine}: 200 messages, 10 crash scripts, batch %i of 10`, async (batch) => {
+    reference ??= execute(driver);
+    const baseline = await reference;
+    await fc.assert(
+      fc.asyncProperty(
+        fc.uniqueArray(fc.integer({ min: 1, max: baseline.writes }), {
+          minLength: 1,
+          maxLength: 3,
+        }),
+        async (cuts) => {
+          const recovered = await execute(driver, cuts);
+          expect(recovered.crashed).toBe(true);
+          expect(recovered.state).toEqual(baseline.state);
+        },
+      ),
+      { numRuns: 10, seed: (fc.readConfigureGlobal().seed ?? 42) + batch },
+    );
+  });
+  test(`T2 ${engine}: 12 messages, crash after every single store write`, async () => {
+    const baseline = await execute(driver, undefined, 12);
+    for (let cut = 1; cut <= baseline.writes; cut += 1)
+      await execute(driver, cut, 12);
+  });
 }
