@@ -126,16 +126,90 @@ const clock = defineMachine({
 
 // === owned: the identity filter drops a Msg addressed to another instance ===
 
-type OwnedMsg = { readonly _tag: "poke"; readonly to: string };
+type OwnedState = { readonly owner: unknown; readonly pokes: number };
+type OwnedMsg = { readonly _tag: "poke"; readonly to: unknown };
 
-const owned = defineMachine({
-  types: {
-    model: {} as { readonly owner: string; readonly pokes: number },
-    msg: {} as OwnedMsg,
+function ownedMachine(initial: OwnedState, declared = true) {
+  return defineMachine({
+    types: { model: {} as OwnedState, msg: {} as OwnedMsg },
+    init: (loaded) => [loaded ?? initial, []],
+    update: { poke: (m) => [{ ...m, pokes: m.pokes + 1 }, []] },
+    ...(declared
+      ? {
+          identity: {
+            ofState: (s: OwnedState) => s.owner,
+            ofMsg: (msg: OwnedMsg) => msg.to,
+          },
+        }
+      : {}),
+  });
+}
+
+const owned = ownedMachine({ owner: "a", pokes: 0 });
+
+export const identityCases = [
+  {
+    name: "no identity",
+    declared: false,
+    own: "r1",
+    addressed: "r2",
+    allowed: true,
   },
-  init: (loaded) => [loaded ?? { owner: "a", pokes: 0 }, []],
-  update: { poke: (m) => [{ ...m, pokes: m.pokes + 1 }, []] },
-  identity: { ofState: (s) => s.owner, ofMsg: (msg) => msg.to },
+  {
+    name: "ofMsg returns undefined",
+    declared: true,
+    own: "r1",
+    addressed: undefined,
+    allowed: true,
+  },
+  {
+    name: "ofState returns undefined",
+    declared: true,
+    own: undefined,
+    addressed: "r1",
+    allowed: true,
+  },
+  {
+    name: "equal primitives",
+    declared: true,
+    own: "r1",
+    addressed: "r1",
+    allowed: true,
+  },
+  {
+    name: "different primitives",
+    declared: true,
+    own: "r1",
+    addressed: "r2",
+    allowed: false,
+  },
+  {
+    name: "equal objects with different key order",
+    declared: true,
+    own: { a: "1", b: "2" },
+    addressed: { b: "2", a: "1" },
+    allowed: true,
+  },
+  {
+    name: "different objects",
+    declared: true,
+    own: { a: "1", b: "2" },
+    addressed: { a: "1", b: "9" },
+    allowed: false,
+  },
+].map(({ name, declared, own, addressed, allowed }) => {
+  const initial: OwnedState = { owner: own, pokes: 0 };
+  return {
+    name,
+    allowed,
+    initial,
+    machine: ownedMachine(initial, declared),
+    script: [{ _tag: "poke", to: addressed }] as const,
+  } satisfies ConformanceCase<OwnedState, OwnedMsg> & {
+    readonly name: string;
+    readonly allowed: boolean;
+    readonly initial: OwnedState;
+  };
 });
 
 // === latch: a Msg the current State has no cell for is refused, and the run goes on ===
