@@ -497,6 +497,18 @@ describe("doEventSourcedStore — readEvents (public log reader)", () => {
     expect(rows.some((r) => r.event._tag === "reset")).toBe(false);
   });
 
+  it("drops old type-keyed rows with the default parseEvent and reads _tag rows", async () => {
+    const backing = new Map<string, string>();
+    backing.set("@@es/evt/0000000000000001", JSON.stringify({ type: "inc" }));
+    backing.set("@@es/evt/0000000000000002", JSON.stringify({ _tag: "inc" }));
+    const { storage } = fakeStorage(backing);
+    const reader = doEventSourcedStore(storage, counter(), ctx);
+
+    expect(await collect(reader.readEvents())).toEqual([
+      { seq: 2, event: { _tag: "inc" } },
+    ]);
+  });
+
   it("is read-only — streaming the log mutates no storage", async () => {
     const backing = new Map<string, string>();
     await liveRun(backing, sampleMsgs, 100);
