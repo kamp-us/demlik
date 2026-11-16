@@ -12,5 +12,5 @@ test("T2 Promise: 200 messages, crashes between durable writes, 100 runs", async
     expect(recovered.crashed).toBe(true);
     expect(recovered.state).toEqual(reference.state);
     expect(new Set(recovered.state.files).size).toBe(200);
-  }), { numRuns: 100 });
+  }), { numRuns: Number(process.env.FC_NUMRUNS ?? 100) });
 });

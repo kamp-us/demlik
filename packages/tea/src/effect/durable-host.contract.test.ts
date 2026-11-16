@@ -28,5 +28,5 @@ test("T2 Effect: 200 messages, crashes between durable writes, 100 runs", async 
     const recovered = await execute(effectDriver, cut);
     expect(recovered.crashed).toBe(true);
     expect(recovered.state).toEqual(reference.state);
-  }), { numRuns: 100 });
+  }), { numRuns: Number(process.env.FC_NUMRUNS ?? 100) });
 });

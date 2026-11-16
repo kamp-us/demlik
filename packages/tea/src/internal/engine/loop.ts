@@ -857,10 +857,10 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
     for (const { id, effect } of owed) {
       if (gate === "abandoned" || session?.poisoned() || storeClosed) return;
       const own: Invocation = { id, failed: false, closed: false, ordinal: 0, detached: [], admissions: [] };
-      const send = (msg: M, terminal = false): void => {
+      const send = (msg: M, single = false): void => {
         if (own.closed) { report(new Error("Callback after delivery completion"), "follow-up"); return; }
-        const identity = messageId("answer", id, terminal ? 0 : ++own.ordinal);
-        const turn = admitLogged(msg, "loop", identity);
+        const inputId = messageId("answer", id, single ? 0 : ++own.ordinal);
+        const turn = admitLogged(msg, "loop", inputId);
         own.admissions.push(turn.admitted);
         turn.folded.catch(reportUndelivered);
       };
@@ -922,16 +922,16 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
     if (!recovering && disposition === "applied") await publishLogged(next, source.msg, cmds, owed);
   }
 
-  function admitLogged(msg: M, origin: "caller" | "loop", identity: string) {
-    const existing = turns.get(identity);
+  function admitLogged(msg: M, origin: "caller" | "loop", inputId: string) {
+    const existing = turns.get(inputId);
     if (existing) return existing;
     const at = Date.now();
-    const appended = admissionReady.then(() => session!.write((store) => store.appendMessage({ _tag: "message", id: identity, at, msg })));
+    const appended = admissionReady.then(() => session!.write((store) => store.appendMessage({ _tag: "message", id: inputId, at, msg })));
     const admitted = appended.then(() => {});
     // Reserve the turn synchronously; append acknowledgement never waits for a fold.
     const folded = enqueueStep(msg, origin, async () => stepLogged((await appended).entry.record));
     const turn = { admitted, folded };
-    turns.set(identity, turn);
+    turns.set(inputId, turn);
     admitted.catch(() => {});
     return turn;
   }

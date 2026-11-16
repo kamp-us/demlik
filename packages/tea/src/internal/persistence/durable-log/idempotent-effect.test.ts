@@ -1,3 +1,4 @@
+import { Refusal } from "../../../runtime-types";
 /**
  * Idempotent-effect brick — the receiver/effect-side dedup half (#227).
  *
@@ -248,6 +249,7 @@ describe("composition — the marker lives in the Store alongside State", () => 
     // — EVICTION — reload from the snapshot bytes.
     const reader = doStore<RunState>(storage, parse, { serialize });
     const loaded = reader.migrate(await reader.load());
+    if (loaded instanceof Refusal) throw loaded;
     expect(loaded).not.toBeNull();
     // Rebuild the guard from the reloaded set; the re-fire is swallowed.
     const reloaded = appliedEffects({
@@ -317,6 +319,7 @@ describe("composition — the marker lives in the Store alongside State", () => 
       { snapshotEvery: 100 },
     );
     const rebuilt = es2.store.migrate(await es2.store.load());
+    if (rebuilt instanceof Refusal) throw rebuilt;
     expect(rebuilt).not.toBeNull();
     // The applied set rebuilt from the folded log — both markers present.
     const reloaded = appliedEffects({
