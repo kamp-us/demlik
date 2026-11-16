@@ -841,9 +841,11 @@ export type LogStep<S, M, C> =
       readonly disposition: LogDisposition;
       readonly failure?: LogFailure;
     };
-/** The canonical deliveries assigned by a committed transition. */
-export interface LogCommit<C> {
+/** The decoded State and deliveries returned by a committed transition. */
+export interface LogCommit<S, C> {
   readonly version: number;
+  /** State decoded from the committed record. */
+  readonly state: S;
   readonly owed: readonly OwedEffect<C>[];
 }
 /** The result of acknowledging an owed delivery. */
@@ -856,7 +858,7 @@ export interface LoggedStore<S, M, C> extends Store<S> {
   readonly logged: true;
   readLog(): Promise<LogRead<S, M, C>>;
   appendMessage(message: LogMessage<M>): Promise<LogAppend<M>>;
-  commitStep(step: LogStep<S, M, C>): Promise<LogCommit<C>>;
+  commitStep(step: LogStep<S, M, C>): Promise<LogCommit<S, C>>;
   confirmEffect(id: DeliveryId): Promise<LogConfirmation>;
   checkpoint(): Promise<boolean>;
 }

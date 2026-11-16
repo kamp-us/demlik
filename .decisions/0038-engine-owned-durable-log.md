@@ -57,9 +57,9 @@ checkpoint. The engine never calls the inherited snapshot `save` on a log store.
   tail when available, including the State produced by supervised restart.
   Never run a committed reducer again. Consume pending sources before handing
   out surviving deliveries; recovery executes no historical command or Sub.
-- State and Cmd payloads must survive JSON serialization and schema validation
-  unchanged. Refuse lossy or normalized payloads before writing so a delivery
-  has the same value live and after wake. Message normalization remains allowed.
+- With a log store, the program sees Msg, State and Cmd values as the store
+  decoded them from the written bytes, both live and after wake. Refuse a
+  payload before writing only if encoding fails or its decoded form fails its schema.
 - The store assigns positive safe-integer delivery IDs, increasing monotonically
   with gaps permitted. Retain the high-water after confirmation. Every handout
   receives its persisted ID in a fresh invocation context.

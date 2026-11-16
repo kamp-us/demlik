@@ -53,6 +53,7 @@ import type { DeliveryId, Dispose, Sub, SubEntry } from "../../pure/core";
 import { deliveryId, desiredSub, detachWork, followUps } from "../../pure/core";
 import type {
   DispatchOptions,
+  LogCommit,
   LogDisposition,
   LogMessage,
   OnError,
@@ -74,7 +75,6 @@ import {
   logLedger,
   messageId,
   pendingMessages,
-  sameLogValue,
 } from "../persistence/durable-log/format";
 import { type InstalledStateRead, installedState } from "./installed-state";
 import { restore } from "./restore";
@@ -967,7 +967,7 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
     try {
       transition = update(state, source.msg);
     } catch (error) {
-      await session.write((store) =>
+      const committed = await session.write((store) =>
         store.commitStep({
           _tag: "message",
           sourceId: source.id,
@@ -981,45 +981,39 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
           },
         }),
       );
+      state = committed.state;
       consumed.add(source.id);
       throw error;
     }
     const disposition: LogDisposition =
       transition === null ? "ignored" : "applied";
     const [next, cmds] = transition ?? [state, []];
-    let owed: readonly OwedEffect<C>[];
+    let committed: LogCommit<S, C>;
     try {
-      owed = (
-        await session.write((store) =>
-          store.commitStep({
-            _tag: "message",
-            sourceId: source.id,
-            state: next,
-            cmds,
-            timers: [],
-            disposition,
-          }),
-        )
-      ).owed;
+      committed = await session.write((store) =>
+        store.commitStep({
+          _tag: "message",
+          sourceId: source.id,
+          state: next,
+          cmds,
+          timers: [],
+          disposition,
+        }),
+      );
     } catch (error) {
       saveStatus = { _tag: "failed", error };
       for (const ext of extensions) ext.saveFailed?.(next, error);
       throw error;
     }
     consumed.add(source.id);
-    if (
-      owed.length !== cmds.length ||
-      owed.some(
-        (row, i) =>
-          !Number.isSafeInteger(row.id) ||
-          row.id <= 0 ||
-          !sameLogValue(row.effect, cmds[i]),
-      )
-    )
-      throw new Error("Store returned noncanonical deliveries");
-    state = next;
+    state = committed.state;
     if (!recovering && disposition === "applied")
-      await publishLogged(next, source.msg, cmds, owed);
+      await publishLogged(
+        committed.state,
+        source.msg,
+        committed.owed.map(({ effect }) => effect),
+        committed.owed,
+      );
   }
 
   function admitLogged(msg: M, origin: "caller" | "loop", inputId: string) {
@@ -1132,13 +1126,13 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
             timers: [],
           }),
         );
-        if (
-          result.owed.length !== cmds.length ||
-          result.owed.some((row, i) => !sameLogValue(row.effect, cmds[i]))
-        )
-          throw new Error("Store returned noncanonical birth deliveries");
         admitReady();
-        await publishLogged(initial, undefined, cmds, result.owed);
+        await publishLogged(
+          result.state,
+          undefined,
+          result.owed.map(({ effect }) => effect),
+          result.owed,
+        );
         return;
       }
       state = committedState(log) as S;

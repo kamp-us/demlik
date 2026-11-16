@@ -34,7 +34,6 @@ import {
   logKey,
   logWriter,
   type PreparedLogWrite,
-  sameLogValue,
 } from "../internal/persistence/durable-log/format";
 import type { Cmd } from "../pure/core";
 import type { EventSourcedOptions, LoggedStore } from "../runtime-types";
@@ -198,9 +197,8 @@ export function memoryEventSourcedStore<
     async load() {
       return read().state();
     },
-    async save(state) {
-      if (!sameLogValue(state, read().state()))
-        throw new Error("Logged State can only change through commitStep");
+    async save() {
+      throw new Error("Logged State can only change through commitStep");
     },
     migrate: schemaMigrate(options.state),
     async readLog() {

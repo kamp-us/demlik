@@ -188,35 +188,6 @@ export function pendingMessages<S, M, C>(
   );
 }
 
-/** Compare codec values strictly, including own-key presence and array shape. */
-export function sameLogValue(left: unknown, right: unknown): boolean {
-  if (Object.is(left, right)) return true;
-  if (
-    typeof left !== "object" ||
-    left === null ||
-    typeof right !== "object" ||
-    right === null
-  )
-    return false;
-  const prototype = Object.getPrototypeOf(left);
-  if (
-    prototype !== Object.getPrototypeOf(right) ||
-    (prototype !== Object.prototype &&
-      prototype !== Array.prototype &&
-      prototype !== null)
-  )
-    return false;
-  const keys = Reflect.ownKeys(left);
-  return (
-    keys.length === Reflect.ownKeys(right).length &&
-    keys.every(
-      (key) =>
-        Object.hasOwn(right, key) &&
-        sameLogValue(Reflect.get(left, key), Reflect.get(right, key)),
-    )
-  );
-}
-
 /** Query applied sources in commit order with inclusive, gap-free query positions. */
 export function logUpdates<S, M, C>(
   log: LogRead<S, M, C>,
@@ -380,16 +351,6 @@ export function logWriter<S, M, C>(options: EventSourcedOptions<S, M, C>) {
     const bytes = JSON.stringify(frame);
     const raw = object(JSON.parse(bytes));
     const canonical = parseRecord(raw.record, options);
-    if (record._tag === "birth" || record._tag === "step") {
-      if (
-        canonical._tag !== record._tag ||
-        !sameLogValue(record.state, canonical.state) ||
-        !sameLogValue(record.owed, canonical.owed)
-      )
-        throw new Error(
-          "Durable State and Cmd must survive the schema/JSON round trip unchanged",
-        );
-    }
     const row = { seq: frame.seq, record: canonical };
     return {
       suffix: frame.seq === 1 ? "" : `/${frame.seq}`,
@@ -422,8 +383,7 @@ export function logWriter<S, M, C>(options: EventSourcedOptions<S, M, C>) {
           appended: false,
           entry: existing.entry,
         });
-      const canonical = parseMessage(message, options.message);
-      return prepare(canonical, null, (row) => ({
+      return prepare(message, null, (row) => ({
         version: row.seq,
         appended: true,
         entry: row as PersistedLogRecord<LogMessage<M>>,
@@ -431,12 +391,13 @@ export function logWriter<S, M, C>(options: EventSourcedOptions<S, M, C>) {
     },
     commit(
       step: LogStep<S, M, C>,
-    ): LogCommit<C> | PreparedLogWrite<LogCommit<C>> {
+    ): LogCommit<S, C> | PreparedLogWrite<LogCommit<S, C>> {
       const existing =
         step._tag === "birth" ? birth : sources.get(step.sourceId)?.step;
       if (existing)
         return structuredClone({
           version: records.length,
+          state: existing.state,
           owed: existing.owed.map(({ id, effect }) => ({ id, effect })),
         });
       if (
@@ -479,6 +440,7 @@ export function logWriter<S, M, C>(options: EventSourcedOptions<S, M, C>) {
           throw new Error("Invalid committed record");
         return {
           version: row.seq,
+          state: r.state,
           owed: r.owed.map(({ id, effect }) => ({ id, effect })),
         };
       });

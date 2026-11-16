@@ -90,7 +90,7 @@ test("one atomic Map write stores State, all deliveries and the source receipt; 
   await expect(
     store.save({ files: ["replacement"], uploaded: [] }),
   ).rejects.toThrow();
-  await expect(store.save(step.state)).resolves.toBeUndefined();
+  await expect(store.save(step.state)).rejects.toThrow("commitStep");
 });
 
 test("manual and automatic checkpoints share an applied-message baseline and retain queries and receipts", async () => {
@@ -238,7 +238,7 @@ test.each([
   ["birth", "command"],
   ["step", "state"],
   ["step", "command"],
-] as const)("refuses schema-normalized %s %s before writing", async (phase, changed) => {
+] as const)("schema-normalized %s %s returns decoded State and Cmd", async (phase, changed) => {
   const disk = new Map<string, string>();
   const store = memoryEventSourcedStore(disk, {
     state: z.object({ value: z.string().trim() }),
@@ -260,7 +260,6 @@ test.each([
       msg: { _tag: "go" },
     });
   }
-  const before = new Map(disk);
   const payload = {
     state: { value: changed === "state" ? " hello " : "hello" },
     cmds: [
@@ -280,8 +279,21 @@ test.each([
           disposition: "applied",
           ...payload,
         });
-  await expect(result).rejects.toThrow("round trip unchanged");
-  expect(disk).toEqual(before);
+  const committed = await result;
+  expect(committed.state).toEqual({ value: "hello" });
+  expect(committed.owed).toEqual([
+    { id: 1, effect: { _tag: "upload", value: "hello" } },
+  ]);
+  expect(
+    await memoryEventSourcedStore(new Map(disk), {
+      state: z.object({ value: z.string().trim() }),
+      message: z.object({ _tag: z.literal("go") }),
+      command: z.object({
+        _tag: z.literal("upload"),
+        value: z.string().trim(),
+      }),
+    }).load(),
+  ).toEqual(committed.state);
 });
 
 test("valid delivered payload is identical live and after wake for the same delivery ID", async () => {

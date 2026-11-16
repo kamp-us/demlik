@@ -116,7 +116,7 @@ import { … } from "@demlik/tea";
 | [`liftSlice`](#liftSlice) | Function | stable | Lift a battery verb's result into the host state that carries its slice. |
 | [`ListenerTarget`](#ListenerTarget) | Interface | stable | The imperative listener target, expressed as the `add`/`remove` pair the substrate pairs into a reconciled resource. |
 | [`LogAppend`](#LogAppend) | Interface | stable | The canonical admission and whether it was newly appended. |
-| [`LogCommit`](#LogCommit) | Interface | stable | The canonical deliveries assigned by a committed transition. |
+| [`LogCommit`](#LogCommit) | Interface | stable | The decoded State and deliveries returned by a committed transition. |
 | [`LogConfirmation`](#LogConfirmation) | Interface | stable | The result of acknowledging an owed delivery. |
 | [`LogDisposition`](#LogDisposition) | Type | stable | The durable result of consuming a message. |
 | [`LogFailure`](#LogFailure) | Interface | stable | A reducer refusal retained with its source receipt. |
@@ -1730,8 +1730,10 @@ interface LogAppend<M> {
 ### `LogCommit`
 
 ```ts
-interface LogCommit<C> {
+interface LogCommit<S, C> {
   readonly owed: readonly OwedEffect<C>[];
+  /** State decoded from the committed record. */
+  readonly state: S;
   readonly version: number;
 }
 ```
@@ -1775,7 +1777,7 @@ interface LoggedStore<S, M, C> extends Store<S> {
   readonly logged: true;
   appendMessage(message: LogMessage<M>): Promise<LogAppend<M>>;
   checkpoint(): Promise<boolean>;
-  commitStep(step: LogStep<S, M, C>): Promise<LogCommit<C>>;
+  commitStep(step: LogStep<S, M, C>): Promise<LogCommit<S, C>>;
   confirmEffect(id: number): Promise<LogConfirmation>;
   readLog(): Promise<LogRead<S, M, C>>;
 }
