@@ -101,6 +101,7 @@ export {
   detectUpdateForm,
   foldMsgs,
   formOf,
+  matchesIdentity,
   NoCellError,
   Outcome,
   OutcomeContractError,

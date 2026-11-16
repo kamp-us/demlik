@@ -1,8 +1,12 @@
+import fc from "fast-check";
 import { describe, expect, it } from "vitest";
+import { identityCases } from "./__fixtures__/engine-conformance";
 import {
+  applyCell,
   defineMachine,
   type Identity,
   IdentityDropNotice,
+  matchesIdentity,
   type Reducer,
   RuntimeDiscardNotice,
 } from "./index";
@@ -307,5 +311,77 @@ describe("Identity — additivity", () => {
     // The exact message the identity-declaring machine drops.
     await rt.dispatch({ _tag: "work", runId: "r2" });
     expect(rt.getState().applied).toEqual(["claim", "work"]);
+  });
+});
+
+describe("matchesIdentity — manual hosts agree with the Promise engine", () => {
+  it.each(identityCases)("$name", async ({
+    machine,
+    initial,
+    script: [msg],
+    allowed,
+  }) => {
+    const matches = matchesIdentity(machine.identity, initial, msg);
+    expect(matches).toBe(allowed);
+
+    const reports: unknown[] = [];
+    const rt = await run(machine, {
+      ctx: undefined,
+      onError: (error) => reports.push(error),
+    }).ready;
+    try {
+      await rt.dispatch(msg);
+      expect(rt.getState().pokes === 0).toBe(!matches);
+      expect(reports).toHaveLength(matches ? 0 : 1);
+      for (const report of reports)
+        expect(report).toBeInstanceOf(IdentityDropNotice);
+    } finally {
+      await rt.stop();
+    }
+  });
+
+  it("a manual stepper filters 1,000 generated messages exactly like the engine", async () => {
+    const msg: fc.Arbitrary<Msg> = fc.oneof(
+      fc.record({
+        _tag: fc.constant<"claim">("claim"),
+        runId: fc.constantFrom("r1", "r2", "r3"),
+      }),
+      fc.record({
+        _tag: fc.constant<"work">("work"),
+        runId: fc.constantFrom("r1", "r2", "r3"),
+      }),
+      fc.constant<Msg>({ _tag: "ping" }),
+    );
+    await fc.assert(
+      fc.asyncProperty(
+        fc.array(msg, { minLength: 1_000, maxLength: 1_000 }),
+        async (msgs) => {
+          const stepped = machine(true);
+          let state: State = { runId: null, applied: [] };
+          const seen: Msg[] = [];
+          const applied: Msg[] = [];
+          const rt = await run(stepped, { ctx: undefined, onError: () => {} })
+            .ready;
+          rt.observe((msg) => seen.push(msg));
+          try {
+            for (const msg of msgs) {
+              const matches = matchesIdentity(stepped.identity, state, msg);
+              if (matches) {
+                [state] = applyCell<State, Msg, never>(stepped, state, msg);
+                applied.push(msg);
+              }
+              const before = seen.length;
+              await rt.dispatch(msg);
+              expect(seen.length - before).toBe(matches ? 1 : 0);
+            }
+            expect(applied).toEqual(seen);
+            expect(state).toEqual(rt.getState());
+          } finally {
+            await rt.stop();
+          }
+        },
+      ),
+      { numRuns: 10 },
+    );
   });
 });

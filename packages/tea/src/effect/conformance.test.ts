@@ -18,12 +18,13 @@ import {
   clock,
   conformanceMachines,
   counter,
+  identityCases,
   latch,
   lookup,
   lookupAnswer,
   owned,
 } from "../__fixtures__/engine-conformance";
-import { type BootingRuntime, NoCellError } from "../index";
+import { type BootingRuntime, matchesIdentity, NoCellError } from "../index";
 import { run as runPromise } from "../promise";
 import { type EffectBootingRuntime, run as runEffect } from "./index";
 
@@ -172,15 +173,14 @@ const engines: { readonly [K in Name]: EnginePair } = {
 type Trace = readonly (readonly [string, unknown])[];
 
 /** Boot, dispatch the script, wait for the terminal State if any, and record. */
-async function drive(name: Name, rt: Driven): Promise<Trace> {
+async function drive(
+  spec: ConformanceCase<never, { _tag: string }>,
+  rt: Driven,
+): Promise<Trace> {
   const trace: (readonly [string, unknown])[] = [];
   rt.onBoot((state) => trace.push(["boot", state]));
   rt.observe((msg, state) => trace.push([JSON.stringify(msg), state]));
   const booted = await rt.ready;
-  const spec = conformanceMachines[name] as {
-    readonly script: readonly { _tag: string }[];
-    readonly terminal?: (state: never) => boolean;
-  };
   for (const msg of spec.script) {
     // A refusal is part of the trace, so both engines must refuse the same Msg.
     await booted.dispatch(msg).catch((err: unknown) => {
@@ -195,7 +195,7 @@ async function drive(name: Name, rt: Driven): Promise<Trace> {
 async function onPromise(name: Name): Promise<Trace> {
   const rt = engines[name].promise();
   try {
-    return await drive(name, rt);
+    return await drive(conformanceMachines[name], rt);
   } finally {
     await rt.stop();
   }
@@ -205,7 +205,7 @@ function onEffect(name: Name): Promise<Trace> {
   return Effect.runPromise(
     Effect.scoped(
       Effect.flatMap(engines[name].effect, (rt) =>
-        Effect.promise(() => drive(name, driven(rt))),
+        Effect.promise(() => drive(conformanceMachines[name], driven(rt))),
       ),
     ),
   );
@@ -264,5 +264,33 @@ describe("both engines run every shared machine to the same trace", () => {
   it("the owned trace drops the Msg addressed to another instance", async () => {
     const trace = await onEffect("owned");
     expect(trace.at(-1)?.[1]).toEqual({ owner: "a", pokes: 2 });
+  });
+});
+
+describe("matchesIdentity agrees with both engines", () => {
+  it.each(identityCases)("$name", async (spec) => {
+    const matches = matchesIdentity(
+      spec.machine.identity,
+      spec.initial,
+      spec.script[0],
+    );
+    expect(matches).toBe(spec.allowed);
+    const rt = runPromise(spec.machine, { clock: fixed, onError: () => {} });
+    try {
+      const trace = await drive(spec, rt as AnyRuntime);
+      expect(trace.length === 1).toBe(!matches);
+    } finally {
+      await rt.stop();
+    }
+    const trace = await Effect.runPromise(
+      Effect.scoped(
+        Effect.flatMap(
+          runEffect(spec.machine, { clock: fixed, onError: () => {} }),
+          (rt) =>
+            Effect.promise(() => drive(spec, driven(rt as AnyEffectRuntime))),
+        ),
+      ),
+    );
+    expect(trace.length === 1).toBe(!matches);
   });
 });

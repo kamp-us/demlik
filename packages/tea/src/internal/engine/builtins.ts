@@ -10,9 +10,9 @@ import {
   cmdContractOver,
   cmdEdge,
   lookupCell,
+  matchesIdentity,
   NoCellError,
   Outcome,
-  structuralHash,
 } from "../../pure/core";
 import type {
   OnError,
@@ -118,16 +118,9 @@ export function identityFilter<S, M extends { _tag: string }, C>(
 ): AnyExtension<S, M, C> {
   return (loop) => {
     if (identity === undefined) return {};
-    const misaddressed = (msg: M, state: S): boolean => {
-      const addressed = identity.ofMsg(msg);
-      if (addressed === undefined) return false;
-      const own = identity.ofState(state);
-      if (own === undefined) return false;
-      return structuralHash(addressed) !== structuralHash(own);
-    };
     return {
       update: (next) => (state, msg) => {
-        if (!misaddressed(msg, state)) return next(state, msg);
+        if (matchesIdentity(identity, state, msg)) return next(state, msg);
         loop.report(new IdentityDropNotice(msg._tag), "identity-drop");
         return null;
       },
