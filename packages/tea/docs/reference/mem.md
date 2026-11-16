@@ -8,14 +8,26 @@ Tier: `stable`
 import { … } from "@demlik/tea/mem";
 ```
 
-## Exports (2)
+## Exports (3)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
+| [`memoryEventSourcedStore`](#memoryEventSourcedStore) | Function | stable | Build a single-writer durable log over caller-owned serialized memory. |
 | [`memoryStore`](#memoryStore) | Function | stable | Build an in-memory `Store<S>`. |
 | [`MemoryStoreOptions`](#MemoryStoreOptions) | Interface | stable | Options for memoryStore. |
 
 ## Declarations
+
+<a id="memoryEventSourcedStore"></a>
+
+### `memoryEventSourcedStore`
+
+```ts
+function memoryEventSourcedStore<S, M extends { _tag: string }, C extends Cmd>(
+  backing: Map<string, string>,
+  options: EventSourcedOptions<S, M, C>,
+): LoggedStore<S, M, C>
+```
 
 <a id="memoryStore"></a>
 

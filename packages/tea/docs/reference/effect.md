@@ -219,12 +219,9 @@ interface EffectBootingRuntime<S, M extends { _tag: string }, E extends { _tag: 
    * when the transition's save fails, and a hand-written cell's declared
    * failure when the transition's Cmd fails with one.
    */
-  dispatch(
-    msg: M,
-    opts?: { readonly settle?: DispatchSettle },
-  ): Effect<void, Stopped | StoreFailed | Err>;
+  dispatch(msg: M, opts?: DispatchOptions): Effect<void, Stopped | StoreFailed | Err>;
   /** `dispatch(msg, { settle: "once" })`: one transition, no follow-up drain. */
-  dispatchOnce(msg: M): Effect<void, Stopped | StoreFailed | Err>;
+  dispatchOnce(msg: M, opts?: DispatchOptions): Effect<void, Stopped | StoreFailed | Err>;
   /** Emit a value on a Port from outside a Cmd handler. */
   emitPort<T>(port: Port<T>, value: T): void;
   /**
@@ -291,7 +288,7 @@ type EffectInterpret<M extends { _tag: string }, C extends Cmd, R = unknown> = {
 ### `EffectInterpretCell`
 
 ```ts
-type EffectInterpretCell<M extends { _tag: string }, C extends Cmd, R = unknown> = unknown extends ErrorsOf<C> ? (cmd: C) => Effect.Effect<M | readonly M[] | void, unknown, R> : (cmd: C) => Effect.Effect<OkOfCmd<C>, DeclaredErrorsOf<C>, R>
+type EffectInterpretCell<M extends { _tag: string }, C extends Cmd, R = unknown> = unknown extends ErrorsOf<C> ? (cmd: C, ctx?: unknown) => Effect.Effect<M | readonly M[] | void, unknown, R> : (cmd: C, ctx?: unknown) => Effect.Effect<OkOfCmd<C>, DeclaredErrorsOf<C>, R>
 ```
 
 <a id="EffectRun"></a>

@@ -40,6 +40,8 @@ One row per ADR, repo-wide. Read the file for the why.
 | [0036](./0036-one-build-per-event.md) | A pull request builds once, its tests follow the packages its change reaches, and one verdict job is the check main requires | Accepted | 2026-11-13 |
 | [0037](./0037-tea-discriminants-are-keyed-tag.md) | Every discriminant tea owns is keyed `_tag`, never `type` | Accepted | 2026-11-15 |
 
+| [0038](./0038-engine-owned-durable-log.md) | The engine owns logged admission, atomic steps and birth/wake recovery; this slice ships a memory log | Accepted | 2026-11-16 |
+
 Numbers are inherited from the `csirin/monorepo` sequence this package was extracted
 from, and the gaps are real: 0009 (the brain/hand seam) and 0012 (the single-root ADR
 convention) are decisions about that monorepo, not about this package, and stayed

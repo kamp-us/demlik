@@ -40,7 +40,7 @@ import { … } from "@demlik/tea/flow";
 | [`createWorkflow`](#createWorkflow) | Function | battery | Build a workflow hook bag. |
 | [`debounce`](#debounce) | Function | battery | Wrap `fn` so a BURST of calls collapses to a single invocation. |
 | [`Debounced`](#Debounced) | Interface | battery | A debounced wrapper around `fn`. |
-| [`DeliveryId`](#DeliveryId) | Type | battery | Monotonic, gap-free delivery id — the single correlation + dedup key. |
+| [`DeliveryId`](#DeliveryId) | Type | battery | Positive safe-integer delivery identity, increasing monotonically with optional gaps. |
 | [`EffectConfirmed`](#EffectConfirmed) | Interface | battery | An owed effect has been CONFIRMED delivered. |
 | [`EffectLedgerEvent`](#EffectLedgerEvent) | Type | battery | The event union the ledger folds over. |
 | [`EffectOwed`](#EffectOwed) | Interface | battery | An effect is now OWED: it has been decided but its delivery is not yet confirmed. |
