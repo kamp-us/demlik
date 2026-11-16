@@ -674,6 +674,19 @@ export function followUps<M>(returned: unknown): readonly M[] {
 // dispatch tail, which `idle()` drains to quiescence. Without it a fanned run
 // reads as quiescent while its tools are still running.
 
+/** Positive safe-integer delivery identity, increasing monotonically with optional gaps. */
+export type DeliveryId = number;
+
+/** Internal invocation context key for the store-assigned delivery identity. */
+export const deliveryId: unique symbol = Symbol("tea.deliveryId");
+
+/** Read this handler invocation's durable delivery identity, when present. */
+export function deliveryIdOf(ctx: unknown): DeliveryId | undefined {
+  return typeof ctx === "object" && ctx !== null
+    ? (ctx as { [deliveryId]?: DeliveryId })[deliveryId]
+    : undefined;
+}
+
 /** Enlist a promise the handler will not return in the runtime's accounting. */
 export type DetachWork = (work: Promise<unknown>) => void;
 

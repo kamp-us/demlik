@@ -78,7 +78,7 @@ import {
   type PendingEffectsLedger,
   pendingEffectsLedger,
   survivingEffects,
-} from "../../../do/durable-effects";
+} from "../../persistence/durable-log/durable-effects";
 import { Cmd, type CmdOf } from "../../../index";
 import { unchecked, undefinedOnly } from "../../schema";
 import { routeWorkflowMsg } from "./route";

@@ -104,3 +104,6 @@ export {
 } from "./pure/core";
 export * from "./runtime-types";
 export * from "./subs";
+
+export * from "./internal/persistence/durable-log/durable-effects";
+export * from "./internal/persistence/durable-log/idempotent-effect";

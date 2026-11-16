@@ -109,3 +109,5 @@ export {
   subIdOf,
   UndeclaredFailureError,
 } from "./core";
+
+export { deliveryIdOf, type DeliveryId } from "./core";
