@@ -10,6 +10,8 @@ or reshaped and shows it before and after.
 - Section 11 is 0.17.
 - Sections 12 to 16 are 0.18.
 - 0.19 has no breaking change. A Model saved by an older release still loads.
+- Section 17 is the release after 0.27. It renames the key every Msg, Cmd, Sub
+  and State carries, and a Model saved before it does not load.
 
 The short version:
 
@@ -595,3 +597,28 @@ onEvent: (e) => {
 A failed or cancelled run reports `RunDone` too, with `status.kind` of
 `"failed"` or `"cancelled"`. Before, it reported nothing, so a listener that
 treated every `RunDone` as a success needs the `kind` check.
+
+## 17. Key every Msg, Cmd, Sub and State by `_tag`
+
+The key that names a variant is `_tag` now, where it was `type`. It is the key
+Effect uses, so `Schema.TaggedStruct`, `Schema.TaggedUnion` and `Match.tag` fit
+a tea Msg as they are. Rename it where you write a Msg, a Cmd, a Sub or a State,
+and where you read one.
+
+```ts
+// before
+type Msg = { type: "inc" } | { type: "add"; by: number };
+const next = msg.type === "add" ? count + msg.by : count + 1;
+
+// after
+type Msg = { _tag: "inc" } | { _tag: "add"; by: number };
+const next = msg._tag === "add" ? count + msg.by : count + 1;
+```
+
+The cells of `update` keep their names: a cell is still named for the variant
+it handles. A content part of an agent message keeps `type`
+(`{ type: "text", text }`), and so does a Jev question.
+
+There is no alias and nothing reads both keys. A Model, an event log or a trace
+saved by an older release does not load on this one: the saved rows carry
+`type`, and the store drops a row with no `_tag`. Start those runs fresh.
