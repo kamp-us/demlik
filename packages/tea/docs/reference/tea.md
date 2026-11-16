@@ -8,7 +8,7 @@ Tier: `stable`
 import { … } from "@demlik/tea";
 ```
 
-## Exports (209)
+## Exports (210)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -133,6 +133,7 @@ import { … } from "@demlik/tea";
 | [`MalformedResult`](#MalformedResult) | Type | stable | The kernel-minted failure: a handler returned an `Ok` value the Cmd's `ok` schema rejects. |
 | [`ManagedResourceBattery`](#ManagedResourceBattery) | Interface | stable | What the battery returns: a `.depKeyed(when)` entry for the machine's `subs`, the `.subscribe` runner for the `subscribe` table handed to `run`, and a `.get(key)` accessor so Cmd handlers can reach the live Handle while the resource is held. |
 | [`ManagedResourceSub`](#ManagedResourceSub) | Type | stable | The running Sub of a managed resource named `N`: its `deps` is the lifetime key. |
+| [`matchesIdentity`](#matchesIdentity) | Function | stable | Return `true` when the engine would let `msg` through the identity filter, or `false` when it would drop it. |
 | [`Migrated`](#Migrated) | Type | stable | What `Store.migrate` answers: the parsed `S`, `null` when nothing was saved, or a Refusal for saved bytes it cannot read. |
 | [`msgKeysOf`](#msgKeysOf) | Function | stable | List every Msg type a machine has an update cell for, across all of its states. |
 | [`nextSeq`](#nextSeq) | Function | stable | The next sequence number to assign: one past the highest `seq` in the buffer, or `0` for an empty buffer. |
@@ -1927,6 +1928,8 @@ type Machine<S, M extends { _tag: string }, C extends Cmd, U extends Sub, Ctx> =
    * reaches `update`. Replaces the per-cell `if (msg.runId !== state.runId)`
    * guard entirely — the reducer never sees a foreign-instance message, so no
    * cell needs to check.
+   * A host that steps the machine itself with `applyCell` calls
+   * `matchesIdentity` first.
    *
    * Opt-in: a machine that omits `identity` skips the filter (every message
    * reaches `update`, exactly as before). A message whose `ofMsg` returns
@@ -2076,6 +2079,18 @@ interface ManagedResourceBattery<N extends string, TKey, Handle, Ctx> {
 
 ```ts
 type ManagedResourceSub<N extends string, TKey> = Sub<N, TKey>
+```
+
+<a id="matchesIdentity"></a>
+
+### `matchesIdentity`
+
+```ts
+function matchesIdentity<S, M>(
+  identity: Identity<S, M> | undefined,
+  state: S,
+  msg: M,
+): boolean
 ```
 
 <a id="Migrated"></a>

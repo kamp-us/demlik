@@ -1849,6 +1849,25 @@ export interface Identity<S, M> {
   readonly ofMsg: (msg: M) => unknown;
 }
 
+/**
+ * Return `true` when the engine would let `msg` through the identity filter,
+ * or `false` when it would drop it. `run` applies this check for you.
+ * `applyCell`, `tryApplyCell`, `foldMsgs` and `replay` do not, so a host that
+ * steps a machine itself calls this first.
+ */
+export function matchesIdentity<S, M>(
+  identity: Identity<S, M> | undefined,
+  state: S,
+  msg: M,
+): boolean {
+  if (identity === undefined) return true;
+  const addressed = identity.ofMsg(msg);
+  if (addressed === undefined) return true;
+  const own = identity.ofState(state);
+  if (own === undefined) return true;
+  return structuralHash(addressed) === structuralHash(own);
+}
+
 // === Port<T>: typed escape hatch for "data leaving the runtime" ===
 //
 // Subscribers receive every emitted value synchronously (same fanout
@@ -2235,6 +2254,8 @@ export type Machine<
    * reaches `update`. Replaces the per-cell `if (msg.runId !== state.runId)`
    * guard entirely — the reducer never sees a foreign-instance message, so no
    * cell needs to check.
+   * A host that steps the machine itself with `applyCell` calls
+   * `matchesIdentity` first.
    *
    * Opt-in: a machine that omits `identity` skips the filter (every message
    * reaches `update`, exactly as before). A message whose `ofMsg` returns

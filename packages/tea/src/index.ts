@@ -96,6 +96,7 @@ export {
   // caller folding a log needs when it must also act on the emitted Cmds.
   foldUpdates,
   formOf,
+  matchesIdentity,
   msgKeysOf,
   NoCellError,
   Outcome,
