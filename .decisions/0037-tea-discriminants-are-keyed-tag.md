@@ -35,7 +35,7 @@ Effect keys every tagged value by `_tag`: `Schema.TaggedStruct` and `Schema.Tagg
 ## Consequences
 
 - Every machine written against an older release changes its Msg, Cmd, Sub and State literals and its reads. One minor changeset with a `**Breaking` callout records it.
-- A save that holds a State or a Msg keyed `type` continues only when its host's boundary parse renames the key. A Model with no discriminant inside loads as before. No deployment held saved runs when this was decided.
+- tea converts no save an older release wrote. Section 17 of the migrate guide is the one place that says what each kind of save does. The owner's reason for shipping no upcaster, as he gave it on [#949](https://github.com/kamp-us/demlik/issues/949#issuecomment-6903808387): no deployment holds saved runs today.
 - `Schema.TaggedStruct`, `Schema.TaggedUnion`, `Match.tag` and `Data.TaggedEnum` fit a tea Msg and a tea State with no wiring.
 - structure-sweep, backlog-sweep and code-graph do not change. Their `type` keys are `parseArgs` options, Jev shapes and a syntax tree, and none is a tea discriminant.
 - tea's unions keyed `kind` are not ruled on here.
