@@ -97,6 +97,7 @@ export type Step<S, M, C> = (state: S, msg: M) => Transition<S, C> | null;
 export type InterpretStep<C, M> = (
   cmd: C,
   dispatch: (msg: M) => void,
+  failed?: () => void,
 ) => Promise<unknown>;
 
 /** Whether the current State has crossed this transition's save boundary. */
@@ -396,7 +397,6 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
     ) {
       reportedThenRejected.add(error);
     }
-    if (phase === "interpret" && invocation) invocation.failed = true;
     const context: RuntimeErrorContext = { phase };
     try {
       onError(error, context);
@@ -910,7 +910,13 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
       };
       invocation = own;
       try {
-        const returned = await interpret(effect, (msg) => send(msg));
+        const returned = await interpret(
+          effect,
+          (msg) => send(msg),
+          () => {
+            own.failed = true;
+          },
+        );
         const follows = followUps<M>(returned);
         for (const follow of follows) send(follow, !Array.isArray(returned));
       } catch (error) {

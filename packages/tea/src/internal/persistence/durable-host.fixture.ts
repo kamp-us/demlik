@@ -83,12 +83,17 @@ class Disk extends Map<string, string> {
 }
 
 /** Crash after a selected acknowledged-or-uncertain physical write, including birth. */
-export async function execute(driver: Driver, cut?: number) {
+export async function execute(
+  driver: Driver,
+  cut?: number,
+  messageCount = 200,
+) {
   let disk: Disk;
   let writes = 0;
   let crashed = false;
   const attempts = new Map<string, number>();
   const effects = new Map<string, number>();
+  const receipts = new Set<string>();
   let receiver = appliedEffects();
   const write = () => {
     writes += 1;
@@ -111,7 +116,9 @@ export async function execute(driver: Driver, cut?: number) {
             await receiver.run(
               idempotentEffect(cmd.file, () => {
                 // Receiver atomically accepts its business key together with the effect.
-                if (!effects.has(cmd.file)) effects.set(cmd.file, 1);
+                if (receipts.has(cmd.file)) return;
+                effects.set(cmd.file, (effects.get(cmd.file) ?? 0) + 1);
+                receipts.add(cmd.file);
               }),
             );
             if (own.closed) throw new Dropped();
@@ -126,7 +133,7 @@ export async function execute(driver: Driver, cut?: number) {
     }
   };
   let live = await boot();
-  for (let index = 0; index < 200; index += 1) {
+  for (let index = 0; index < messageCount; index += 1) {
     const msg: Msg = { _tag: "picked", file: `file-${index}.png` };
     try {
       await live.dispatch(msg, { id: msg.file });
@@ -143,11 +150,27 @@ export async function execute(driver: Driver, cut?: number) {
   await live.stop();
   const read = memoryEventSourcedStore(new Map(disk), options);
   const log = await read.readLog();
-  expect(await read.load()).toEqual(final);
+  const expected = Array.from(
+    { length: messageCount },
+    (_, index) => `file-${index}.png`,
+  );
+  expect(final.files).toEqual(expected);
+  expect(final.uploaded).toEqual(expected);
+  expect(await read.load()).toEqual({ files: expected, uploaded: expected });
+  const admitted = log.records.flatMap(({ record }) =>
+    record._tag === "message" ? [record.msg] : [],
+  );
+  expect(
+    admitted.filter((msg) => msg._tag === "picked").map((msg) => msg.file),
+  ).toEqual(expected);
+  expect(
+    admitted.filter((msg) => msg._tag === "uploaded").map((msg) => msg.file),
+  ).toEqual(expected);
+  expect([...receipts]).toEqual(expected);
   const messages = log.records.flatMap(({ record }) =>
     record._tag === "message" ? [record.id] : [],
   );
-  for (let index = 0; index < 200; index += 1) {
+  for (let index = 0; index < messageCount; index += 1) {
     const key = `file-${index}.png`;
     expect(messages).toContain(JSON.stringify(["caller", key]));
     expect(attempts.get(key)).toBeGreaterThanOrEqual(1);
