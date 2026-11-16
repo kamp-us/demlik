@@ -107,3 +107,7 @@ export * from "./subs";
 
 export * from "./internal/persistence/durable-log/durable-effects";
 export * from "./internal/persistence/durable-log/idempotent-effect";
+
+export { isLoggedStore, type DispatchOptions, type LoggedTimer, type LogMessage, type LogDisposition, type LogFailure, type LogRecord, type PersistedLogRecord, type LogRead, type LogAppend, type LogStep, type LogCommit, type LogConfirmation, type LoggedStore, type EventSourcedOptions } from "./runtime-types";
+
+export { logUpdates } from "./internal/persistence/durable-log/format";

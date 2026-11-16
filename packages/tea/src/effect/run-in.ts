@@ -1,3 +1,4 @@
+import type { DispatchOptions } from "../runtime-types";
 /**
  * `runIn`: the Effect engine's `run`, as a host adapter takes it (#852).
  *
@@ -307,9 +308,9 @@ class HostedRun<S, M extends { _tag: string }>
     ) as S;
   }
 
-  dispatch(msg: M): Promise<void> {
+  dispatch(msg: M, opts?: DispatchOptions): Promise<void> {
     return this.attached.then((target) =>
-      Effect.runPromise(target.dispatch(msg)),
+      Effect.runPromise(target.dispatch(msg, opts)),
     );
   }
 

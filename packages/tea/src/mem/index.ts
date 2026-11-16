@@ -1,3 +1,7 @@
+import type { Cmd } from "../pure/core";
+import type { EventSourcedOptions, LoggedStore } from "../runtime-types";
+import { schemaMigrate } from "../runtime-types";
+import { appendLogMessage, checkpointLog, committedState, commitLogStep, confirmLogEffect, type LogEnvelope, logKey, readEnvelope, sameLogValue } from "../internal/persistence/durable-log/format";
 /**
  * @packageDocumentation
  * @demlik/tea/mem — in-memory `Store<S>` adapter for `@demlik/tea`.
@@ -118,5 +122,43 @@ export function memoryStore<S>(
       version += 1;
       return version;
     },
+  };
+}
+
+/**
+ * Build a single-writer durable log over caller-owned serialized memory.
+ * A fresh driver over the same Map and key resumes the same history.
+ * Each mutation reads, decides and writes synchronously before yielding.
+ */
+export function memoryEventSourcedStore<S, M extends { _tag: string }, C extends Cmd>(
+  backing: Map<string, string>,
+  options: EventSourcedOptions<S, M, C>,
+): LoggedStore<S, M, C> {
+  const key = logKey(options.key);
+  const every = options.snapshotEvery ?? 100;
+  if (!Number.isSafeInteger(every) || every < 1) throw new Error("snapshotEvery must be a positive safe integer");
+  const read = () => readEnvelope(backing.get(key), options);
+  const mutate = <T>(decide: (log: LogEnvelope<S, M, C>) => readonly [LogEnvelope<S, M, C>, T]): T => {
+    const before = read();
+    const [after, result] = decide(before);
+    if (after !== before) {
+      const bytes = JSON.stringify(after);
+      readEnvelope(bytes, options);
+      backing.set(key, bytes);
+    }
+    return result;
+  };
+  return {
+    logged: true,
+    async load() { return committedState(read()); },
+    async save(state) {
+      if (!sameLogValue(state, committedState(read()))) throw new Error("Logged State can only change through commitStep");
+    },
+    migrate: schemaMigrate(options.state),
+    async readLog() { return read(); },
+    async appendMessage(message) { return mutate((log) => appendLogMessage(log, message)); },
+    async commitStep(step) { return mutate((log) => commitLogStep(log, step, every)); },
+    async confirmEffect(id) { return mutate((log) => confirmLogEffect(log, id)); },
+    async checkpoint() { return mutate(checkpointLog); },
   };
 }

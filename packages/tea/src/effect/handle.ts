@@ -19,7 +19,7 @@ import {
   post,
 } from "../internal/engine/loop";
 import type { Cmd, Port } from "../pure/core";
-import type { DispatchSettle, Runtime } from "../runtime-types";
+import type { DispatchOptions, Runtime } from "../runtime-types";
 import {
   doneExitOf,
   exitOf,
@@ -49,10 +49,10 @@ export interface EffectBootingRuntime<
    */
   dispatch(
     msg: M,
-    opts?: { readonly settle?: DispatchSettle },
+    opts?: DispatchOptions,
   ): Effect.Effect<void, Err | Stopped | StoreFailed>;
   /** `dispatch(msg, { settle: "once" })`: one transition, no follow-up drain. */
-  dispatchOnce(msg: M): Effect.Effect<void, Err | Stopped | StoreFailed>;
+  dispatchOnce(msg: M, opts?: DispatchOptions): Effect.Effect<void, Err | Stopped | StoreFailed>;
   /**
    * A zero-arg change notifier, fired for each applied transition after its
    * save and before its first Cmd's handler starts.
@@ -197,7 +197,7 @@ export function effectHandle<
     [post]: loop[post],
     [installedState]: loop[installedState],
     dispatch: (msg, opts) => settled(() => loop.dispatch(msg, opts)),
-    dispatchOnce: (msg) => settled(() => loop.dispatchOnce(msg)),
+    dispatchOnce: (msg, opts) => settled(() => loop.dispatchOnce(msg, opts)),
     subscribe: (listener) => loop.subscribe(listener),
     observe: (observer) => loop.observe(observer),
     onBoot: (handler) => loop.onBoot(handler),
