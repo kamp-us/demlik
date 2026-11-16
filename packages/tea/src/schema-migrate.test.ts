@@ -190,6 +190,43 @@ describe("a State saved before the discriminant was keyed `_tag`", () => {
     });
   });
 
+  it("renaming only the Model's own key leaves a Msg held inside it refused", () => {
+    type Queued = {
+      readonly _tag: "green";
+      readonly queue: readonly LightMsg[];
+    };
+    const queuedSchema: Schema<Queued> = {
+      safeParse(raw) {
+        const r = raw as { _tag?: unknown; queue?: unknown } | null;
+        return typeof r === "object" &&
+          r !== null &&
+          r._tag === "green" &&
+          Array.isArray(r.queue) &&
+          r.queue.every((m: { _tag?: unknown }) => m._tag === "tick")
+          ? { success: true, data: raw as Queued }
+          : { success: false };
+      },
+    };
+    const rename = (raw: unknown): unknown => {
+      const { type, ...rest } = raw as { type?: unknown };
+      return type === undefined ? raw : { _tag: type, ...rest };
+    };
+    const oldQueued = { type: "green", queue: [{ type: "tick" }] };
+
+    expect(schemaMigrate(queuedSchema, rename)(oldQueued)).toBeInstanceOf(
+      Refusal,
+    );
+
+    const renameAll = (raw: unknown): unknown => {
+      const root = rename(raw) as { queue: readonly unknown[] };
+      return { ...root, queue: root.queue.map(rename) };
+    };
+    expect(schemaMigrate(queuedSchema, renameAll)(oldQueued)).toEqual({
+      _tag: "green",
+      queue: [{ _tag: "tick" }],
+    });
+  });
+
   it("a migrate that does not check the shape hands the machine a State with no row", () => {
     const unchecked = oldSave as unknown as Light;
     expect(() => applyCell(light, unchecked, { _tag: "tick" })).toThrowError(

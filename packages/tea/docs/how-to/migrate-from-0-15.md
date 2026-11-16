@@ -630,7 +630,7 @@ kind has its own place to rename the key:
   refuses it, and `run` fails with `StoreRefusedError`. A `migrate` that does
   not check the shape passes it on, and a state table has no row for it
   (`NoCellError`). To keep the run, rename the key in `migrate`, or in the
-  second argument of `schemaMigrate`:
+  second argument of `schemaMigrate`. This one renames the Model's own key:
 
   ```ts
   const migrate = schemaMigrate(schema, (raw) => {
@@ -638,6 +638,10 @@ kind has its own place to rename the key:
     return type === undefined ? raw : { _tag: type, ...rest };
   });
   ```
+
+  It does not touch a `type` key deeper in the save, such as a Msg held in a
+  queue. The schema refuses the save until those are renamed too, so rename
+  each one where it sits.
 
 - **An event row of `doEventSourcedStore`** is read by `parseEvent`, before
   `Store.migrate` sees anything. The default `parseEvent` drops a row with no
