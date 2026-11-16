@@ -19,3 +19,4 @@ Append individual records through an incremental projection instead of rewriting
 and revalidating history, and retain detached contract failures as owed work.
 With a log store, the program sees Msg, State and Cmd values as the store
 decoded them, both live and after wake.
+An ignored or rejected message saves a receipt, without rewriting State.

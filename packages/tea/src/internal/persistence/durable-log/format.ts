@@ -17,6 +17,17 @@ import type {
 import type { EffectLedgerEvent, EffectOwed } from "./durable-effects";
 import { pendingEffectsLedger } from "./durable-effects";
 
+type Cases<R extends { _tag: string }, T> = {
+  [K in R["_tag"]]: (record: Extract<R, { _tag: K }>) => T;
+};
+
+function visit<R extends { _tag: string }, T>(
+  record: R,
+  cases: Cases<R, T>,
+): T {
+  return cases[record._tag as R["_tag"]](record as never);
+}
+
 function object(raw: unknown): Record<string, unknown> {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw))
     throw new Error("Invalid durable log object");
@@ -41,7 +52,7 @@ function array<T>(raw: unknown, parse: (value: unknown) => T): readonly T[] {
   return raw.map(parse);
 }
 function value<T>(schema: Schema<T>, raw: unknown): T {
-  const parsed = schema.safeParse(raw);
+  const parsed = schema.safeParse(structuredClone(raw));
   if (!parsed.success)
     throw new Error("Durable log payload rejected by schema");
   return parsed.data;
@@ -109,23 +120,28 @@ function parseRecord<S, M, C>(
         timers: timers(),
       }) as const,
     message: () => parseMessage(r, options.message),
-    step: (): LogRecord<S, M, C> => {
-      const disposition = r.disposition;
-      if (
-        disposition !== "applied" &&
-        disposition !== "ignored" &&
-        disposition !== "rejected"
-      )
-        throw new Error("Invalid disposition");
-      const failure = r.failure === undefined ? undefined : object(r.failure);
-      if (failure && failure.kind !== "reduce" && failure.kind !== "no_cell")
-        throw new Error("Invalid log failure");
-      return {
-        _tag: "step",
+    applied: () =>
+      ({
+        _tag: "applied",
         sourceId: string(r.sourceId),
         state: value(options.state, r.state),
         owed: owed(),
         timers: timers(),
+      }) as const,
+    receipt: (): LogRecord<S, M, C> => {
+      const disposition = r.disposition;
+      if (disposition !== "ignored" && disposition !== "rejected")
+        throw new Error("Invalid disposition");
+      if (
+        ["state", "owed", "timers", "cmds"].some((key) => Object.hasOwn(r, key))
+      )
+        throw new Error("A source receipt cannot carry State or work");
+      const failure = r.failure === undefined ? undefined : object(r.failure);
+      if (failure && failure.kind !== "reduce" && failure.kind !== "no_cell")
+        throw new Error("Invalid log failure");
+      return {
+        _tag: "receipt",
+        sourceId: string(r.sourceId),
         disposition,
         ...(failure
           ? {
@@ -156,36 +172,72 @@ function parseRecord<S, M, C>(
 /** Read committed State fields; never invoke historical reducers or init. */
 export function committedState<S, M, C>(log: LogRead<S, M, C>): S | null {
   let state: S | null = log.snapshot?.state ?? null;
-  for (const { seq, record } of log.records) {
-    if (seq <= (log.snapshot?.through ?? 0)) continue;
-    if (record._tag === "birth" || record._tag === "step") state = record.state;
-  }
+  const install = (record: { state: S }) => {
+    state = record.state;
+  };
+  const readers: Cases<LogRecord<S, M, C>, void> = {
+    birth: install,
+    applied: install,
+    message: () => {},
+    receipt: () => {},
+    confirmed: () => {},
+  };
+  for (const { seq, record } of log.records)
+    if (seq > (log.snapshot?.through ?? 0)) visit(record, readers);
   return state;
 }
 
 /** Restore the single delivery ledger, including its consumed high-water mark. */
 export function logLedger<S, M, C>(log: LogRead<S, M, C>) {
   const events: EffectLedgerEvent<C>[] = [];
-  for (const { record } of log.records) {
-    if (record._tag === "birth" || record._tag === "step")
-      events.push(...record.owed);
-    if (record._tag === "confirmed") events.push(record.event);
-  }
+  const owed = (record: { owed: readonly EffectOwed<C>[] }) => {
+    events.push(...record.owed);
+  };
+  const readers: Cases<LogRecord<S, M, C>, void> = {
+    birth: owed,
+    applied: owed,
+    message: () => {},
+    receipt: () => {},
+    confirmed: (record) => {
+      events.push(record.event);
+    },
+  };
+  for (const { record } of log.records) visit(record, readers);
   return pendingEffectsLedger({ events });
+}
+
+/** Source IDs consumed by either an applied transition or a receipt. */
+export function consumedSources<S, M, C>(
+  log: LogRead<S, M, C>,
+): ReadonlySet<string> {
+  const consumed = new Set<string>();
+  const consume = (record: { sourceId: string }) => {
+    consumed.add(record.sourceId);
+  };
+  const readers: Cases<LogRecord<S, M, C>, void> = {
+    birth: () => {},
+    applied: consume,
+    receipt: consume,
+    message: () => {},
+    confirmed: () => {},
+  };
+  for (const { record } of log.records) visit(record, readers);
+  return consumed;
 }
 
 /** Unconsumed sources, in durable admission order. */
 export function pendingMessages<S, M, C>(
   log: LogRead<S, M, C>,
 ): readonly LogMessage<M>[] {
-  const consumed = new Set(
-    log.records.flatMap(({ record }) =>
-      record._tag === "step" ? [record.sourceId] : [],
-    ),
-  );
-  return log.records.flatMap(({ record }) =>
-    record._tag === "message" && !consumed.has(record.id) ? [record] : [],
-  );
+  const consumed = consumedSources(log);
+  const readers: Cases<LogRecord<S, M, C>, readonly LogMessage<M>[]> = {
+    birth: () => [],
+    applied: () => [],
+    receipt: () => [],
+    confirmed: () => [],
+    message: (record) => (consumed.has(record.id) ? [] : [record]),
+  };
+  return log.records.flatMap(({ record }) => visit(record, readers));
 }
 
 /** Query applied sources in commit order with inclusive, gap-free query positions. */
@@ -193,26 +245,31 @@ export function logUpdates<S, M, C>(
   log: LogRead<S, M, C>,
   range?: { readonly fromSeq?: number; readonly toSeq?: number },
 ): readonly { readonly seq: number; readonly event: M; readonly state: S }[] {
-  const messages = new Map(
-    log.records.flatMap(({ record }) =>
-      record._tag === "message" ? [[record.id, record.msg] as const] : [],
-    ),
-  );
+  const messages = new Map<string, M>();
+  const rows: { seq: number; event: M; state: S }[] = [];
   let seq = 0;
-  return log.records.flatMap(({ record }) => {
-    if (record._tag !== "step" || record.disposition !== "applied") return [];
-    seq += 1;
-    return seq >= (range?.fromSeq ?? 1) &&
-      seq <= (range?.toSeq ?? Number.POSITIVE_INFINITY)
-      ? [
-          {
-            seq,
-            event: messages.get(record.sourceId) as M,
-            state: record.state,
-          },
-        ]
-      : [];
-  });
+  const readers: Cases<LogRecord<S, M, C>, void> = {
+    birth: () => {},
+    receipt: () => {},
+    confirmed: () => {},
+    message: (record) => {
+      messages.set(record.id, record.msg);
+    },
+    applied: (record) => {
+      seq += 1;
+      if (
+        seq >= (range?.fromSeq ?? 1) &&
+        seq <= (range?.toSeq ?? Number.POSITIVE_INFINITY)
+      )
+        rows.push({
+          seq,
+          event: messages.get(record.sourceId) as M,
+          state: record.state,
+        });
+    },
+  };
+  for (const { record } of log.records) visit(record, readers);
+  return rows;
 }
 
 /** One physical record write and the projection change to install after acknowledgement. */
@@ -231,10 +288,12 @@ type Frame<S, M, C> = PersistedLogRecord<LogRecord<S, M, C>> & {
 
 /** Open a private, incrementally maintained projection of validated protocol records. */
 export function logWriter<S, M, C>(options: EventSourcedOptions<S, M, C>) {
+  type Applied = Extract<LogRecord<S, M, C>, { _tag: "applied" }>;
+  type Receipt = Extract<LogRecord<S, M, C>, { _tag: "receipt" }>;
   const records: PersistedLogRecord<LogRecord<S, M, C>>[] = [];
   type Source = {
     entry: PersistedLogRecord<LogMessage<M>>;
-    step?: Extract<LogRecord<S, M, C>, { _tag: "step" }>;
+    commit?: Applied | Receipt;
     appliedCount?: number;
   };
   const sources = new Map<string, Source>();
@@ -243,6 +302,7 @@ export function logWriter<S, M, C>(options: EventSourcedOptions<S, M, C>) {
   const deliveries = new Map<DeliveryId, boolean>();
   let cursor = 0;
   let state: S | null = null;
+  let storedState: unknown;
   let timers: readonly LoggedTimer<M>[] = [];
   let birth: Extract<LogRecord<S, M, C>, { _tag: "birth" }> | undefined;
   let high = 0;
@@ -257,67 +317,69 @@ export function logWriter<S, M, C>(options: EventSourcedOptions<S, M, C>) {
     const boundary = integer(r.through, 1);
     const source = sourceSeqs.get(boundary);
     if (
-      !source?.step ||
+      !source?.commit ||
       source.appliedCount === undefined ||
       boundary > through
     )
       throw new Error("Invalid checkpoint boundary");
     if (boundary < (snapshot?.through ?? 0)) return;
-    const parsed = options.state.safeParse(r.state);
+    const parsed = options.state.safeParse(structuredClone(r.state));
     if (!parsed.success) return;
     snapshot = { through: boundary, state: parsed.data };
     baseline = source.appliedCount;
   }
 
+  function consume(record: Applied | Receipt): void {
+    const source = pending[cursor];
+    if (source?.entry.record.id !== record.sourceId)
+      throw new Error("Invalid source receipt");
+    source.commit = record;
+    source.appliedCount = applied;
+    through = source.entry.seq;
+    cursor += 1;
+  }
+
   function accept(
     row: PersistedLogRecord<LogRecord<S, M, C>>,
+    stored: Record<string, unknown>,
     checkpoint: unknown = null,
   ): void {
     const { seq, record } = row;
     if (seq !== records.length + 1 || (seq === 1 && record._tag !== "birth"))
       throw new Error("Invalid durable log ordering");
-    const consumers = {
-      birth: (r: Extract<LogRecord<S, M, C>, { _tag: "birth" }>) => {
+    const consumers: Cases<LogRecord<S, M, C>, void> = {
+      birth: (r) => {
         if (birth) throw new Error("Duplicate birth");
         birth = r;
-        install(r);
+        install(r, stored.state);
       },
-      message: (r: LogMessage<M>) => {
+      message: (r) => {
         if (sources.has(r.id)) throw new Error("Duplicate log source");
         const source = { entry: { seq, record: r } };
         sources.set(r.id, source);
         sourceSeqs.set(seq, source);
         pending.push(source);
       },
-      step: (r: Extract<LogRecord<S, M, C>, { _tag: "step" }>) => {
-        const source = pending[cursor];
-        if (source?.entry.record.id !== r.sourceId)
-          throw new Error("Invalid source receipt");
-        source.step = r;
-        if (r.disposition === "applied") applied += 1;
-        source.appliedCount = applied;
-        through = source.entry.seq;
-        cursor += 1;
-        install(r);
+      applied: (r) => {
+        applied += 1;
+        consume(r);
+        install(r, stored.state);
       },
-      confirmed: (r: Extract<LogRecord<S, M, C>, { _tag: "confirmed" }>) => {
+      receipt: consume,
+      confirmed: (r) => {
         if (deliveries.get(r.event.id) !== false)
           throw new Error("Invalid delivery receipt");
         deliveries.set(r.event.id, true);
       },
-    } satisfies {
-      [K in LogRecord<S, M, C>["_tag"]]: (
-        r: Extract<LogRecord<S, M, C>, { _tag: K }>,
-      ) => void;
     };
-    // The discriminant selects the matching table row, which is total over the protocol union.
-    consumers[record._tag](record as never);
+    visit(record, consumers);
     records.push(row);
     acceptSnapshot(checkpoint);
   }
 
   function install(
-    record: Extract<LogRecord<S, M, C>, { _tag: "birth" | "step" }>,
+    record: Extract<LogRecord<S, M, C>, { _tag: "birth" | "applied" }>,
+    stored: unknown,
   ): void {
     for (const owed of record.owed) {
       if (owed.id <= high) throw new Error("Invalid delivery ordering");
@@ -325,6 +387,7 @@ export function logWriter<S, M, C>(options: EventSourcedOptions<S, M, C>) {
       deliveries.set(owed.id, false);
     }
     state = record.state;
+    storedState = stored;
     timers = record.timers;
   }
 
@@ -333,31 +396,70 @@ export function logWriter<S, M, C>(options: EventSourcedOptions<S, M, C>) {
     if (raw.protocol !== 2) throw new Error("Unsupported durable log protocol");
     accept(
       { seq: integer(raw.seq, 1), record: parseRecord(raw.record, options) },
+      object(raw.record),
       raw.snapshot,
     );
   }
 
   function prepare<T>(
     record: LogRecord<S, M, C>,
-    checkpoint: Snapshot<S, M, C>,
+    checkpointThrough: number | null,
     result: (row: PersistedLogRecord<LogRecord<S, M, C>>) => T,
   ): PreparedLogWrite<T> {
     const frame: Frame<S, M, C> = {
       protocol: 2,
       seq: records.length + 1,
       record,
-      snapshot: checkpoint,
+      snapshot: null,
     };
-    const bytes = JSON.stringify(frame);
+    let bytes = JSON.stringify(frame);
     const raw = object(JSON.parse(bytes));
-    const canonical = parseRecord(raw.record, options);
-    const row = { seq: frame.seq, record: canonical };
+    const stored = object(raw.record);
+    // Copy the encoded State, so a checkpoint never evaluates its producer again.
+    if (checkpointThrough !== null) {
+      raw.snapshot = { through: checkpointThrough, state: stored.state };
+      bytes = JSON.stringify(raw);
+    }
+    const row = { seq: frame.seq, record: parseRecord(stored, options) };
     return {
       suffix: frame.seq === 1 ? "" : `/${frame.seq}`,
       bytes,
       result: structuredClone(result(row)),
-      accept: () => accept(row, raw.snapshot),
+      accept: () => accept(row, stored, raw.snapshot),
     };
+  }
+
+  function committed(
+    record: LogRecord<S, M, C>,
+    version: number,
+  ): LogCommit<S, C> {
+    const withState = (r: { state: S; owed: readonly EffectOwed<C>[] }) => ({
+      version,
+      state: r.state,
+      owed: r.owed.map(({ id, effect }) => ({ id, effect })),
+    });
+    const invalid = (): never => {
+      throw new Error("Invalid committed record");
+    };
+    const readers: Cases<LogRecord<S, M, C>, LogCommit<S, C>> = {
+      birth: withState,
+      applied: withState,
+      receipt: () => ({ version, state: state as S, owed: [] }),
+      message: invalid,
+      confirmed: invalid,
+    };
+    return visit(record, readers);
+  }
+
+  function requireSource(sourceId: string): Source {
+    const source = pending[cursor];
+    if (source?.entry.record.id !== sourceId)
+      throw new Error("Commit requires the first pending source");
+    return source;
+  }
+  function owe(cmds: readonly C[]) {
+    const recorder = pendingEffectsLedger<C>({ lastId: high });
+    return cmds.map((cmd) => recorder.owe(cmd).event);
   }
 
   return {
@@ -392,58 +494,65 @@ export function logWriter<S, M, C>(options: EventSourcedOptions<S, M, C>) {
     commit(
       step: LogStep<S, M, C>,
     ): LogCommit<S, C> | PreparedLogWrite<LogCommit<S, C>> {
-      const existing =
-        step._tag === "birth" ? birth : sources.get(step.sourceId)?.step;
-      if (existing)
-        return structuredClone({
-          version: records.length,
-          state: existing.state,
-          owed: existing.owed.map(({ id, effect }) => ({ id, effect })),
-        });
-      if (
-        step._tag === "birth"
-          ? records.length !== 0
-          : pending[cursor]?.entry.record.id !== step.sourceId
-      )
-        throw new Error("Commit requires birth or the first pending source");
-      const recorder = pendingEffectsLedger<C>({ lastId: high });
-      const owed = step.cmds.map((cmd) => recorder.owe(cmd).event);
-      const record: LogRecord<S, M, C> =
-        step._tag === "birth"
-          ? {
+      const previous = (r: { sourceId: string }) =>
+        sources.get(r.sourceId)?.commit;
+      const existing = visit<LogStep<S, M, C>, LogRecord<S, M, C> | undefined>(
+        step,
+        {
+          birth: () => birth,
+          applied: previous,
+          receipt: previous,
+        } satisfies Cases<LogStep<S, M, C>, LogRecord<S, M, C> | undefined>,
+      );
+      if (existing) return structuredClone(committed(existing, records.length));
+      type Proposal = { record: LogRecord<S, M, C>; checkpoint: number | null };
+      const writers: Cases<LogStep<S, M, C>, Proposal> = {
+        birth: (r) => {
+          if (records.length !== 0) throw new Error("Duplicate birth");
+          return {
+            record: {
               _tag: "birth",
-              at: step.at,
-              state: step.state,
-              owed,
-              timers: step.timers,
-            }
-          : {
-              _tag: "step",
-              sourceId: step.sourceId,
-              state: step.state,
-              owed,
-              timers: step.timers,
-              disposition: step.disposition,
-              ...(step.failure ? { failure: step.failure } : {}),
-            };
-      const source = pending[cursor];
-      const checkpoint =
-        source !== undefined &&
-        step._tag === "message" &&
-        step.disposition === "applied" &&
-        applied + 1 - baseline >= (options.snapshotEvery ?? 100)
-          ? { through: source.entry.seq, state: step.state }
-          : null;
-      return prepare(record, checkpoint, (row) => {
-        const r = row.record;
-        if (r._tag !== "birth" && r._tag !== "step")
-          throw new Error("Invalid committed record");
-        return {
-          version: row.seq,
-          state: r.state,
-          owed: r.owed.map(({ id, effect }) => ({ id, effect })),
-        };
-      });
+              at: r.at,
+              state: r.state,
+              owed: owe(r.cmds),
+              timers: r.timers,
+            },
+            checkpoint: null,
+          };
+        },
+        applied: (r) => {
+          const source = requireSource(r.sourceId);
+          return {
+            record: {
+              _tag: "applied",
+              sourceId: r.sourceId,
+              state: r.state,
+              owed: owe(r.cmds),
+              timers: r.timers,
+            },
+            checkpoint:
+              applied + 1 - baseline >= (options.snapshotEvery ?? 100)
+                ? source.entry.seq
+                : null,
+          };
+        },
+        receipt: (r) => {
+          requireSource(r.sourceId);
+          return {
+            record: {
+              _tag: "receipt",
+              sourceId: r.sourceId,
+              disposition: r.disposition,
+              ...(r.failure ? { failure: r.failure } : {}),
+            },
+            checkpoint: null,
+          };
+        },
+      };
+      const proposal = visit(step, writers);
+      return prepare(proposal.record, proposal.checkpoint, (row) =>
+        committed(row.record, row.seq),
+      );
     },
     confirm(
       id: DeliveryId,
@@ -458,8 +567,8 @@ export function logWriter<S, M, C>(options: EventSourcedOptions<S, M, C>) {
       );
     },
     checkpoint(): boolean | PreparedLogWrite<boolean> {
-      if (applied === baseline || state === null) return false;
-      const next = { through, state };
+      if (applied === baseline || !birth) return false;
+      const next = { through, state: storedState };
       const bytes = JSON.stringify({ protocol: 2, snapshot: next });
       return {
         suffix: "/checkpoint",

@@ -46,12 +46,11 @@ test("one atomic Map write stores State, all deliveries and the source receipt; 
     { _tag: "upload", file: "two" },
   ] as const;
   const step = {
-    _tag: "message",
+    _tag: "applied",
     sourceId: source.entry.record.id,
     state: { files: ["one"], uploaded: [] },
     cmds,
     timers: [],
-    disposition: "applied",
   } satisfies LogStep<State, Msg, Upload>;
   let writes = 0;
   const set = disk.set.bind(disk);
@@ -67,7 +66,7 @@ test("one atomic Map write stores State, all deliveries and the source receipt; 
   expect(await store.load()).toEqual(step.state);
   const after = await store.readLog();
   expect(after.records.at(-1)?.record).toMatchObject({
-    _tag: "step",
+    _tag: "applied",
     sourceId: step.sourceId,
     state: step.state,
     owed: [{ id: 1 }, { id: 2 }],
@@ -103,14 +102,21 @@ test("manual and automatic checkpoints share an applied-message baseline and ret
     disposition: "applied" | "ignored" | "rejected",
   ) => {
     const row = await store.appendMessage(input(id));
-    return store.commitStep({
-      _tag: "message",
-      sourceId: row.entry.record.id,
-      state: birth.state,
-      cmds: [],
-      timers: [],
-      disposition,
-    });
+    return store.commitStep(
+      disposition === "applied"
+        ? {
+            _tag: "applied",
+            sourceId: row.entry.record.id,
+            state: birth.state,
+            cmds: [],
+            timers: [],
+          }
+        : {
+            _tag: "receipt",
+            sourceId: row.entry.record.id,
+            disposition,
+          },
+    );
   };
   await consume("one", "applied");
   const version = (await store.readLog()).version;
@@ -154,12 +160,11 @@ test("two keyed drivers share a Map while isolating history, dedup, revisions, c
   const rightBefore = await right.readLog();
   const source = await left.appendMessage(input("same"));
   await left.commitStep({
-    _tag: "message",
+    _tag: "applied",
     sourceId: source.entry.record.id,
     state: { files: ["left"], uploaded: [] },
     cmds: [{ _tag: "upload", file: "left" }],
     timers: [],
-    disposition: "applied",
   });
   await left.checkpoint();
   expect(await right.readLog()).toEqual(rightBefore);
@@ -274,9 +279,8 @@ test.each([
     phase === "birth"
       ? store.commitStep({ _tag: "birth", at: 0, ...payload })
       : store.commitStep({
-          _tag: "message",
+          _tag: "applied",
           sourceId: "go",
-          disposition: "applied",
           ...payload,
         });
   const committed = await result;

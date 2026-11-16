@@ -1732,7 +1732,7 @@ interface LogAppend<M> {
 ```ts
 interface LogCommit<S, C> {
   readonly owed: readonly OwedEffect<C>[];
-  /** State decoded from the committed record. */
+  /** The current decoded State, unchanged by a receipt. */
   readonly state: S;
   readonly version: number;
 }
@@ -1838,13 +1838,17 @@ type LogRecord<S, M, C> =
   }
   | LogMessage<M>
   | {
-    readonly _tag: "step";
-    readonly disposition: LogDisposition;
-    readonly failure?: LogFailure;
+    readonly _tag: "applied";
     readonly owed: readonly EffectOwed<C>[];
     readonly sourceId: string;
     readonly state: S;
     readonly timers: readonly LoggedTimer<M>[];
+  }
+  | {
+    readonly _tag: "receipt";
+    readonly disposition: "ignored" | "rejected";
+    readonly failure?: LogFailure;
+    readonly sourceId: string;
   }
   | {
     readonly _tag: "confirmed";
@@ -1866,14 +1870,13 @@ type LogStep<S, M, C> =
     readonly timers: readonly LoggedTimer<M>[];
   }
   | {
-    readonly _tag: "message";
+    readonly _tag: "applied";
     readonly cmds: readonly C[];
-    readonly disposition: LogDisposition;
-    readonly failure?: LogFailure;
     readonly sourceId: string;
     readonly state: S;
     readonly timers: readonly LoggedTimer<M>[];
   }
+  | Extract<LogRecord<S, M, C>, { _tag: "receipt" }>
 ```
 
 <a id="logUpdates"></a>

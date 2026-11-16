@@ -796,12 +796,16 @@ export type LogRecord<S, M, C> =
     }
   | LogMessage<M>
   | {
-      readonly _tag: "step";
+      readonly _tag: "applied";
       readonly sourceId: string;
       readonly state: S;
       readonly owed: readonly EffectOwed<C>[];
       readonly timers: readonly LoggedTimer<M>[];
-      readonly disposition: LogDisposition;
+    }
+  | {
+      readonly _tag: "receipt";
+      readonly sourceId: string;
+      readonly disposition: "ignored" | "rejected";
       readonly failure?: LogFailure;
     }
   | { readonly _tag: "confirmed"; readonly event: EffectConfirmed };
@@ -833,18 +837,17 @@ export type LogStep<S, M, C> =
       readonly timers: readonly LoggedTimer<M>[];
     }
   | {
-      readonly _tag: "message";
+      readonly _tag: "applied";
       readonly sourceId: string;
       readonly state: S;
       readonly cmds: readonly C[];
       readonly timers: readonly LoggedTimer<M>[];
-      readonly disposition: LogDisposition;
-      readonly failure?: LogFailure;
-    };
+    }
+  | Extract<LogRecord<S, M, C>, { _tag: "receipt" }>;
 /** The decoded State and deliveries returned by a committed transition. */
 export interface LogCommit<S, C> {
   readonly version: number;
-  /** State decoded from the committed record. */
+  /** The current decoded State, unchanged by a receipt. */
   readonly state: S;
   readonly owed: readonly OwedEffect<C>[];
 }

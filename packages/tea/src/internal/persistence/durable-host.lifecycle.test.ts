@@ -315,17 +315,19 @@ test("T6: missing cells, escaping reducer failures and ignored messages retain d
   await live.dispatch({ _tag: "open", to: "own" });
   expect(live.getState()._tag).toBe("open");
   const steps = (await store.readLog()).records.flatMap(({ record }) =>
-    record._tag === "step" ? [record] : [],
+    record._tag === "applied" || record._tag === "receipt" ? [record] : [],
   );
-  expect(steps.map((step) => step.disposition)).toEqual([
-    "rejected",
-    "rejected",
-    "ignored",
-    "applied",
-  ]);
-  expect(steps.slice(0, 2).map((step) => step.failure?.kind)).toEqual([
-    "no_cell",
-    "reduce",
-  ]);
+  expect(
+    steps.map((step) =>
+      step._tag === "applied" ? "applied" : step.disposition,
+    ),
+  ).toEqual(["rejected", "rejected", "ignored", "applied"]);
+  expect(
+    steps
+      .slice(0, 2)
+      .map((step) =>
+        step._tag === "receipt" ? step.failure?.kind : undefined,
+      ),
+  ).toEqual(["no_cell", "reduce"]);
   await live.stop();
 });

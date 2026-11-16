@@ -5,6 +5,7 @@ import {
   defineMachine,
   deliveryIdOf,
   type LoggedStore,
+  type LogStep,
   type Settled,
 } from "../../index";
 import { memoryEventSourcedStore } from "../../mem";
@@ -111,13 +112,13 @@ test("crash harness rejects a driver dropping a committed completion step", asyn
       ...store,
       commitStep: async (step) => {
         const dropped =
-          step._tag === "message" &&
+          step._tag === "applied" &&
           step.state.uploaded.length > durable.uploaded.length;
-        const accepted = dropped
-          ? { ...step, state: durable, disposition: "ignored" as const }
+        const accepted: LogStep<State, Msg, Upload> = dropped
+          ? { _tag: "receipt", sourceId: step.sourceId, disposition: "ignored" }
           : step;
         const result = await store.commitStep(accepted);
-        durable = accepted.state;
+        durable = result.state;
         return result;
       },
     };

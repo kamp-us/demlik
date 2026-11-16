@@ -41,9 +41,10 @@ in a caller-owned `Map<string, string>`. Cold recovery validates retained
 records once and builds admission, receipt and checkpoint indexes. An active
 writer validates and serializes only its new record, without scanning history.
 Each mutation reads, decides and writes synchronously before yielding.
-A transition uses one Map mutation containing its State, every
-newly owed command, an applied/ignored/rejected source receipt and any automatic
-checkpoint. The engine never calls the inherited snapshot `save` on a log store.
+An applied transition uses one Map mutation containing its State, every newly
+owed command, its source ID and any automatic checkpoint. An ignored or rejected
+message saves only a receipt, without State, commands or timers.
+The engine never calls the inherited snapshot `save` on a log store.
 
 **Binding constraints.**
 
@@ -71,8 +72,9 @@ checkpoint. The engine never calls the inherited snapshot `save` on a log store.
   log bytes are refused without overwriting history. A schema-rejected derived
   checkpoint falls back to retained committed records.
 - Manual and automatic checkpoints share a baseline of applied source messages.
-  Ignored and rejected receipts do not advance the cadence. Checkpoints retain
-  message and confirmation receipts and do not advance writer revision.
+  Ignored and rejected receipts do not advance the cadence. Checkpoints copy
+  State's stored form, retain message and confirmation receipts, and do not
+  advance writer revision.
 - Timers remain on their existing path; engine log commits carry `timers: []`.
   This slice adds no fenced log, file or Durable Object driver, deferred outcome,
   external delivery confirmation, agent integration or replacement host wrapper.

@@ -54,7 +54,6 @@ import { deliveryId, desiredSub, detachWork, followUps } from "../../pure/core";
 import type {
   DispatchOptions,
   LogCommit,
-  LogDisposition,
   LogMessage,
   OnError,
   RuntimeErrorContext,
@@ -72,6 +71,7 @@ import {
 import type { OwedEffect } from "../persistence/durable-log/durable-effects";
 import {
   committedState,
+  consumedSources,
   logLedger,
   messageId,
   pendingMessages,
@@ -967,13 +967,10 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
     try {
       transition = update(state, source.msg);
     } catch (error) {
-      const committed = await session.write((store) =>
+      await session.write((store) =>
         store.commitStep({
-          _tag: "message",
+          _tag: "receipt",
           sourceId: source.id,
-          state: state as S,
-          cmds: [],
-          timers: [],
           disposition: "rejected",
           failure: {
             kind: refused ? "no_cell" : "reduce",
@@ -981,23 +978,30 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
           },
         }),
       );
-      state = committed.state;
       consumed.add(source.id);
       throw error;
     }
-    const disposition: LogDisposition =
-      transition === null ? "ignored" : "applied";
-    const [next, cmds] = transition ?? [state, []];
+    if (transition === null) {
+      await session.write((store) =>
+        store.commitStep({
+          _tag: "receipt",
+          sourceId: source.id,
+          disposition: "ignored",
+        }),
+      );
+      consumed.add(source.id);
+      return;
+    }
+    const [next, cmds] = transition;
     let committed: LogCommit<S, C>;
     try {
       committed = await session.write((store) =>
         store.commitStep({
-          _tag: "message",
+          _tag: "applied",
           sourceId: source.id,
           state: next,
           cmds,
           timers: [],
-          disposition,
         }),
       );
     } catch (error) {
@@ -1007,7 +1011,7 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
     }
     consumed.add(source.id);
     state = committed.state;
-    if (!recovering && disposition === "applied")
+    if (!recovering)
       await publishLogged(
         committed.state,
         source.msg,
@@ -1113,8 +1117,7 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
     // `null` when nothing was saved (boots fresh), a refusal otherwise.
     if (session) {
       let log = await session.read();
-      for (const { record } of log.records)
-        if (record._tag === "step") consumed.add(record.sourceId);
+      for (const sourceId of consumedSources(log)) consumed.add(sourceId);
       if (log.records.length === 0) {
         const [initial, cmds] = config.init(null, config.ctx);
         const result = await session.write((store) =>
