@@ -1,5 +1,3 @@
-import type { EffectOwed, EffectConfirmed, OwedEffect } from "./internal/persistence/durable-log/durable-effects";
-import type { DeliveryId } from "./pure/core";
 /**
  * @demlik/tea runtime interface surface + pure helpers — the public types,
  * interfaces, and construction/composition helpers the runtime (`./run`)
@@ -13,9 +11,15 @@ import type { DeliveryId } from "./pure/core";
 
 import { describeError } from "./describe-error";
 import type {
+  EffectConfirmed,
+  EffectOwed,
+  OwedEffect,
+} from "./internal/persistence/durable-log/durable-effects";
+import type {
   AnyCmdDef,
   BuiltinSub,
   CmdOf,
+  DeliveryId,
   HandlerCtx,
   InterpretDetached,
   Machine,
@@ -759,6 +763,118 @@ export interface FencedStore<S> extends Store<S> {
   saveFenced(state: S, expectedVersion: number): Promise<number>;
 }
 
+/** A committed timer decision. */
+export interface LoggedTimer<M> {
+  readonly id: string;
+  readonly subId: string;
+  readonly at: number;
+  readonly msg: M;
+  readonly fired: boolean;
+}
+/** A canonical admitted message, saved before reduction. */
+export interface LogMessage<M> {
+  readonly _tag: "message";
+  readonly id: string;
+  readonly at: number;
+  readonly msg: M;
+}
+/** The durable result of consuming a message. */
+export type LogDisposition = "applied" | "ignored" | "rejected";
+/** A reducer refusal retained with its source receipt. */
+export interface LogFailure {
+  readonly kind: "no_cell" | "reduce";
+  readonly message: string;
+}
+/** The atomic records retained by a durable log. */
+export type LogRecord<S, M, C> =
+  | {
+      readonly _tag: "birth";
+      readonly at: number;
+      readonly state: S;
+      readonly owed: readonly EffectOwed<C>[];
+      readonly timers: readonly LoggedTimer<M>[];
+    }
+  | LogMessage<M>
+  | {
+      readonly _tag: "step";
+      readonly sourceId: string;
+      readonly state: S;
+      readonly owed: readonly EffectOwed<C>[];
+      readonly timers: readonly LoggedTimer<M>[];
+      readonly disposition: LogDisposition;
+      readonly failure?: LogFailure;
+    }
+  | { readonly _tag: "confirmed"; readonly event: EffectConfirmed };
+/** A protocol record with its namespace-local sequence. */
+export interface PersistedLogRecord<R> {
+  readonly seq: number;
+  readonly record: R;
+}
+/** A coherent validated log and its derived checkpoint. */
+export interface LogRead<S, M, C> {
+  readonly version: number;
+  readonly records: readonly PersistedLogRecord<LogRecord<S, M, C>>[];
+  readonly snapshot: { readonly through: number; readonly state: S } | null;
+  readonly timers: readonly LoggedTimer<M>[];
+}
+/** The canonical admission and whether it was newly appended. */
+export interface LogAppend<M> {
+  readonly version: number;
+  readonly appended: boolean;
+  readonly entry: PersistedLogRecord<LogMessage<M>>;
+}
+/** An atomic birth or source transition request. */
+export type LogStep<S, M, C> =
+  | {
+      readonly _tag: "birth";
+      readonly at: number;
+      readonly state: S;
+      readonly cmds: readonly C[];
+      readonly timers: readonly LoggedTimer<M>[];
+    }
+  | {
+      readonly _tag: "message";
+      readonly sourceId: string;
+      readonly state: S;
+      readonly cmds: readonly C[];
+      readonly timers: readonly LoggedTimer<M>[];
+      readonly disposition: LogDisposition;
+      readonly failure?: LogFailure;
+    };
+/** The canonical deliveries assigned by a committed transition. */
+export interface LogCommit<C> {
+  readonly version: number;
+  readonly owed: readonly OwedEffect<C>[];
+}
+/** The result of acknowledging an owed delivery. */
+export interface LogConfirmation {
+  readonly version: number;
+  readonly confirmed: boolean;
+}
+/** An optional store capability for engine-owned durable execution. */
+export interface LoggedStore<S, M, C> extends Store<S> {
+  readonly logged: true;
+  readLog(): Promise<LogRead<S, M, C>>;
+  appendMessage(message: LogMessage<M>): Promise<LogAppend<M>>;
+  commitStep(step: LogStep<S, M, C>): Promise<LogCommit<C>>;
+  confirmEffect(id: DeliveryId): Promise<LogConfirmation>;
+  checkpoint(): Promise<boolean>;
+}
+/** Recognize the optional durable log capability. */
+export function isLoggedStore<S, M, C>(
+  store: Store<S>,
+): store is LoggedStore<S, M, C> {
+  return "logged" in store && store.logged === true;
+}
+/** Schemas and namespace for a durable log store. */
+export interface EventSourcedOptions<S, M, C> {
+  readonly state: Schema<S>;
+  readonly message: Schema<M>;
+  readonly command: Schema<C>;
+  readonly key?: string;
+  readonly snapshotEvery?: number;
+}
+
 /**
  * A `Store<S>` that can remove what it saved — how a host forgets a run.
  *
@@ -908,6 +1024,12 @@ export function schemaMigrate<S>(
  * transition.
  */
 export type DispatchSettle = "quiescent" | "once";
+
+/** Dispatch metadata, including a stable caller identity for logged admission. */
+export interface DispatchOptions {
+  readonly settle?: DispatchSettle;
+  readonly id?: string;
+}
 
 // === RuntimeRef<M>: typed sibling-runtime handle ===
 //
@@ -1744,91 +1866,4 @@ export function tryInterpret<C extends Cmd, Ok, M, Ctx>(
     }
     return onOk(value, cmd);
   };
-}
-
-/** Dispatch metadata, including a stable caller identity for logged admission. */
-export interface DispatchOptions {
-  readonly settle?: DispatchSettle;
-  readonly id?: string;
-}
-/** A committed timer decision. */
-export interface LoggedTimer<M> {
-  readonly id: string;
-  readonly subId: string;
-  readonly at: number;
-  readonly msg: M;
-  readonly fired: boolean;
-}
-/** A canonical admitted message, saved before reduction. */
-export interface LogMessage<M> {
-  readonly _tag: "message";
-  readonly id: string;
-  readonly at: number;
-  readonly msg: M;
-}
-/** The durable result of consuming a message. */
-export type LogDisposition = "applied" | "ignored" | "rejected";
-/** A reducer refusal retained with its source receipt. */
-export interface LogFailure {
-  readonly kind: "no_cell" | "reduce";
-  readonly message: string;
-}
-/** The atomic records retained by a durable log. */
-export type LogRecord<S, M, C> =
-  | { readonly _tag: "birth"; readonly at: number; readonly state: S; readonly owed: readonly EffectOwed<C>[]; readonly timers: readonly LoggedTimer<M>[] }
-  | LogMessage<M>
-  | { readonly _tag: "step"; readonly sourceId: string; readonly state: S; readonly owed: readonly EffectOwed<C>[]; readonly timers: readonly LoggedTimer<M>[]; readonly disposition: LogDisposition; readonly failure?: LogFailure }
-  | { readonly _tag: "confirmed"; readonly event: EffectConfirmed };
-/** A protocol record with its namespace-local sequence. */
-export interface PersistedLogRecord<R> {
-  readonly seq: number;
-  readonly record: R;
-}
-/** A coherent validated log and its derived checkpoint. */
-export interface LogRead<S, M, C> {
-  readonly version: number;
-  readonly records: readonly PersistedLogRecord<LogRecord<S, M, C>>[];
-  readonly snapshot: { readonly through: number; readonly state: S } | null;
-  readonly timers: readonly LoggedTimer<M>[];
-}
-/** The canonical admission and whether it was newly appended. */
-export interface LogAppend<M> {
-  readonly version: number;
-  readonly appended: boolean;
-  readonly entry: PersistedLogRecord<LogMessage<M>>;
-}
-/** An atomic birth or source transition request. */
-export type LogStep<S, M, C> =
-  | { readonly _tag: "birth"; readonly at: number; readonly state: S; readonly cmds: readonly C[]; readonly timers: readonly LoggedTimer<M>[] }
-  | { readonly _tag: "message"; readonly sourceId: string; readonly state: S; readonly cmds: readonly C[]; readonly timers: readonly LoggedTimer<M>[]; readonly disposition: LogDisposition; readonly failure?: LogFailure };
-/** The canonical deliveries assigned by a committed transition. */
-export interface LogCommit<C> {
-  readonly version: number;
-  readonly owed: readonly OwedEffect<C>[];
-}
-/** The result of acknowledging an owed delivery. */
-export interface LogConfirmation {
-  readonly version: number;
-  readonly confirmed: boolean;
-}
-/** An optional store capability for engine-owned durable execution. */
-export interface LoggedStore<S, M, C> extends Store<S> {
-  readonly logged: true;
-  readLog(): Promise<LogRead<S, M, C>>;
-  appendMessage(message: LogMessage<M>): Promise<LogAppend<M>>;
-  commitStep(step: LogStep<S, M, C>): Promise<LogCommit<C>>;
-  confirmEffect(id: DeliveryId): Promise<LogConfirmation>;
-  checkpoint(): Promise<boolean>;
-}
-/** Recognize the optional durable log capability. */
-export function isLoggedStore<S, M, C>(store: Store<S>): store is LoggedStore<S, M, C> {
-  return "logged" in store && store.logged === true;
-}
-/** Schemas and namespace for a durable log store. */
-export interface EventSourcedOptions<S, M, C> {
-  readonly state: Schema<S>;
-  readonly message: Schema<M>;
-  readonly command: Schema<C>;
-  readonly key?: string;
-  readonly snapshotEvery?: number;
 }

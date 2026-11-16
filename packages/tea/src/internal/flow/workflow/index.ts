@@ -68,6 +68,7 @@
  * subpath; reached from inside the package as `internal/flow/workflow`.
  */
 
+import { Cmd, type CmdOf } from "../../../index";
 import {
   type DeliveryId,
   type EffectConfirmed,
@@ -79,7 +80,6 @@ import {
   pendingEffectsLedger,
   survivingEffects,
 } from "../../persistence/durable-log/durable-effects";
-import { Cmd, type CmdOf } from "../../../index";
 import { unchecked, undefinedOnly } from "../../schema";
 import { routeWorkflowMsg } from "./route";
 

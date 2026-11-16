@@ -64,7 +64,10 @@ export function supervision<S, M extends { _tag: string }, C>(
       try {
         return next(state, msg);
       } catch (reduceError) {
-        if (isRefusal(machine, reduceError, state, msg)) throw reduceError;
+        if (isRefusal(machine, reduceError, state, msg)) {
+          loop.refused();
+          throw reduceError;
+        }
         loop.report(reduceError, "reduce");
         switch (policy.strategy) {
           case "restart":

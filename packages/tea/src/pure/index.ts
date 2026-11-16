@@ -97,6 +97,8 @@ export {
   acceptsOf,
   Cmd,
   CmdNameCollisionError,
+  type DeliveryId,
+  deliveryIdOf,
   describeMachine,
   detectUpdateForm,
   foldMsgs,
@@ -109,5 +111,3 @@ export {
   subIdOf,
   UndeclaredFailureError,
 } from "./core";
-
-export { deliveryIdOf, type DeliveryId } from "./core";

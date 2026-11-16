@@ -13,6 +13,9 @@
 // because both `./resilience` and `./jev` import it, so it cannot live inside
 // either one.
 export * from "./compose";
+export * from "./internal/persistence/durable-log/durable-effects";
+export { logUpdates } from "./internal/persistence/durable-log/format";
+export * from "./internal/persistence/durable-log/idempotent-effect";
 export * from "./observability";
 // `./pure` and `./subs` are no longer subpaths of their own (#51): the closing
 // sweep pinned the export map to the public subpaths, and ADR 0016 moves parts
@@ -103,11 +106,22 @@ export {
   UndeclaredFailureError,
 } from "./pure/core";
 export * from "./runtime-types";
+
+export {
+  type DispatchOptions,
+  type EventSourcedOptions,
+  isLoggedStore,
+  type LogAppend,
+  type LogCommit,
+  type LogConfirmation,
+  type LogDisposition,
+  type LogFailure,
+  type LoggedStore,
+  type LoggedTimer,
+  type LogMessage,
+  type LogRead,
+  type LogRecord,
+  type LogStep,
+  type PersistedLogRecord,
+} from "./runtime-types";
 export * from "./subs";
-
-export * from "./internal/persistence/durable-log/durable-effects";
-export * from "./internal/persistence/durable-log/idempotent-effect";
-
-export { isLoggedStore, type DispatchOptions, type LoggedTimer, type LogMessage, type LogDisposition, type LogFailure, type LogRecord, type PersistedLogRecord, type LogRead, type LogAppend, type LogStep, type LogCommit, type LogConfirmation, type LoggedStore, type EventSourcedOptions } from "./runtime-types";
-
-export { logUpdates } from "./internal/persistence/durable-log/format";

@@ -1,4 +1,3 @@
-import type { DispatchOptions } from "../runtime-types";
 /**
  * `runIn`: the Effect engine's `run`, as a host adapter takes it (#852).
  *
@@ -31,6 +30,7 @@ import {
   type TellAnswer,
 } from "../internal/engine/loop";
 import type { Cmd, Machine, Sub } from "../pure/core";
+import type { DispatchOptions } from "../runtime-types";
 import {
   type BootedRunHandle,
   DispatchDiscardedError,

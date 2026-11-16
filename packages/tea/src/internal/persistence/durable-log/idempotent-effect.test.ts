@@ -15,8 +15,9 @@ import { Refusal } from "../../../runtime-types";
 
 import fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
-import { defineMachine, type Reducer } from "../../../index";
 import { doEventSourcedStore } from "../../../do/event-sourced-store";
+import { doStore } from "../../../do/index";
+import { defineMachine, type Reducer } from "../../../index";
 import {
   type AppliedEffectsEvent,
   appliedEffects,
@@ -26,7 +27,6 @@ import {
   idempotentEffect,
   isApplied,
 } from "./idempotent-effect";
-import { doStore } from "../../../do/index";
 
 // ── An in-memory `DurableObjectStorage` fake (mirrors the sibling do-store
 //    tests). Enough of the surface for `doStore` / `doEventSourcedStore`. ──────

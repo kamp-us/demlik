@@ -52,7 +52,10 @@ export interface EffectBootingRuntime<
     opts?: DispatchOptions,
   ): Effect.Effect<void, Err | Stopped | StoreFailed>;
   /** `dispatch(msg, { settle: "once" })`: one transition, no follow-up drain. */
-  dispatchOnce(msg: M, opts?: DispatchOptions): Effect.Effect<void, Err | Stopped | StoreFailed>;
+  dispatchOnce(
+    msg: M,
+    opts?: DispatchOptions,
+  ): Effect.Effect<void, Err | Stopped | StoreFailed>;
   /**
    * A zero-arg change notifier, fired for each applied transition after its
    * save and before its first Cmd's handler starts.

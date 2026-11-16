@@ -1,4 +1,3 @@
-import { failHandler } from "../internal/engine/store-session";
 /**
  * The Effect engine's `run` (#283): the same machine the Promise engine runs,
  * with Effect handlers, Effect sub runners, the caller's Layers and
@@ -42,6 +41,7 @@ import {
   type Postable,
   startLoop,
 } from "../internal/engine/loop";
+import { failHandler } from "../internal/engine/store-session";
 import { subGateOf } from "../internal/engine/sub-gate";
 import type {
   BuiltinSub,
@@ -82,9 +82,15 @@ export type EffectInterpretCell<
   R = unknown,
 > =
   unknown extends ErrorsOf<C>
-    ? // biome-ignore lint/suspicious/noConfusingVoidType: a hand-written Cmd's handler may settle with nothing
-      (cmd: C, ctx?: unknown) => Effect.Effect<M | readonly M[] | void, unknown, R>
-    : (cmd: C, ctx?: unknown) => Effect.Effect<OkOfCmd<C>, DeclaredErrorsOf<C>, R>;
+    ? (
+        cmd: C,
+        ctx?: unknown,
+        // biome-ignore lint/suspicious/noConfusingVoidType: a hand-written Cmd's handler may settle with nothing
+      ) => Effect.Effect<M | readonly M[] | void, unknown, R>
+    : (
+        cmd: C,
+        ctx?: unknown,
+      ) => Effect.Effect<OkOfCmd<C>, DeclaredErrorsOf<C>, R>;
 
 /**
  * The Effect engine's `interpret` map: one cell per Cmd variant, each reading
@@ -433,12 +439,17 @@ function start<
   // defined Cmd the `Cmd.define` edge routes it to the error sink, for a
   // hand-written one it rejects the dispatch. A hand-written cell's failure is
   // marked, so the handle fails the dispatch with it as a typed error.
-  async function settle(cell: AnyCell, cmd: unknown, ctx: unknown): Promise<unknown> {
+  async function settle(
+    cell: AnyCell,
+    cmd: unknown,
+    ctx: unknown,
+  ): Promise<unknown> {
     const type = (cmd as { _tag: string })._tag;
     const exit = await runEffect(cellResult(cell(cmd, ctx)), {
       signal: interruption.signal,
     });
-    if (Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)) failHandler(ctx);
+    if (Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause))
+      failHandler(ctx);
     return settleCellExit(exit, defined.has(type));
   }
 

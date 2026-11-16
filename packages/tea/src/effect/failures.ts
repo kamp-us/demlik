@@ -1,4 +1,3 @@
-import { LogWriteFailure } from "../internal/engine/store-session";
 /**
  * The Effect engine's typed failures (#308, ruling R4.1 of #325), and the edge
  * that turns what the shared loop rejects with into them.
@@ -16,6 +15,7 @@ import {
   type ExtensionFactory,
   RuntimeStoppedError,
 } from "../internal/engine/loop";
+import { LogWriteFailure } from "../internal/engine/store-session";
 import {
   DispatchDiscardedError,
   type Store,
@@ -83,7 +83,8 @@ class SaveFailure {
 /** What was thrown, with the edge's wrapper taken off. */
 export function unwrapped(error: unknown): unknown {
   if (error instanceof CellFailure) return error.failure;
-  if (error instanceof SaveFailure || error instanceof LogWriteFailure) return error.cause;
+  if (error instanceof SaveFailure || error instanceof LogWriteFailure)
+    return error.cause;
   return error;
 }
 
