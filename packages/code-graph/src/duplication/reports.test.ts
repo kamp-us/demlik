@@ -437,10 +437,7 @@ describe("positional data clumps", () => {
       "different keys inside wrapped options objects",
       ["outage", "failure", "fallback"]
         .flatMap((key, i) =>
-          Array.from(
-            { length: 3 },
-            () => `run(a${i}, b${i}, c${i}, ({ ${key}: d${i} } as Opts));`,
-          ),
+          Array.from({ length: 3 }, () => `run(a${i}, b${i}, c${i}, ({ ${key}: d${i} } as Opts));`),
         )
         .join("\n"),
     ],
