@@ -164,9 +164,15 @@ const texts = [
   nonJson,
   "long".repeat(1024),
 ] as const;
+// Any well-formed Unicode text. Built from code points, because `fc.string({ unit })`
+// does not exist on the oldest fast-check the `./pbt` entry supports (3.0.0).
+const codePoint = fc
+  .integer({ min: 0, max: 0x10ffff })
+  .filter((point) => point < 0xd800 || point > 0xdfff)
+  .map((point) => String.fromCodePoint(point));
 const encoded = fc.oneof(
   fc.constantFrom(...texts),
-  fc.string({ unit: "binary", maxLength: 40 }),
+  fc.array(codePoint, { maxLength: 40 }).map((points) => points.join("")),
 );
 const batchArbitrary = fc
   .tuple(encoded, fc.array(encoded, { maxLength: 3 }))
