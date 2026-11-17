@@ -173,6 +173,8 @@ export type FoldInput<S, M, C> = {
   readonly storedState: unknown;
   readonly stored: Admission<M> | null;
   readonly snapshot: CheckpointInput<S, M, C> | null;
+  /** Metadata is parsed eagerly, but a record refusal takes precedence. */
+  readonly checkpointRefusal?: LogRefusal;
 };
 
 /** Fold a whole newly observed batch with one invocation-local accumulator. */
@@ -230,45 +232,65 @@ export function fold<S, M, C>(
   };
   type Tag = LogRecord<S, M, C>["_tag"];
   type Table = {
-    [K in Tag]: (
-      input: Omit<FoldInput<S, M, C>, "row"> & {
-        readonly row: PersistedLogRecord<
-          Extract<LogRecord<S, M, C>, { _tag: K }>
-        >;
-      },
-    ) => undefined | LogRefusal;
+    [K in Tag]: {
+      readonly first: boolean;
+      readonly fold: (
+        input: Omit<FoldInput<S, M, C>, "row"> & {
+          readonly row: PersistedLogRecord<
+            Extract<LogRecord<S, M, C>, { _tag: K }>
+          >;
+        },
+      ) => undefined | LogRefusal;
+    };
   };
   const foldCases = {
-    birth: (input) => {
-      if (draft.birth) return { _tag: "duplicate_birth_record" };
-      draft.birth = true;
-      return install(input.row.record, input.storedState);
+    birth: {
+      first: true,
+      fold: (input) => {
+        if (draft.birth) return { _tag: "duplicate_birth_record" };
+        draft.birth = true;
+        return install(input.row.record, input.storedState);
+      },
     },
-    message: (input) => {
-      if (input.stored !== null) return { _tag: "duplicate_source" };
-      draft.pending.push(input.row);
+    message: {
+      first: false,
+      fold: (input) => {
+        if (input.stored !== null) return { _tag: "duplicate_source" };
+        draft.pending.push(input.row);
+      },
     },
-    applied: (input) => {
-      draft.applied += 1;
-      const refusal = consume(input.row.record);
-      if (refusal) return refusal;
-      return install(input.row.record, input.storedState);
+    applied: {
+      first: false,
+      fold: (input) => {
+        draft.applied += 1;
+        const refusal = consume(input.row.record);
+        if (refusal) return refusal;
+        return install(input.row.record, input.storedState);
+      },
     },
-    receipt: (input) => consume(input.row.record),
-    confirmed: (input) => {
-      if (!draft.owed.has(input.row.record.event.id))
-        return { _tag: "invalid_delivery_receipt" };
-      ledger(input.row.record.event);
+    receipt: {
+      first: false,
+      fold: (input) => consume(input.row.record),
+    },
+    confirmed: {
+      first: false,
+      fold: (input) => {
+        if (!draft.owed.has(input.row.record.event.id))
+          return { _tag: "invalid_delivery_receipt" };
+        ledger(input.row.record.event);
+      },
     },
   } satisfies Table satisfies Record<Tag, Table[Tag]>;
   for (const input of inputs) {
     if ("_tag" in input) return input;
     const { seq, record } = input.row;
-    if (seq !== draft.version + 1 || (seq === 1 && record._tag !== "birth"))
+    const row = foldCases[record._tag];
+    if (seq !== draft.version + 1 || (seq === 1 && !row.first))
       return { _tag: "invalid_ordering" };
-    const refusal = foldCases[record._tag](input as never);
+    const refusal = row.fold(input as never);
     if (refusal) return refusal;
     draft.version = seq;
+    if (input.checkpointRefusal) return input.checkpointRefusal;
     if (input.snapshot !== null) {
       const checkpoint = checkpointFields(draft, input.snapshot, boundary);
       if (checkpoint._tag !== "ok") return checkpoint;

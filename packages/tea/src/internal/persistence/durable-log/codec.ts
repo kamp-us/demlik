@@ -188,7 +188,7 @@ function record<S, M, C>(
 export type DecodedFrame<S, M, C> = {
   readonly row: PersistedLogRecord<LogRecord<S, M, C>>;
   readonly storedState: unknown;
-  readonly snapshot: CheckpointMetadata | null;
+  readonly snapshot: Result<CheckpointMetadata | null>;
 };
 
 export type CheckpointMetadata = {
@@ -210,11 +210,10 @@ export function decodeFrame<S, M, C>(
   const stored = object(raw.value.record);
   if (stored._tag !== "ok") return stored;
   const snapshot = checkpointMetadata(raw.value.snapshot ?? null);
-  if (snapshot._tag !== "ok") return snapshot;
   return ok({
     row: { seq: seq.value, record: decoded.value },
     storedState: stored.value.state,
-    snapshot: snapshot.value,
+    snapshot,
   });
 }
 
@@ -243,12 +242,11 @@ export function encodeFrame<S, M, C>(
   const decoded = record(stored.value, options);
   if (decoded._tag !== "ok") return decoded;
   const snapshot = checkpointMetadata(raw.snapshot);
-  if (snapshot._tag !== "ok") return snapshot;
   return ok({
     bytes,
     row: { seq, record: decoded.value },
     storedState: stored.value.state,
-    snapshot: snapshot.value,
+    snapshot,
   });
 }
 

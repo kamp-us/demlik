@@ -77,12 +77,22 @@ type Table<S, M, C> = {
   };
 };
 
+type RecordCases<S, M, C, R> = {
+  [K in LogRecord<S, M, C>["_tag"]]: (
+    record: Extract<LogRecord<S, M, C>, { _tag: K }>,
+  ) => R;
+};
+
+const invalidCommitment = (): LogRefusal => ({
+  _tag: "invalid_committed_record",
+});
+
 function committed<S, M, C>(
   record: LogRecord<S, M, C> | null,
   p: Projection<S, M, C>,
   version: number,
 ): LogCommit<S, C> | LogRefusal {
-  if (record === null) return { _tag: "invalid_committed_record" };
+  if (record === null) return invalidCommitment();
   const withState = (
     r: Birth<S, M, C> | Extract<LogRecord<S, M, C>, { _tag: "applied" }>,
   ): LogCommit<S, C> => ({
@@ -90,7 +100,6 @@ function committed<S, M, C>(
     state: r.state,
     owed: r.owed.map(({ id, effect }) => ({ id, effect })),
   });
-  const invalid = (): LogRefusal => ({ _tag: "invalid_committed_record" });
   const readers = {
     birth: withState,
     applied: withState,
@@ -99,14 +108,28 @@ function committed<S, M, C>(
       state: p.state as S,
       owed: [],
     }),
-    message: invalid,
-    confirmed: invalid,
-  } satisfies {
-    [K in LogRecord<S, M, C>["_tag"]]: (
-      r: Extract<LogRecord<S, M, C>, { _tag: K }>,
-    ) => LogCommit<S, C> | LogRefusal;
-  };
+    message: invalidCommitment,
+    confirmed: invalidCommitment,
+  } satisfies RecordCases<S, M, C, LogCommit<S, C> | LogRefusal>;
   return readers[record._tag](record as never);
+}
+
+function appended<S, M, C>(
+  stored: PersistedLogRecord<LogRecord<S, M, C>> | null,
+): LogAppend<M> | LogRefusal {
+  if (stored === null) return invalidCommitment();
+  const readers = {
+    birth: invalidCommitment,
+    message: (record) => ({
+      version: stored.seq,
+      appended: true,
+      entry: { seq: stored.seq, record },
+    }),
+    applied: invalidCommitment,
+    receipt: invalidCommitment,
+    confirmed: invalidCommitment,
+  } satisfies RecordCases<S, M, C, LogAppend<M> | LogRefusal>;
+  return readers[stored.record._tag](stored.record as never);
 }
 
 function cases<S, M, C>(): Table<S, M, C> {
@@ -146,13 +169,7 @@ function cases<S, M, C>(): Table<S, M, C> {
       response: (p, op, stored) => {
         if (op.stored !== null)
           return { version: p.version, appended: false, entry: op.stored };
-        if (stored?.record._tag !== "message")
-          return { _tag: "invalid_committed_record" };
-        return {
-          version: stored.seq,
-          appended: true,
-          entry: { seq: stored.seq, record: stored.record },
-        };
+        return appended(stored);
       },
     },
     birth: {

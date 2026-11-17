@@ -774,3 +774,20 @@ test("a repeated applied commitment never reads the replacement", async () => {
     ),
   ).toEqual(applied);
 });
+
+test("record rules precede a structurally rejected checkpoint", async () => {
+  const disk = new Map([
+    [
+      "@@es/default/log",
+      JSON.stringify({
+        protocol: 2,
+        seq: 1,
+        record: message("a"),
+        snapshot: true,
+      }),
+    ],
+  ]);
+  await expect(
+    memoryEventSourcedStore(disk, options).readLog(),
+  ).rejects.toThrow("Invalid durable log ordering");
+});

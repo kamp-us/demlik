@@ -153,8 +153,14 @@ export function memoryLog<S, M extends { _tag: string }, C extends Cmd>(
     return previous;
   };
   const add = (frame: DecodedFrame<S, M, C>): FoldInput<S, M, C> => {
-    const stored = indexRecord(frame.row);
-    return { ...frame, stored, snapshot: checkpointInput(frame.snapshot) };
+    const input = {
+      row: frame.row,
+      storedState: frame.storedState,
+      stored: indexRecord(frame.row),
+    };
+    if (frame.snapshot._tag !== "ok")
+      return { ...input, snapshot: null, checkpointRefusal: frame.snapshot };
+    return { ...input, snapshot: checkpointInput(frame.snapshot.value) };
   };
   const apply = (inputs: Iterable<FoldInput<S, M, C> | LogRefusal>): void => {
     [projection] = requireVerb(fold(projection, inputs, boundary));
