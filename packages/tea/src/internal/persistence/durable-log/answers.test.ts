@@ -184,6 +184,82 @@ describe("answer log rules and protocol", () => {
     }
   });
 
+  it.each([
+    null,
+    5,
+    "ignored",
+    false,
+    { id: 5 },
+    [5],
+  ])("F3: protocol 2 ignores extra answerTo %j and leaves delivery 5 owed", async (answerTo) => {
+    const oldFrames = legacy.frames.map((bytes) => {
+      const frame = JSON.parse(bytes);
+      if (frame.record._tag === "applied") frame.record.owed[0].id = 5;
+      return JSON.stringify(frame);
+    });
+    const record = {
+      _tag: "message" as const,
+      id: "old-extra",
+      at: 2,
+      msg: { _tag: "go" as const, n: 7 },
+    };
+    const bytes = JSON.stringify({
+      protocol: 2,
+      seq: 4,
+      record: { ...record, answerTo },
+      snapshot: null,
+    });
+    const decoded = decodeFrame(bytes, options);
+    expect(decoded).toMatchObject({ _tag: "ok", value: { row: { record } } });
+    if (decoded._tag !== "ok") throw new Error("old frame refused");
+    expect(Object.hasOwn(decoded.value.row.record, "answerTo")).toBe(false);
+    const before = durableLog(storageOf({ frames: oldFrames }), options);
+    const after = durableLog(
+      storageOf({ frames: [...oldFrames, bytes] }),
+      options,
+    );
+    expect(logLedger(await before.store.readLog()).surviving()).toEqual([
+      { id: 5, effect: delivery.effect },
+    ]);
+    expect(logLedger(await after.store.readLog()).surviving()).toEqual(
+      logLedger(await before.store.readLog()).surviving(),
+    );
+    expect(after.inspect().projection.owed).toEqual(
+      before.inspect().projection.owed,
+    );
+    expect(pendingMessages(await after.store.readLog())).toEqual([record]);
+    expect(await after.store.load()).toEqual(await before.store.load());
+  });
+
+  it.each([
+    {},
+    { answerTo: null },
+    { answerTo: 0 },
+    { answerTo: 1.5 },
+    { answerTo: Number.MAX_SAFE_INTEGER + 1 },
+  ])("F3: protocol 3 requires a valid receipt %j", (metadata) => {
+    const record = {
+      _tag: "message",
+      id: "new-answer",
+      at: 2,
+      msg: answer.msg,
+      ...metadata,
+    };
+    expect(
+      decodeFrame(
+        JSON.stringify({ protocol: 3, seq: 4, record, snapshot: null }),
+        options,
+      ),
+    ).toEqual({ _tag: "invalid_integer" });
+  });
+
+  it("F3: protocol 3 refuses records that cannot carry a message receipt", () => {
+    const birth = JSON.parse(legacy.frames[0] ?? "null");
+    expect(
+      decodeFrame(JSON.stringify({ ...birth, protocol: 3 }), options)._tag,
+    ).not.toBe("ok");
+  });
+
   it("writes protocol 3 only for answer metadata, and reads both protocols", () => {
     const ordinary = {
       _tag: "message" as const,

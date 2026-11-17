@@ -79,9 +79,22 @@ function timer<M>(raw: unknown, schema: Schema<M>): Result<LoggedTimer<M>> {
   });
 }
 
+type Protocol = 2 | 3;
+const protocols = {
+  2: () => ok(undefined),
+  3: (record) =>
+    record._tag === "message"
+      ? integer(record.answerTo, 1)
+      : { _tag: "unsupported_log_protocol" },
+} satisfies Record<
+  Protocol,
+  (record: Readonly<Record<string, unknown>>) => Result<number | undefined>
+>;
+
 function message<M>(
   r: Readonly<Record<string, unknown>>,
   schema: Schema<M>,
+  answerTo: number | undefined,
 ): Result<LogMessage<M>> {
   const id = identity(r.id);
   if (id._tag !== "ok") return id;
@@ -89,25 +102,25 @@ function message<M>(
   if (at._tag !== "ok") return at;
   const msg = value(schema, r.msg);
   if (msg._tag !== "ok") return msg;
-  const answerTo =
-    r.answerTo === undefined ? ok(undefined) : integer(r.answerTo, 1);
-  if (answerTo._tag !== "ok") return answerTo;
   return ok({
     _tag: "message",
     id: id.value,
     at: at.value,
     msg: msg.value,
-    ...(answerTo.value === undefined ? {} : { answerTo: answerTo.value }),
+    ...(answerTo === undefined ? {} : { answerTo }),
   });
 }
 
 function record<S, M, C>(
   raw: unknown,
   options: EventSourcedOptions<S, M, C>,
+  protocol: Protocol,
 ): Result<LogRecord<S, M, C>> {
   const parsed = object(raw);
   if (parsed._tag !== "ok") return parsed;
   const r = parsed.value;
+  const answerTo = protocols[protocol](r);
+  if (answerTo._tag !== "ok") return answerTo;
   const work = () => {
     const state = value(options.state, r.state);
     if (state._tag !== "ok") return state;
@@ -135,7 +148,7 @@ function record<S, M, C>(
       if (decoded._tag !== "ok") return decoded;
       return ok({ _tag: "birth", at: at.value, ...decoded.value });
     },
-    message: () => message(r, options.message),
+    message: () => message(r, options.message, answerTo.value),
     applied: (): Result<LogRecord<S, M, C>> => {
       const sourceId = identity(r.sourceId);
       if (sourceId._tag !== "ok") return sourceId;
@@ -216,7 +229,6 @@ export function decodeFrame<S, M, C>(
 ): Result<DecodedFrame<S, M, C>> {
   const raw = object(JSON.parse(bytes));
   if (raw._tag !== "ok") return raw;
-  const protocols = { 2: true, 3: true } satisfies Record<2 | 3, true>;
   if (
     typeof raw.value.protocol !== "number" ||
     !Object.hasOwn(protocols, raw.value.protocol)
@@ -224,7 +236,11 @@ export function decodeFrame<S, M, C>(
     return { _tag: "unsupported_log_protocol" };
   const seq = integer(raw.value.seq, 1);
   if (seq._tag !== "ok") return seq;
-  const decoded = record(raw.value.record, options);
+  const decoded = record(
+    raw.value.record,
+    options,
+    raw.value.protocol as Protocol,
+  );
   if (decoded._tag !== "ok") return decoded;
   const stored = object(raw.value.record);
   if (stored._tag !== "ok") return stored;
@@ -242,8 +258,10 @@ export function encodeFrame<S, M, C>(
   checkpointThrough: number | null,
   options: EventSourcedOptions<S, M, C>,
 ): Result<DecodedFrame<S, M, C> & { readonly bytes: string }> {
+  const protocol =
+    entry._tag === "message" && entry.answerTo !== undefined ? 3 : 2;
   let bytes = JSON.stringify({
-    protocol: "answerTo" in entry && entry.answerTo !== undefined ? 3 : 2,
+    protocol,
     seq,
     record: entry,
     snapshot: null,
@@ -258,7 +276,7 @@ export function encodeFrame<S, M, C>(
     raw.snapshot = { through: checkpointThrough, state: stored.value.state };
     bytes = JSON.stringify(raw);
   }
-  const decoded = record(stored.value, options);
+  const decoded = record(stored.value, options, protocol);
   if (decoded._tag !== "ok") return decoded;
   const snapshot = checkpointMetadata(raw.snapshot);
   return ok({

@@ -264,13 +264,16 @@ that the fourth call has the result without another handoff.
 
 `owed()` requires a logged invocation; otherwise the existing interpret error
 sink reports the refusal. On Effect, succeed with `owed()` after enqueueing.
-`dispatch(msg, { answerTo: id })` clears an owed entry and admits its answer
-atomically. Repeats of an atomic answer, including different payloads, write nothing.
+For a new answer, `dispatch(msg, { answerTo: id })` clears the owed entry with
+its admission atomically. Repeats of an atomic answer, including different payloads,
+write nothing.
 If an ordinary canonical handler reply was admitted before a crash left its delivery
 owed, that first reply stands: the later call writes one confirmation record and
 does not fold another reply. Unknown ids and malformed new answers are refused
-before writing; corrected new answers may retry on the same activation. An ordinary caller `id`
-deduplicates input and does not confirm a delivery.
+before writing; corrected new answers may retry on the same activation. An ordinary
+caller `id` deduplicates input and does not confirm a delivery.
 
 Answer-bearing log frames use protocol 3 and require this reader. Ordinary frames
-and checkpoints stay on protocol 2; existing protocol-2 logs remain readable.
+and checkpoints stay on protocol 2. Protocol-2 messages keep their previous meaning:
+an extra field named `answerTo` is ignored. Protocol-3 message frames require a
+positive safe-integer `answerTo`; older readers refuse these frames.
