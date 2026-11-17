@@ -241,7 +241,7 @@ tea drops its late result ([ADR 0025](https://github.com/kamp-us/demlik/blob/mai
 
 ## 6. Hand long work to an external owner
 
-Use the [executable handler recipe](../../src/docs/how-to/make-durable.test.ts)
+Use the [executable handler recipe](https://github.com/kamp-us/demlik/blob/main/packages/tea/src/docs/how-to/make-durable.test.ts)
 (the `external-work` region) with a `Cmd.define`d job and a log store:
 
 1. Read `deliveryIdOf(ctx)` in the handler. Send that id and the Cmd to the
