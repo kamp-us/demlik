@@ -153,33 +153,86 @@ describe("fileJournal", () => {
   });
 });
 
-const fileFixture: JournalKitFactory = async () => {
+it("fences separate file instances against the real head under the shared lock", async () => {
   const dir = freshDir();
-  return {
-    byteFile: true,
-    async open() {
-      return fileJournal(dir);
-    },
-    interruptAt(point) {
-      writes.cut = point;
-    },
-    writePoints: (records) =>
-      Array.from(
-        { length: Buffer.byteLength(`${JSON.stringify(records)}\n`) + 1 },
-        (_, i) => i,
-      ),
-    async tearTail() {
-      fs.appendFileSync(
-        join(dir, "s.jsonl"),
-        Buffer.from('["半').subarray(0, 4),
-      );
-    },
-    async dispose() {
-      writes.cut = undefined;
-      fs.rmSync(dir, { recursive: true, force: true });
-    },
+  const a = fileJournal(dir, { fenced: true });
+  const b = fileJournal(dir, { fenced: true });
+  await a.read("s", 0);
+  await b.read("s", 0);
+  const results = await Promise.all([
+    a.appendFenced("s", ['"a"'], 0),
+    b.appendFenced("s", ['"b"'], 0),
+  ]);
+  expect(results.filter((result) => result._tag === "appended")).toHaveLength(
+    1,
+  );
+  expect(
+    results.filter((result) => result._tag === "journal_conflict"),
+  ).toEqual([{ _tag: "journal_conflict", expected: 0, head: 1 }]);
+  const before = fs.readFileSync(join(dir, "s.jsonl"));
+  expect(await a.appendFenced("s", ['"ahead"'], 2)).toEqual({
+    _tag: "journal_conflict",
+    expected: 2,
+    head: 1,
+  });
+  expect(fs.readFileSync(join(dir, "s.jsonl"))).toEqual(before);
+  expect(await b.appendFenced("s", ['"next"'], 1)).toEqual({
+    _tag: "appended",
+    head: 2,
+    entries: [{ seq: 2, record: '"next"' }],
+  });
+});
+
+const fileFixture =
+  (fenced: boolean): JournalKitFactory =>
+  async () => {
+    const dir = freshDir();
+    return {
+      byteFile: true,
+      async open() {
+        if (!fenced) return fileJournal(dir);
+        const journal = fileJournal(dir, { fenced: true });
+        const heads = new Map<string, number>();
+        return {
+          ...journal,
+          async read(stream, after) {
+            const result = await journal.read(stream, after);
+            if (result._tag === "read") heads.set(stream, result.head);
+            return result;
+          },
+          async append(stream, records) {
+            const result = await journal.appendFenced(
+              stream,
+              records,
+              heads.get(stream) ?? 0,
+            );
+            if (result._tag === "journal_conflict")
+              throw new Error(JSON.stringify(result));
+            if (result._tag === "appended") heads.set(stream, result.head);
+            return result;
+          },
+        } satisfies FencedJournal;
+      },
+      interruptAt(point) {
+        writes.cut = point;
+      },
+      writePoints: (records) =>
+        Array.from(
+          { length: Buffer.byteLength(`${JSON.stringify(records)}\n`) + 1 },
+          (_, i) => i,
+        ),
+      async tearTail() {
+        fs.appendFileSync(
+          join(dir, "s.jsonl"),
+          Buffer.from('["半').subarray(0, 4),
+        );
+      },
+      async dispose() {
+        writes.cut = undefined;
+        fs.rmSync(dir, { recursive: true, force: true });
+      },
+    };
   };
-};
 
 type StoredRow = { readonly pos: number; readonly body: string };
 function openTurn(path: string) {
@@ -329,10 +382,11 @@ const sqliteFixture: JournalKitFactory = async () => {
   };
 };
 
-const drivers = { file: fileFixture, sqlite: sqliteFixture } satisfies Record<
-  string,
-  JournalKitFactory
->;
+const drivers = {
+  file: fileFixture(false),
+  fileFenced: fileFixture(true),
+  sqlite: sqliteFixture,
+} satisfies Record<string, JournalKitFactory>;
 for (const [label, make] of Object.entries(drivers)) {
   for (let repeat = 1; repeat <= 3; repeat++) {
     describeJournalConformance(`${label} ${repeat}`, make, {

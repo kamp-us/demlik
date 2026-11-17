@@ -20,7 +20,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { defineMachine, type Reducer, StoreConflictError } from "../index";
 import { run } from "../promise";
 import { FileLockTimeoutError, withFileLock } from "./file-lock";
-import { fileStore } from "./index";
+import { fileJournal, fileStore } from "./index";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DEAD_PID = 2147483647;
@@ -75,12 +75,18 @@ describe("a folder restored from another machine", { timeout: 30_000 }, () => {
         store: fileStore(path, parseNotes, { fenced: true }),
       };
     });
-    const leftovers = stores.map((s) => s.lockPath);
+    const journalLock = join(dir, "s.jsonl.lock");
+    writeFileSync(journalLock, fromAnotherHost());
+    const journal = fileJournal(dir, { fenced: true });
+    const leftovers = [...stores.map((s) => s.lockPath), journalLock];
     const before = leftovers.map((p) => readFileSync(p, "utf8"));
 
     const startedAt = performance.now();
-    const writes = await Promise.allSettled([
-      ...stores.map((s) => s.store.saveFenced({ notes: [] }, 0)),
+    const [writes, refusal] = await Promise.all([
+      Promise.allSettled(
+        stores.map((s) => s.store.saveFenced({ notes: [] }, 0)),
+      ),
+      journal.appendFenced("s", ['{"tag":"a"}'], 0),
     ]);
     const elapsedMs = performance.now() - startedAt;
 
@@ -94,6 +100,20 @@ describe("a folder restored from another machine", { timeout: 30_000 }, () => {
       expect(error.message).toContain(leftovers[i]);
       expect(error.blockedBy).toBe("another-host");
     }
+    expect(refusal).toMatchObject({
+      _tag: "journal_io",
+      operation: "append",
+      uncertain: false,
+    });
+    if (refusal._tag !== "journal_io")
+      throw new Error("expected a lock refusal");
+    expect(refusal.message).toContain(journalLock);
+    expect(refusal.message).toContain("delete the file");
+    expect(await journal.read("s", 0)).toEqual({
+      _tag: "read",
+      head: 0,
+      entries: [],
+    });
     expect(elapsedMs).toBeGreaterThanOrEqual(REAL_LIMIT_MS);
     expect(elapsedMs).toBeLessThan(REAL_LIMIT_MS + 5_000);
     // Not stolen: every leftover is still there, byte for byte.
@@ -104,6 +124,11 @@ describe("a folder restored from another machine", { timeout: 30_000 }, () => {
     await expect(
       stores[0]?.store.saveFenced({ notes: ["back"] }, 0),
     ).resolves.toBe(1);
+    expect(await journal.appendFenced("s", ['{"tag":"a"}'], 0)).toEqual({
+      _tag: "appended",
+      head: 1,
+      entries: [{ seq: 1, record: '{"tag":"a"}' }],
+    });
   });
 
   it.concurrent("a run's final save over a held lock reaches onError with the typed error", async () => {

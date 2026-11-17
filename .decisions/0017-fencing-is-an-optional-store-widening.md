@@ -77,8 +77,8 @@ Both sub-questions triage left open are ruled here, per the founder ruling on #1
   both the fencing story and the single-writer requirement that applies without it.
 - Two durability tiers now exist, and every page that explains the `Store` seam has to name
   which one it is describing. That is the cost bought in exchange for breaking no implementor.
-- `fileStore`'s fence is a sidecar `<path>.fence` stamp guarded by a `wx` lock file —
-  `open(…, "wx")` is the only primitive here that is atomic across
+- `fileStore`'s fence is a sidecar `<path>.fence` stamp guarded by the same `wx` lock file
+  `fileJournal` uses — `open(…, "wx")` is the only primitive here that is atomic across
   processes, and without it the read-compare-write is a TOCTOU race that both writers pass.
   The state file's own format is unchanged, so a file written unfenced resumes fenced.
 - `doStore`'s fence runs inside `storage.transaction`, so the read, the compare and both writes

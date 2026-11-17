@@ -57,6 +57,7 @@ import type {
 } from "../index";
 import { StoreConflictError } from "../index";
 import type {
+  FencedJournal,
   Journal,
   JournalEntry,
   JournalRefusal,
@@ -272,7 +273,7 @@ function fenceFileStore<S>(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// fileJournal — a `Journal<R>` over one on-disk JSONL file per stream.
+// fileJournal — encoded atomic batches in one JSONL file per stream.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -280,8 +281,12 @@ function fenceFileStore<S>(
  * Each stream is `<encoded-stream>.jsonl`; each LF-terminated storage frame
  * contains one array of opaque strings. The driver never parses record bodies.
  *
- * One writer per stream is the caller's precondition. This driver takes no
- * cross-process lock and offers no fenced widening. Reads refresh incrementally,
+ * The plain call takes no cross-process lock; one writer per stream is the
+ * caller's precondition. Pass `{ fenced: true }` for `appendFenced`, which
+ * compares the real head and appends under the existing `wx` stream lock.
+ * A stale or ahead expectation refuses without writing; an unavailable lock
+ * returns `journal_io` with `uncertain: false` and the lock's clear step.
+ * Base `append` remains unconditional in either form. Reads refresh incrementally,
  * omit an incomplete tail without changing it, and the next append truncates
  * that tail before writing. Short writes are completed before acknowledgement.
  * Complete batches survive controlled process interruption; no fsync or
@@ -290,7 +295,18 @@ function fenceFileStore<S>(
  * The factory remains experimental on the stable `./node` subpath.
  * @experimental
  */
-export function fileJournal(dir: string): Journal {
+export function fileJournal(
+  dir: string,
+  options: { readonly fenced: true },
+): FencedJournal;
+export function fileJournal(
+  dir: string,
+  options?: { readonly fenced?: false },
+): Journal;
+export function fileJournal(
+  dir: string,
+  options: { readonly fenced?: boolean } = {},
+): Journal | FencedJournal {
   const streams = new Map<
     string,
     { end: number; tail: number; rows: JournalEntry[] }
@@ -303,6 +319,7 @@ export function fileJournal(dir: string): Journal {
   const refusal = (
     error: unknown,
     operation: "read" | "append",
+    uncertain = operation === "append",
   ): JournalRefusal =>
     error instanceof SyntaxError
       ? { _tag: "journal_corrupt", message: message(error) }
@@ -310,7 +327,7 @@ export function fileJournal(dir: string): Journal {
           _tag: "journal_io",
           operation,
           message: message(error),
-          uncertain: operation === "append",
+          uncertain,
         };
 
   journalFs.mkdirSync(dir, { recursive: true });
@@ -376,7 +393,7 @@ export function fileJournal(dir: string): Journal {
       journalFs.closeSync(fd);
     }
   }
-  return {
+  const base: Journal = {
     async read(stream, after) {
       try {
         const { rows } = refresh(stream);
@@ -422,6 +439,25 @@ export function fileJournal(dir: string): Journal {
     },
     async close() {
       streams.clear();
+    },
+  };
+  if (options.fenced !== true) return base;
+  return {
+    ...base,
+    fenced: true,
+    async appendFenced(stream, records, expected) {
+      let attempted = false;
+      try {
+        return await withFileLock(dir, `${path(stream)}.lock`, async () => {
+          const head = refresh(stream).rows.length;
+          if (expected !== head)
+            return { _tag: "journal_conflict", expected, head };
+          attempted = true;
+          return base.append(stream, records);
+        });
+      } catch (error) {
+        return refusal(error, "append", attempted);
+      }
     },
   };
 }
