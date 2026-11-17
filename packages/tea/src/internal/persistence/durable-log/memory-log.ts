@@ -275,6 +275,11 @@ export function memoryLog<S, M extends { _tag: string }, C extends Cmd>(
         requireVerb(response<S, M, C, K>(before, op, row, writes)),
       );
     let prepared: ReturnType<typeof prepareResponse> | undefined;
+    let writeStarted = false;
+    const persist = (suffix: string, bytes: string): void => {
+      writeStarted = true;
+      backing.set(key + suffix, bytes);
+    };
     const interpreters = {
       append_record: (
         write: Extract<Write<S, M, C>, { _tag: "append_record" }>,
@@ -290,10 +295,7 @@ export function memoryLog<S, M extends { _tag: string }, C extends Cmd>(
         stored = frame.row;
         // A native response-clone failure must leave storage untouched.
         prepared = prepareResponse(stored);
-        backing.set(
-          key + (stored.seq === 1 ? "" : `/${stored.seq}`),
-          frame.bytes,
-        );
+        persist(stored.seq === 1 ? "" : `/${stored.seq}`, frame.bytes);
         apply([add(frame)]);
         if (stored.seq === 1) root = frame.bytes;
       },
@@ -301,7 +303,7 @@ export function memoryLog<S, M extends { _tag: string }, C extends Cmd>(
         write: Extract<Write<S, M, C>, { _tag: "write_checkpoint" }>,
       ) => {
         const bytes = encodeCheckpoint(write.through, write.storedState);
-        backing.set(`${key}/checkpoint`, bytes);
+        persist("/checkpoint", bytes);
         acceptCheckpoint(bytes);
         checkpointBytes = bytes;
       },
@@ -310,8 +312,13 @@ export function memoryLog<S, M extends { _tag: string }, C extends Cmd>(
         write: Extract<Write<S, M, C>, { _tag: K }>,
       ) => void;
     };
-    for (const write of writes) interpreters[write._tag](write as never);
-    return prepared ?? prepareResponse(stored);
+    try {
+      for (const write of writes) interpreters[write._tag](write as never);
+      return prepared ?? prepareResponse(stored);
+    } catch (error) {
+      if (writeStarted) loaded = false;
+      throw error;
+    }
   };
   const store: LoggedStore<S, M, C> = {
     logged: true,

@@ -1,8 +1,9 @@
 import fc from "fast-check";
 import { expect, test, vi } from "vitest";
 import { z } from "zod";
+import { memoryEventSourcedStore } from "../../../mem";
 import { deepFreeze } from "../../../pure/core";
-import type { LogMessage } from "../../../runtime-types";
+import type { LogMessage, Schema } from "../../../runtime-types";
 import { op, optionsFor } from "../durable-wake.fixture";
 import { memoryLog } from "./memory-log";
 import * as operations from "./operations";
@@ -136,6 +137,149 @@ test("purity, whole projection replay, and cold cache equals incremental cache a
     decisionSpy.mockRestore();
     foldSpy.mockRestore();
   }
+
+  await fc.assert(
+    fc.asyncProperty(
+      fc.constantFrom("state", "message", "command"),
+      fc.integer({ min: 1, max: 12 }),
+      fc.constantFrom(1, 2, 100),
+      fc.array(op, { minLength: 1, maxLength: 30 }),
+      async (target, kthDecode, snapshotEvery, actions) => {
+        const base = { ...options, snapshotEvery };
+        const counts = { state: 0, message: 0, command: 0 };
+        let armed = false;
+        let faultDecodes = 0;
+        const fault = new Error(`injected ${target} decode ${kthDecode}`);
+        const schema = <T>(
+          name: keyof typeof counts,
+          delegate: Schema<T>,
+        ): Schema<T> => ({
+          safeParse(raw) {
+            counts[name] += 1;
+            if (armed && name === target && ++faultDecodes === kthDecode)
+              throw fault;
+            return delegate.safeParse(raw);
+          },
+        });
+        const faultOptions = {
+          ...base,
+          state: schema("state", base.state),
+          message: schema("message", base.message),
+          command: schema("command", base.command),
+        };
+        const disk = new Map<string, string>();
+        let live = memoryLog(disk, faultOptions);
+        const verify = () => {
+          const current = live.inspect();
+          const cold = memoryLog(new Map(disk), base).inspect();
+          expect(current).toEqual(cold);
+          return current;
+        };
+        const attempt = async (operation: () => Promise<unknown>) => {
+          const before = verify();
+          const stored = [...disk];
+          armed = true;
+          try {
+            await operation();
+          } catch (error) {
+            if (error !== fault)
+              expect(error).toMatchObject({
+                message: "Commit requires the first pending source",
+              });
+          } finally {
+            armed = false;
+          }
+          const decoded = { ...counts };
+          const after = verify();
+          if (JSON.stringify([...disk]) === JSON.stringify(stored)) {
+            expect(after).toEqual(before);
+            expect(counts).toEqual(decoded);
+          }
+        };
+        const boot = () =>
+          live.store.commitStep({
+            _tag: "birth",
+            at: 0,
+            state: { n: 0 },
+            cmds: [],
+            timers: [],
+          });
+        await attempt(boot);
+        if (!live.inspect().projection.birth) await attempt(boot);
+        await attempt(() =>
+          live.store.commitStep({
+            _tag: "applied",
+            sourceId: "not-admitted",
+            state: { n: 0 },
+            cmds: [],
+            timers: [],
+          }),
+        );
+        let sequence = 0;
+        let last: LogMessage<z.infer<typeof options.message>> | undefined;
+        type Action = (typeof actions)[number];
+        const admitted = async (
+          action: Extract<Action, { op: "set" | "ignored" | "rejected" }>,
+        ) => {
+          last = {
+            _tag: "message",
+            id: String(++sequence),
+            at: sequence,
+            msg: { _tag: "go", n: 1 },
+          };
+          const message = last;
+          await attempt(() => live.store.appendMessage(message));
+          const source = live.inspect().projection.pending[0];
+          if (source !== undefined) {
+            await attempt(() =>
+              action.op === "set"
+                ? live.store.commitStep({
+                    _tag: "applied",
+                    sourceId: source.record.id,
+                    state: { n: 1 },
+                    cmds: [{ _tag: "work", n: 1 }],
+                    timers: [],
+                  })
+                : live.store.commitStep({
+                    _tag: "receipt",
+                    sourceId: source.record.id,
+                    disposition:
+                      action.op === "ignored" ? "ignored" : "rejected",
+                  }),
+            );
+          }
+          for (const owed of live.inspect().projection.owed)
+            await attempt(() => live.store.confirmEffect(owed.id));
+        };
+        const perform = {
+          set: admitted,
+          ignored: admitted,
+          rejected: admitted,
+          repeat: async () => {
+            const message = last;
+            if (message) await attempt(() => live.store.appendMessage(message));
+          },
+          checkpoint: async () => {
+            await attempt(() => live.store.checkpoint());
+          },
+          wake: async () => {
+            live = memoryLog(disk, faultOptions);
+            verify();
+          },
+        } satisfies {
+          [K in Action["op"]]: (
+            action: Extract<Action, { op: K }>,
+          ) => Promise<void>;
+        };
+        for (const action of actions) await perform[action.op](action as never);
+      },
+    ),
+    {
+      seed: 954,
+      numRuns: 200,
+      examples: [["state", 3, 1, [{ op: "set", value: 1 }]]],
+    },
+  );
 });
 
 test("mutation control: purity rejects a verb that pushes into its projection", () => {
@@ -322,4 +466,56 @@ test("delivery gaps preserve high-water allocation and invalid stored confirmati
   await expect(memoryLog(invalid, options).store.readLog()).rejects.toThrow(
     "Invalid delivery receipt",
   );
+});
+
+function throwsOnSecondDecodeOf(expected: {
+  readonly n: number;
+}): Schema<{ n: number }> {
+  let matching = 0;
+  return {
+    safeParse(raw) {
+      const parsed = options.state.safeParse(raw);
+      if (parsed.success && parsed.data.n === expected.n && ++matching === 2)
+        throw new Error("State decode failed after the write");
+      return parsed;
+    },
+  };
+}
+
+test("a commit that fails after its write leaves the next read equal to a cold open", async () => {
+  const disk = new Map<string, string>();
+  const store = memoryEventSourcedStore(disk, {
+    ...options,
+    snapshotEvery: 1,
+    state: throwsOnSecondDecodeOf({ n: 1 }),
+  });
+  await store.commitStep({
+    _tag: "birth",
+    at: 0,
+    state: { n: 0 },
+    cmds: [],
+    timers: [],
+  });
+  await store.appendMessage({
+    _tag: "message",
+    id: "a",
+    at: 1,
+    msg: { _tag: "go", n: 1 },
+  });
+  await expect(
+    store.commitStep({
+      _tag: "applied",
+      sourceId: "a",
+      state: { n: 1 },
+      cmds: [],
+      timers: [],
+    }),
+  ).rejects.toThrow("State decode failed after the write");
+  const live = await store.readLog();
+  const cold = await memoryEventSourcedStore(new Map(disk), {
+    ...options,
+    snapshotEvery: 1,
+  }).readLog();
+  expect(live).toEqual(cold);
+  expect(live.records.map((r) => r.seq)).toEqual([1, 2, 3]);
 });
