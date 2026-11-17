@@ -1,4 +1,0 @@
-{"engine":"effect","driver":"memory","calls":50,"handoffs":9,"repeats":25,"answers":9,"deadlines":7,"owed":0}
-{"engine":"effect","driver":"file","calls":50,"handoffs":9,"repeats":25,"answers":9,"deadlines":7,"owed":0}
-{"engine":"promise","driver":"memory","calls":50,"handoffs":9,"repeats":25,"answers":9,"deadlines":7,"owed":0}
-{"engine":"promise","driver":"file","calls":50,"handoffs":9,"repeats":25,"answers":9,"deadlines":7,"owed":0}

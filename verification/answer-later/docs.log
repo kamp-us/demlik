@@ -1,9 +1,0 @@
-
- RUN  v5.0.1 /Users/cansirin/Documents/development/demlik/.worktrees/answer-later/packages/tea
-
-
- Test Files  27 passed (27)
-      Tests  207 passed | 1 skipped (208)
-   Start at  03:11:39
-   Duration  146.80s (tests 82%, transform 8%, import 6%, setup 4%)
-
