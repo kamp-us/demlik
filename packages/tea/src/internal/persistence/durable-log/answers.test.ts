@@ -23,22 +23,74 @@ const answer: LogMessage<Msg> = {
   msg: { _tag: "go", n: 7 },
   answerTo: 1,
 };
+const ordinary: LogMessage<Msg> = {
+  _tag: "message",
+  id: answer.id,
+  at: 1,
+  msg: { _tag: "go", n: 5 },
+};
 
 describe("answer log rules and protocol", () => {
   it.each([
-    ["owed", [delivery], 1, false, { _tag: "owed", delivery }],
-    ["repeat", [], 1, true, { _tag: "repeat" }],
+    ["owed", [delivery], 1, null, { _tag: "owed", delivery }],
+    ["repeat", [], 1, answer, { _tag: "repeat" }],
     [
       "unknown",
       [delivery],
       2,
-      false,
+      null,
       { _tag: "refused", refusal: { _tag: "unknown_answer" } },
     ],
+    [
+      "F2 ordinary reply still owed",
+      [delivery],
+      1,
+      ordinary,
+      { _tag: "confirm", id: 1 },
+    ],
+    [
+      "F2 ordinary reply already confirmed",
+      [],
+      1,
+      ordinary,
+      { _tag: "repeat" },
+    ],
+    ["F2 atomic reply", [delivery], 1, answer, { _tag: "repeat" }],
   ] as const)("pure correlation: %s", (_name, owed, id, admitted, expected) => {
     deepFreeze(owed);
     expect(decideAnswer(owed, id, admitted)).toEqual(expected);
     expect(decideAnswer(owed, id, admitted)).toEqual(expected);
+  });
+
+  it("F2: append confirms an ordinary canonical reply with one existing record", async () => {
+    const disk = storageOf(legacy);
+    const live = durableLog(disk, options);
+    await live.store.appendMessage(ordinary);
+    await live.store.commitStep({
+      _tag: "applied",
+      sourceId: ordinary.id,
+      state: { n: 5 },
+      cmds: [],
+      timers: [],
+    });
+    const before = storedLog(disk).frames.length;
+    const result = await live.store.appendMessage(answer);
+    expect(storedLog(disk).frames).toHaveLength(before + 1);
+    expect(JSON.parse(storedLog(disk).frames.at(-1) ?? "null").record).toEqual({
+      _tag: "confirmed",
+      event: { _tag: "effect_confirmed", id: 1 },
+    });
+    expect(result.appended).toBe(false);
+    expect(result.entry.record).toEqual(ordinary);
+    expect(result.version).toBe(live.inspect().projection.version);
+    expect(live.inspect().projection.state).toEqual({ n: 5 });
+    expect(live.inspect().projection.owed).toEqual([]);
+    expect(live.inspect().projection).toEqual(
+      durableLog(storageOf(storedLog(disk)), options).inspect().projection,
+    );
+    const confirmed = storedLog(disk).frames.length;
+    await live.store.appendMessage(answer);
+    expect(storedLog(disk).frames).toHaveLength(confirmed);
   });
 
   it("the append row produces one answer record or no writes, with the same owner refusing unknown ids", async () => {

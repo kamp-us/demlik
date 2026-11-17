@@ -33,7 +33,7 @@ import {
   deadlinesSub,
 } from "../../resilience";
 import type { Journal } from "../journal";
-import { readDeliveryLedger } from "./durable-log/format";
+import { messageId, readDeliveryLedger } from "./durable-log/format";
 
 const state = z.object({
   steps: z.array(z.number()),
@@ -684,6 +684,84 @@ export function answerHostTests(
           }
         } finally {
           await host.stop();
+          await journal.close();
+        }
+      });
+
+      it("F2: confirms an ordinary canonical reply after a cut, preserving its first payload", async () => {
+        const journal = memoryJournal();
+        const store = answerStore(journal);
+        const cut = new Error("cut before ordinary reply confirmation");
+        let confirmations = 0;
+        const cutting: typeof store = {
+          ...store,
+          confirmEffect: async () => {
+            confirmations += 1;
+            throw cut;
+          },
+        };
+        const initial = await boot(cutting, async () => Outcome.ok(5));
+        try {
+          await initial.dispatch({ _tag: "start", value: 1 }).catch(() => {});
+          await initial.stop();
+          expect(confirmations).toBe(1);
+          const prefix = await answerStore(journal).readLog();
+          const original = prefix.records.find(
+            ({ record }) =>
+              record._tag === "message" &&
+              record.id === messageId("answer", 1, 0),
+          );
+          expect(original?.record).toEqual({
+            _tag: "message",
+            id: messageId("answer", 1, 0),
+            at: expect.any(Number),
+            msg: job.ok(job({ value: 1 }), 5, expect.any(Number)),
+          });
+          expect(logLedger(prefix).surviving()).toEqual([
+            { id: 1, effect: job({ value: 1 }) },
+          ]);
+          const liveStore = answerStore(journal);
+          const handed: number[] = [];
+          const wake = await boot(liveStore, async (_cmd, ctx) => {
+            const id = deliveryIdOf(ctx);
+            if (id === undefined) throw new Error("missing delivery id");
+            handed.push(id);
+            return owed();
+          });
+          try {
+            expect(handed).toEqual([1]);
+            expect(wake.getState().answers).toEqual(["ok:1:5"]);
+            const before = await liveStore.readLog();
+            await wake.dispatch(job.ok(job({ value: 1 }), 10, 2), {
+              answerTo: 1,
+            });
+            const after = await liveStore.readLog();
+            expect(
+              after.records
+                .slice(before.records.length)
+                .map(({ record }) => record),
+            ).toEqual([
+              { _tag: "confirmed", event: { _tag: "effect_confirmed", id: 1 } },
+            ]);
+            expect(logLedger(after).surviving()).toEqual([]);
+            expect(wake.getState().answers).toEqual(["ok:1:5"]);
+            const cold = answerStore(journal);
+            expect(await cold.readLog()).toEqual(after);
+            expect(await cold.load()).toEqual(wake.getState());
+            await wake.stop();
+            let calls = 0;
+            const next = await boot(answerStore(journal), async () => {
+              calls += 1;
+              return owed();
+            });
+            await next.stop();
+            expect(calls).toBe(0);
+            expect(next.getState().answers).toEqual(["ok:1:5"]);
+          } finally {
+            await wake.stop();
+          }
+        } finally {
+          await initial.stop();
           await journal.close();
         }
       });

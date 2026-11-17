@@ -65,6 +65,7 @@ import type {
   LogCommit,
   LogMessage,
   OnError,
+  PersistedLogRecord,
   RuntimeErrorContext,
   RuntimeErrorPhase,
   Store,
@@ -1064,7 +1065,7 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
     answerTo?: DeliveryId,
   ) {
     const existing = turns.get(inputId);
-    if (existing) return existing;
+    if (existing && answerTo === undefined) return existing;
     if (session === undefined)
       throw new Error("Durable admission requires a logged store");
     const at = Date.now();
@@ -1090,12 +1091,13 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
       parsers[parsed._tag]();
       const log = await session.read();
       const old = log.records.find(
-        ({ record }) => record._tag === "message" && record.id === inputId,
+        (entry): entry is PersistedLogRecord<LogMessage<M>> =>
+          entry.record._tag === "message" && entry.record.id === inputId,
       );
       const answer = decideAnswer(
         logLedger(log).surviving(),
         id,
-        old !== undefined,
+        old?.record ?? null,
       );
       const results = {
         owed: (result) => {
@@ -1104,6 +1106,7 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
           msg = prepare(result.delivery.effect, msg);
         },
         repeat: () => {},
+        confirm: () => {},
         refused: (result) => {
           throw new Error(refusalMessage(result.refusal), {
             cause: result.refusal,
