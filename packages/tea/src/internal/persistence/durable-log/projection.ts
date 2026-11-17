@@ -87,6 +87,13 @@ export function checkpointEligibility<S, M, C>(
   );
 }
 
+function checkpointFields<S>(checkpoint: Checkpoint<S>) {
+  return {
+    snapshot: { through: checkpoint.through, state: checkpoint.state },
+    baseline: checkpoint.baseline,
+  } as const;
+}
+
 export function installCheckpoint<S, M, C>(
   p: Projection<S, M, C>,
   checkpoint: Checkpoint<S> | null,
@@ -95,8 +102,7 @@ export function installCheckpoint<S, M, C>(
     ? p
     : {
         ...p,
-        snapshot: { through: checkpoint.through, state: checkpoint.state },
-        baseline: checkpoint.baseline,
+        ...checkpointFields(checkpoint),
       };
 }
 
@@ -216,11 +222,7 @@ export function fold<S, M, C>(
       });
       if (checkpoint._tag !== "ok") return checkpoint;
       if (checkpoint.value !== null) {
-        draft.snapshot = {
-          through: checkpoint.value.through,
-          state: checkpoint.value.state,
-        };
-        draft.baseline = checkpoint.value.baseline;
+        Object.assign(draft, checkpointFields(checkpoint.value));
       }
     }
   }

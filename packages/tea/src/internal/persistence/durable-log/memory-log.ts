@@ -225,10 +225,8 @@ export function memoryLog<S, M extends { _tag: string }, C extends Cmd>(
 
   type Input =
     | LogStep<S, M, C>
-    | Extract<
-        Operation<S, M, C>,
-        { _tag: "append_message" | "confirm_effect" | "checkpoint" }
-      >;
+    | Extract<Operation<S, M, C>, { _tag: "confirm_effect" | "checkpoint" }>
+    | Omit<Extract<Operation<S, M, C>, { _tag: "append_message" }>, "stored">;
   const operation = (input: Input): Operation<S, M, C> => {
     type Cases = {
       [K in Input["_tag"]]: (
@@ -272,6 +270,11 @@ export function memoryLog<S, M extends { _tag: string }, C extends Cmd>(
       decide(projection, op, { snapshotEvery: every }),
     );
     let stored: Row | null = null;
+    const prepareResponse = (row: Row | null) =>
+      structuredClone(
+        requireVerb(response<S, M, C, K>(before, op, row, writes)),
+      );
+    let prepared: ReturnType<typeof prepareResponse> | undefined;
     const interpreters = {
       append_record: (
         write: Extract<Write<S, M, C>, { _tag: "append_record" }>,
@@ -285,6 +288,8 @@ export function memoryLog<S, M extends { _tag: string }, C extends Cmd>(
           ),
         );
         stored = frame.row;
+        // A native response-clone failure must leave storage untouched.
+        prepared = prepareResponse(stored);
         backing.set(
           key + (stored.seq === 1 ? "" : `/${stored.seq}`),
           frame.bytes,
@@ -306,9 +311,7 @@ export function memoryLog<S, M extends { _tag: string }, C extends Cmd>(
       ) => void;
     };
     for (const write of writes) interpreters[write._tag](write as never);
-    return structuredClone(
-      requireVerb(response<S, M, C, K>(before, op, stored, writes)),
-    );
+    return prepared ?? prepareResponse(stored);
   };
   const store: LoggedStore<S, M, C> = {
     logged: true,
@@ -330,7 +333,7 @@ export function memoryLog<S, M extends { _tag: string }, C extends Cmd>(
       });
     },
     async appendMessage(message) {
-      return mutate({ _tag: "append_message", message, stored: null });
+      return mutate({ _tag: "append_message", message });
     },
     async commitStep(step) {
       return mutate(step);

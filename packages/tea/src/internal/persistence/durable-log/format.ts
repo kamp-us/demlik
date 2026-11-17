@@ -129,4 +129,3 @@ export function logUpdates<S, M, C>(
   for (const { record } of log.records) visit(record, readers);
   return rows;
 }
-
