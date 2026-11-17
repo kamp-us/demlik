@@ -54,7 +54,13 @@ import type {
   Sub,
   TimerSub,
 } from "../pure/core";
-import { applyCell, Outcome, subEntriesOf } from "../pure/core";
+import {
+  applyCell,
+  Outcome,
+  type Owed,
+  owed,
+  subEntriesOf,
+} from "../pure/core";
 import type {
   CtxArg,
   Runtime,
@@ -90,7 +96,7 @@ export type EffectInterpretCell<
     : (
         cmd: C,
         ctx?: unknown,
-      ) => Effect.Effect<OkOfCmd<C>, DeclaredErrorsOf<C>, R>;
+      ) => Effect.Effect<OkOfCmd<C> | Owed, DeclaredErrorsOf<C>, R>;
 
 /**
  * The Effect engine's `interpret` map: one cell per Cmd variant, each reading
@@ -285,7 +291,9 @@ export function settleCellExit(
   const result = exit.value as Result.Result<unknown, unknown>;
   if (defined) {
     return Result.isSuccess(result)
-      ? Outcome.ok(result.success)
+      ? result.success === owed()
+        ? result.success
+        : Outcome.ok(result.success)
       : Outcome.err(result.failure);
   }
   if (Result.isFailure(result)) throw new CellFailure(result.failure);

@@ -187,6 +187,37 @@ async function call(
 }
 // #endregion per-call
 
+// #region external-work
+import {
+  Cmd,
+  type DeliveryId,
+  deliveryIdOf,
+  logLedger,
+  owed,
+} from "../../index";
+
+const externalJobInput = z.object({ key: z.string() });
+const externalJob = Cmd.define("external_job", {
+  input: externalJobInput,
+  ok: z.string(),
+  err: [],
+});
+type ExternalJob = ReturnType<typeof externalJob>;
+
+function handOff(
+  enqueue: (work: { id: DeliveryId; cmd: ExternalJob }) => Promise<void>,
+) {
+  return async (cmd: ExternalJob, ctx: unknown) => {
+    const id = deliveryIdOf(ctx);
+    if (id === undefined)
+      throw new Error("external work needs a logged invocation");
+    await enqueue({ id, cmd }); // Await only the external queue's durable acknowledgement.
+    return owed();
+  };
+}
+// After dispatch and stop: logLedger(await store.readLog()).surviving()
+// #endregion external-work
+
 afterAll(async () => {
   // `first` is not stopped here: the refused save already stopped it.
   await b.stop();
@@ -195,6 +226,78 @@ afterAll(async () => {
 });
 
 describe("docs/how-to/make-durable.md — it runs", () => {
+  it("hands a Cmd back without a Msg, then re-hands its stable id on a fresh call", async () => {
+    const externalState = z.object({ settled: z.array(z.string()) });
+    const externalCommand = z.object({
+      _tag: z.literal(externalJob.cmdType),
+      ...externalJobInput.shape,
+    });
+    const externalMessage = z.discriminatedUnion("_tag", [
+      z.object({ _tag: z.literal("submit"), ...externalJobInput.shape }),
+      z.object({
+        _tag: z.literal(externalJob.okType),
+        cmd: externalCommand,
+        value: z.string(),
+        at: z.number(),
+      }),
+      z.object({
+        _tag: z.literal(externalJob.errType),
+        cmd: externalCommand,
+        error: z.object({ _tag: z.literal("malformed_result") }),
+        at: z.number(),
+      }),
+    ]);
+    const work = defineMachine({
+      types: {
+        model: {} as z.infer<typeof externalState>,
+        msg: {} as { _tag: "submit"; key: string },
+      },
+      cmds: [externalJob],
+      init: (loaded) => [loaded ?? { settled: [] }, []],
+      update: {
+        submit: (s, m) => [s, [externalJob({ key: m.key })]],
+        external_job_ok: (s, m) => [{ settled: [...s.settled, m.value] }, []],
+        external_job_err: (s, m) => [
+          { settled: [...s.settled, m.error._tag] },
+          [],
+        ],
+      },
+    });
+    const handed: { id: DeliveryId; cmd: ExternalJob }[] = [];
+    const accepted = new Map<DeliveryId, ExternalJob>();
+    const handler = handOff(async ({ id, cmd }) => {
+      handed.push({ id, cmd });
+      if (!accepted.has(id)) accepted.set(id, cmd);
+    });
+    const path = join(dir, "external-jobs");
+    for (let call = 0; call < 2; call += 1) {
+      const journal = fileJournal(path);
+      const store = eventSourcedStore(journal, {
+        state: externalState,
+        message: externalMessage,
+        command: externalCommand,
+      });
+      const rt = await run(work, {
+        store,
+        interpret: { external_job: handler },
+      }).ready;
+      try {
+        if (call === 0) await rt.dispatch({ _tag: "submit", key: "report-7" });
+        await rt.stop();
+        expect(rt.getState().settled).toEqual([]);
+        expect(logLedger(await store.readLog()).surviving()).toEqual([
+          { id: handed[0]?.id, effect: externalJob({ key: "report-7" }) },
+        ]);
+      } finally {
+        await rt.stop();
+        await journal.close();
+      }
+    }
+    expect(handed).toHaveLength(2);
+    expect(handed[1]).toEqual(handed[0]);
+    expect(accepted.size).toBe(1);
+  });
+
   it("reads an absolute next deadline across closed calls, then delivers the host's wake once", async () => {
     const path = join(dir, "reminders");
     const next = await call(

@@ -4,8 +4,11 @@ import { type LiveWorkProbe, liveWork } from "../internal/engine/loop";
 import {
   type Boot,
   complete,
+  type JobBoot,
+  jobMachine,
   machine,
   measured,
+  owedHostTests,
   perCallHostTests,
   storeFor,
 } from "../internal/persistence/per-call-host.fixture";
@@ -41,6 +44,22 @@ const boot: Boot = async (store, options = {}) => {
 };
 
 perCallHostTests("promise", boot);
+
+const bootJob: JobBoot = async (store, handle, errors) => {
+  const host = await run(jobMachine(), {
+    store,
+    onError: (error, { phase }) => errors?.push({ error, phase }),
+    interpret: { job: handle },
+  }).ready;
+  return {
+    dispatch: (msg) => host.dispatch(msg),
+    getState: () => host.getState(),
+    stop: () => host.stop(),
+    live: () => (host as typeof host & LiveWorkProbe)[liveWork](),
+  };
+};
+
+owedHostTests("promise", bootJob);
 
 describe("ADR 0025: an unfinished Promise handler outlives bounded stop", () => {
   it("leaves its handler, timer and dispatch pending, then drops its late result", async () => {

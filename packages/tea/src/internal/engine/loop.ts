@@ -50,7 +50,14 @@
  */
 
 import type { DeliveryId, Dispose, Sub, SubEntry } from "../../pure/core";
-import { deliveryId, desiredSub, detachWork, followUps } from "../../pure/core";
+import {
+  deliveryId,
+  desiredSub,
+  detachWork,
+  followUps,
+  type Owed,
+  owed,
+} from "../../pure/core";
 import type {
   DispatchOptions,
   LogCommit,
@@ -461,6 +468,7 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
   interface Invocation {
     readonly id: DeliveryId;
     failed: boolean;
+    owed: boolean;
     closed: boolean;
     ordinal: number;
     readonly detached: Promise<unknown>[];
@@ -823,6 +831,19 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
       .catch(() => {});
   }
 
+  function returnedHandler(returned: unknown, own?: Invocation): unknown {
+    const rows = {
+      Returned: () => returned,
+      Owed: () => {
+        if (own === undefined)
+          throw new Error("Owed requires a logged invocation");
+        own.owed = true;
+        return undefined;
+      },
+    } satisfies Record<"Returned" | Owed["_tag"], () => unknown>;
+    return rows[returned === owed() ? "Owed" : "Returned"]();
+  }
+
   // The innermost interpret step: call the Cmd's handler, if one is wired. A
   // missing handler returns nothing, which is invariant 6's forward progress
   // for a miswired consumer.
@@ -834,7 +855,10 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
       return Promise.resolve(undefined);
     }
     if (!session || !invocation)
-      return trackInFlight(handler(cmd as never, handlerCtx, dispatch), type);
+      return trackInFlight(
+        handler(cmd as never, handlerCtx, dispatch),
+        type,
+      ).then((returned) => returnedHandler(returned));
     const own = invocation;
     const ctx = Object.assign({}, handlerCtx, {
       [deliveryId]: own.id,
@@ -850,7 +874,9 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
         detachInFlight(tracked);
       },
     });
-    return trackInFlight(handler(cmd as never, ctx, dispatch), type);
+    return trackInFlight(handler(cmd as never, ctx, dispatch), type).then(
+      (returned) => returnedHandler(returned, own),
+    );
   }
 
   /**
@@ -886,6 +912,7 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
       const own: Invocation = {
         id,
         failed: false,
+        owed: false,
         closed: false,
         ordinal: 0,
         detached: [],
@@ -926,7 +953,7 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
           await Promise.all(own.detached);
           own.closed = true;
           await Promise.all(own.admissions);
-          if (!own.failed && canCompleteDelivery())
+          if (!own.failed && !own.owed && canCompleteDelivery())
             await session?.write((store) => store.confirmEffect(id));
         })();
         detachInFlight(completion);

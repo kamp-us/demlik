@@ -288,7 +288,10 @@ type EffectInterpret<M extends { _tag: string }, C extends Cmd, R = unknown> = {
 ### `EffectInterpretCell`
 
 ```ts
-type EffectInterpretCell<M extends { _tag: string }, C extends Cmd, R = unknown> = unknown extends ErrorsOf<C> ? (cmd: C, ctx?: unknown) => Effect.Effect<M | readonly M[] | void, unknown, R> : (cmd: C, ctx?: unknown) => Effect.Effect<OkOfCmd<C>, DeclaredErrorsOf<C>, R>
+type EffectInterpretCell<M extends { _tag: string }, C extends Cmd, R = unknown> = unknown extends ErrorsOf<C> ? (cmd: C, ctx?: unknown) => Effect.Effect<M | readonly M[] | void, unknown, R> : (
+  cmd: C,
+  ctx?: unknown,
+) => Effect.Effect<OkOfCmd<C> | Owed, DeclaredErrorsOf<C>, R>
 ```
 
 <a id="EffectRun"></a>
