@@ -1,42 +1,52 @@
-// ───────────────────────────────────────────────────────────────────────────
-// @demlik/tea/journal — the in-process substrate. Drives the shared behavioural
-// conformance suite (equivalence with the Node file substrate), then pins the
-// two properties that are memoryJournal's own: reference semantics (mirroring
-// memoryStore) and that concurrent appenders to one stream converge on one
-// order — the local, single-process twin of phoenix spike #6673.
-// ───────────────────────────────────────────────────────────────────────────
 import { describe, expect, it } from "vitest";
-import { describeJournalConformance } from "./conformance";
 import { memoryJournal } from "./index";
 
-describeJournalConformance("memoryJournal", () => memoryJournal());
-
-describe("memoryJournal: reference semantics (mirrors memoryStore)", () => {
-  it("stores the record by reference — a later mutation is observable", async () => {
-    const journal = memoryJournal<{ items: string[] }>();
-    const record = { items: ["a"] };
-    await journal.append("s", record);
-    record.items.push("b");
-    const [entry] = await journal.list("s");
-    expect(entry?.record.items).toEqual(["a", "b"]);
+describe("memoryJournal", () => {
+  it("acknowledges the stored text and positions of a complete batch", async () => {
+    const journal = memoryJournal();
+    const records = ['{"value":1}', '{ "value": 2 }'] as const;
+    expect(await journal.read("s", 0)).toEqual({
+      _tag: "read",
+      head: 0,
+      entries: [],
+    });
+    expect(await journal.append("s", records)).toEqual({
+      _tag: "appended",
+      head: 2,
+      entries: [
+        { seq: 1, record: records[0] },
+        { seq: 2, record: records[1] },
+      ],
+    });
+    expect(await journal.read("s", 1)).toEqual({
+      _tag: "read",
+      head: 2,
+      entries: [{ seq: 2, record: records[1] }],
+    });
   });
-});
 
-describe("memoryJournal: racing appenders converge on one order", () => {
-  it("assigns each of two racing appenders a distinct, gapless seq", async () => {
-    const journal = memoryJournal<{ writer: string }>();
-    const perWriter = 20;
-    await Promise.all([
-      ...Array.from({ length: perWriter }, () =>
-        journal.append("s", { writer: "A" }),
-      ),
-      ...Array.from({ length: perWriter }, () =>
-        journal.append("s", { writer: "B" }),
-      ),
-    ]);
-    const seqs = (await journal.list("s")).map((e) => e.seq);
-    expect(seqs).toEqual(
-      Array.from({ length: perWriter * 2 }, (_v, i) => i + 1),
-    );
+  it("refuses both stale and ahead expectations without writing", async () => {
+    const journal = memoryJournal({ fenced: true });
+    await journal.append("s", ['"first"']);
+    for (const expected of [0, 2]) {
+      expect(await journal.appendFenced("s", ['"refused"'], expected)).toEqual({
+        _tag: "journal_conflict",
+        expected,
+        head: 1,
+      });
+    }
+    expect(await journal.appendFenced("s", ['"second"'], 1)).toEqual({
+      _tag: "appended",
+      head: 2,
+      entries: [{ seq: 2, record: '"second"' }],
+    });
+    expect(await journal.read("s", 0)).toEqual({
+      _tag: "read",
+      head: 2,
+      entries: [
+        { seq: 1, record: '"first"' },
+        { seq: 2, record: '"second"' },
+      ],
+    });
   });
 });
