@@ -83,6 +83,58 @@ describe("fileJournal", () => {
     });
   });
 
+  it("maps UTF-8 stream names distinctly even on a case-insensitive volume", async () => {
+    async function fileNameOf(stream: string) {
+      const dir = freshDir();
+      const journal = fileJournal(dir);
+      expect(await journal.append(stream, ['"name"'])).toMatchObject({
+        _tag: "appended",
+      });
+      await journal.close();
+      return fs.readdirSync(dir)[0] ?? "";
+    }
+    expect(await fileNameOf("s")).not.toBe(await fileNameOf("S"));
+    expect((await fileNameOf("s")).toLowerCase()).not.toBe(
+      (await fileNameOf("S")).toLowerCase(),
+    );
+    expect(await fileNameOf("é")).not.toBe(await fileNameOf("é"));
+    const dir = freshDir();
+    const journal = fileJournal(dir);
+    await journal.append("s", ["a"]);
+    await journal.append("S", ["b"]);
+    expect(await journal.read("s", 0)).toMatchObject({
+      head: 1,
+      entries: [{ seq: 1, record: "a" }],
+    });
+    expect(await journal.read("S", 0)).toMatchObject({
+      head: 1,
+      entries: [{ seq: 1, record: "b" }],
+    });
+    const checked = fileJournal(dir, { fenced: true });
+    expect(await checked.appendFenced("S", ["c"], 1)).toMatchObject({
+      _tag: "appended",
+      head: 2,
+    });
+    expect(await journal.read("s", 0)).toMatchObject({ head: 1 });
+  });
+
+  it.each([
+    false,
+    true,
+  ])("refuses an oversized stream name before writing (fenced=%s)", async (fenced) => {
+    const dir = freshDir();
+    const name = "S".repeat(300);
+    const result = fenced
+      ? await fileJournal(dir, { fenced: true }).appendFenced(name, ["a"], 0)
+      : await fileJournal(dir).append(name, ["a"]);
+    expect(result).toMatchObject({
+      _tag: "journal_io",
+      operation: "append",
+      uncertain: false,
+    });
+    expect(fs.readdirSync(dir)).toEqual([]);
+  });
+
   it("completes short writes and refuses a write that makes no progress", async () => {
     const dir = freshDir();
     const journal = fileJournal(dir);

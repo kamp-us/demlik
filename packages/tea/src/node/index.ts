@@ -278,8 +278,11 @@ function fenceFileStore<S>(
 
 /**
  * Append encoded JSON text in atomic batches under `dir`.
- * Each stream is `<encoded-stream>.jsonl`; each LF-terminated storage frame
- * contains one array of opaque strings. The driver never parses record bodies.
+ * Stream file names encode UTF-8 bytes: a-z, 0-9, `-` and `_` stay literal;
+ * every other byte is `%` plus two lowercase hex digits, followed by `.jsonl`.
+ * Names remain distinct across case-insensitive and Unicode-normalizing volumes.
+ * Each LF-terminated frame contains one array of opaque strings.
+ * The driver never parses record bodies.
  *
  * The plain call takes no cross-process lock; one writer per stream is the
  * caller's precondition. Pass `{ fenced: true }` for `appendFenced`, which
@@ -311,8 +314,14 @@ export function fileJournal(
     string,
     { end: number; tail: number; rows: JournalEntry[] }
   >();
-  const path = (stream: string) =>
-    join(dir, `${encodeURIComponent(stream)}.jsonl`);
+  const fileNameOf = (stream: string) =>
+    `${Array.from(Buffer.from(stream), (byte) => {
+      const char = String.fromCharCode(byte);
+      return /^[a-z0-9_-]$/.test(char)
+        ? char
+        : `%${byte.toString(16).padStart(2, "0")}`;
+    }).join("")}.jsonl`;
+  const path = (stream: string) => join(dir, fileNameOf(stream));
   const message = (error: unknown) =>
     error instanceof Error ? error.message : String(error);
   const corruption = (detail: string) => new SyntaxError(detail);
@@ -405,6 +414,7 @@ export function fileJournal(
       }
     },
     async append(stream, records) {
+      let uncertain = false;
       try {
         const info = refresh(stream);
         const entries = records.map((record, i) => ({
@@ -413,6 +423,7 @@ export function fileJournal(
         }));
         const bytes = Buffer.from(`${JSON.stringify(records)}\n`);
         const fd = journalFs.openSync(path(stream), "a");
+        uncertain = true;
         try {
           if (info.tail) journalFs.ftruncateSync(fd, info.end);
           let offset = 0;
@@ -436,7 +447,7 @@ export function fileJournal(
         return { _tag: "appended", head: info.rows.length, entries };
       } catch (error) {
         streams.delete(stream);
-        return refusal(error, "append");
+        return refusal(error, "append", uncertain);
       }
     },
     async close() {

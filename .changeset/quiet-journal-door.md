@@ -14,6 +14,8 @@ tagged data; a lost expected head is `journal_conflict`, and an unavailable lock
 is `journal_io` for `append` with `uncertain: false` and the lock's clear step.
 The listener and caller lock methods are removed.
 
+Stream file names changed to lowercase UTF-8 byte escapes, keeping letter case and Unicode normalization forms distinct on every volume.
+
 File appends add one complete batch frame instead of rewriting history. The file
 format changes from `{ seq, record }` lines to arrays of encoded strings, one
 batch per line; existing files need migration. Reads preserve an incomplete

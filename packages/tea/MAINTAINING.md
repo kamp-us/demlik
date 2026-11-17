@@ -143,9 +143,12 @@ caller's precondition; the old implementation locked every append.
 appends under the existing `wx` stream lock. A mismatch is `journal_conflict`
 with the real head and no write. A lock that cannot be taken is `journal_io`
 for `append`, with `uncertain: false` and a message naming the lock and clear step.
-Each LF-terminated file frame
-stores a complete batch of opaque strings. Reads omit an incomplete tail without
-changing it; the next append truncates that tail before writing. Controlled byte
+Stream file names encode UTF-8 bytes: a-z, 0-9, `-` and `_` remain literal;
+all other bytes become `%` plus two lowercase hex digits, with a `.jsonl` suffix.
+This distinguishes letter case and Unicode normalization forms on every volume.
+A name the filesystem refuses answers `journal_io` with `uncertain: false`
+before writing. Each LF-terminated file frame stores a complete batch of opaque
+strings. Reads omit an incomplete tail without changing it; the next append truncates that tail before writing. Controlled byte
 cuts prove whole-batch recovery, not fsync or power-loss durability.
 
 `fileJournal` carries the journal's **experimental** promise, not the `stable`
