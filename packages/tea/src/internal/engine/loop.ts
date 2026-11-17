@@ -13,7 +13,7 @@
  * Sharing the loop is also what makes the two engines' traces identical: the
  * fold, the save order and the built-ins are the same code.
  *
- * Everything else `run` offers is an {@link Extension} built on ten points:
+ * Everything else `run` offers is an {@link Extension} built on eleven points:
  *
  *   1. `update`    — middleware over the fold. Returning `null` means "no
  *                    transition": no save, no effects, no commit.
@@ -37,6 +37,8 @@
  *  10. `ctx`       — keys added to the ctx every Cmd handler receives, so a
  *                    handler that runs another handler inside its own can reach
  *                    the same machinery the loop applies to it.
+ *  11. `answer`    — parse a later answer against its persisted Cmd, before
+ *                    durable admission; the Cmd boundary owns this rule.
  *
  * An extension may also add methods to the run handle (`handle`). Array order
  * is nesting order: the first extension's middleware is the outermost, and
@@ -75,6 +77,7 @@ import {
   RuntimeDiscardedError,
   RuntimeDiscardNotice,
 } from "../../runtime-types";
+import { integer } from "../persistence/durable-log/codec";
 import type { OwedEffect } from "../persistence/durable-log/durable-effects";
 import {
   committedState,
@@ -83,6 +86,11 @@ import {
   messageId,
   pendingMessages,
 } from "../persistence/durable-log/format";
+import {
+  type AnswerDecision,
+  decideAnswer,
+} from "../persistence/durable-log/operations";
+import { refusalMessage } from "../persistence/durable-log/refusals";
 import { type InstalledStateRead, installedState } from "./installed-state";
 import { restore } from "./restore";
 import { handlerFailed, storeSession } from "./store-session";
@@ -139,6 +147,7 @@ export interface LoopServices<S> {
 
 /** One built-in, as the loop sees it. Every member is optional. */
 export interface Extension<S, M, C> {
+  readonly answer?: (cmd: C, msg: M) => M;
   readonly update?: (next: Step<S, M, C>) => Step<S, M, C>;
   readonly interpret?: (next: InterpretStep<C, M>) => InterpretStep<C, M>;
   readonly store?: (store: Store<S>) => Store<S>;
@@ -493,6 +502,7 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
     refuseAdmission = reject;
   });
   admissionReady.catch(() => {});
+  let lastAdmission: Promise<unknown> | undefined;
 
   const services: LoopServices<S> = {
     report,
@@ -1045,17 +1055,73 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
       );
   }
 
-  function admitLogged(msg: M, origin: "caller" | "loop", inputId: string) {
+  function admitLogged(
+    msg: M,
+    origin: "caller" | "loop",
+    inputId: string,
+    answerTo?: DeliveryId,
+  ) {
     const existing = turns.get(inputId);
     if (existing) return existing;
     if (session === undefined)
       throw new Error("Durable admission requires a logged store");
     const at = Date.now();
-    const appended = admissionReady.then(() =>
+    const append = () =>
       session.write((store) =>
-        store.appendMessage({ _tag: "message", id: inputId, at, msg }),
-      ),
+        store.appendMessage({
+          _tag: "message",
+          id: inputId,
+          at,
+          msg,
+          ...(answerTo === undefined ? {} : { answerTo }),
+        }),
+      );
+    const prepareAnswer = async (id: DeliveryId) => {
+      const parsed = integer(id, 1);
+      // Boundary parsing uses the codec's existing positive-safe-integer rule.
+      const parsers = {
+        ok: () => {},
+        invalid_integer: () => {
+          throw new Error("Invalid answer delivery id");
+        },
+      } satisfies Record<ReturnType<typeof integer>["_tag"], () => void>;
+      parsers[parsed._tag]();
+      const log = await session.read();
+      const old = log.records.find(
+        ({ record }) => record._tag === "message" && record.id === inputId,
+      );
+      const answer = decideAnswer(
+        logLedger(log).surviving(),
+        id,
+        old !== undefined,
+      );
+      const results = {
+        owed: (result) => {
+          const prepare = extensions.find((ext) => ext.answer)?.answer;
+          if (!prepare) throw new Error("Answer Cmd boundary missing");
+          msg = prepare(result.delivery.effect, msg);
+        },
+        repeat: () => {},
+        refused: (result) => {
+          throw new Error(refusalMessage(result.refusal), {
+            cause: result.refusal,
+          });
+        },
+      } satisfies {
+        [K in AnswerDecision<C>["_tag"]]: (
+          result: Extract<AnswerDecision<C>, { _tag: K }>,
+        ) => void;
+      };
+      results[answer._tag](answer as never);
+    };
+    const prepare = () =>
+      answerTo === undefined ? append() : prepareAnswer(answerTo).then(append);
+    const previous = lastAdmission;
+    // Async answer parsing must not let the next source overtake this admission.
+    const appended = admissionReady.then(() =>
+      previous === undefined ? prepare() : previous.then(prepare, prepare),
     );
+    lastAdmission = appended;
     const admitted = appended.then(() => {});
     // Reserve the turn synchronously; append acknowledgement never waits for a fold.
     const folded = enqueueStep(msg, origin, async () =>
@@ -1063,7 +1129,9 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
     );
     const turn = { admitted, folded };
     turns.set(inputId, turn);
-    admitted.catch(() => {});
+    admitted.catch(() => {
+      if (turns.get(inputId) === turn) turns.delete(inputId);
+    });
     return turn;
   }
 
@@ -1201,16 +1269,23 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
           : new RuntimeStoppedError(msg._tag),
       );
     }
+    if (opts?.answerTo !== undefined && opts.id !== undefined)
+      return Promise.reject(new Error("An answer cannot also set id"));
     if (session) {
       if (session.poisoned()) return Promise.reject(session.poisoned());
       return admitLogged(
         msg,
         origin,
-        opts?.id === undefined
-          ? messageId("generated", crypto.randomUUID())
-          : messageId("caller", opts.id),
+        opts?.answerTo !== undefined
+          ? messageId("answer", opts.answerTo, 0)
+          : opts?.id === undefined
+            ? messageId("generated", crypto.randomUUID())
+            : messageId("caller", opts.id),
+        opts?.answerTo,
       ).folded;
     }
+    if (opts?.answerTo !== undefined)
+      return Promise.reject(new Error("An answer needs a logged store"));
     return enqueueStep(msg, origin, stepDispatch);
   }
 

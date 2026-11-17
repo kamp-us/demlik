@@ -9,9 +9,27 @@ import type {
   LogStep,
   PersistedLogRecord,
 } from "../../../runtime-types";
-import { pendingEffectsLedger } from "./durable-effects";
+import { type OwedEffect, pendingEffectsLedger } from "./durable-effects";
 import type { Admission, Birth, Projection, SourceCommit } from "./projection";
 import type { LogRefusal } from "./refusals";
+
+export type AnswerDecision<C> =
+  | { readonly _tag: "owed"; readonly delivery: OwedEffect<C> }
+  | { readonly _tag: "repeat" }
+  | { readonly _tag: "refused"; readonly refusal: LogRefusal };
+
+/** One owner for external answer correlation, before Cmd parsing or writing. */
+export function decideAnswer<C>(
+  owed: readonly OwedEffect<C>[],
+  id: DeliveryId,
+  admitted: boolean,
+): AnswerDecision<C> {
+  if (admitted) return { _tag: "repeat" };
+  const delivery = owed.find((entry) => entry.id === id);
+  return delivery === undefined
+    ? { _tag: "refused", refusal: { _tag: "unknown_answer" } }
+    : { _tag: "owed", delivery };
+}
 
 export type Operation<S, M, C> =
   | {
@@ -153,6 +171,24 @@ function cases<S, M, C>(): Table<S, M, C> {
     append_message: {
       decide: (p, op) => {
         if (!p.birth) return { _tag: "admission_before_birth" };
+        if (op.message.answerTo !== undefined) {
+          const answer = decideAnswer(
+            p.owed,
+            op.message.answerTo,
+            op.stored !== null,
+          );
+          const outcomes = {
+            owed: () => undefined,
+            repeat: () => undefined,
+            refused: (result) => result.refusal,
+          } satisfies {
+            [K in AnswerDecision<C>["_tag"]]: (
+              result: Extract<AnswerDecision<C>, { _tag: K }>,
+            ) => LogRefusal | undefined;
+          };
+          const refusal = outcomes[answer._tag](answer as never);
+          if (refusal) return refusal;
+        }
         return [
           p,
           op.stored === null

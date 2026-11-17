@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import { DispatchDiscardedError, DrainTimeoutNotice } from "../index";
 import { type LiveWorkProbe, liveWork } from "../internal/engine/loop";
 import {
+  type AnswerBoot,
+  answerHostTests,
+  answerMachine,
   type Boot,
   complete,
   type JobBoot,
@@ -60,6 +63,23 @@ const bootJob: JobBoot = async (store, handle, errors) => {
 };
 
 owedHostTests("promise", bootJob);
+
+const bootAnswer: AnswerBoot = async (store, handle, reject) => {
+  const host = await run(answerMachine(reject), {
+    store,
+    interpret: { job: handle },
+    subscribe: { deadline: subscribeWith(() => () => {}) },
+    onError: () => {},
+  }).ready;
+  return {
+    dispatch: (msg, options) => host.dispatch(msg, options),
+    getState: () => host.getState(),
+    stop: () => host.stop(),
+    live: () => (host as typeof host & LiveWorkProbe)[liveWork](),
+  };
+};
+
+answerHostTests("promise", bootAnswer);
 
 describe("ADR 0025: an unfinished Promise handler outlives bounded stop", () => {
   it("leaves its handler, timer and dispatch pending, then drops its late result", async () => {

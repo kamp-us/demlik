@@ -17,10 +17,15 @@ function object(raw: unknown): Result<Readonly<Record<string, unknown>>> {
     : ok(raw as Readonly<Record<string, unknown>>);
 }
 
-export function integer(raw: unknown, min = 0): Result<number> {
+export function integer(
+  raw: unknown,
+  min = 0,
+):
+  | { readonly _tag: "ok"; readonly value: number }
+  | { readonly _tag: "invalid_integer" } {
   return typeof raw !== "number" || !Number.isSafeInteger(raw) || raw < min
     ? { _tag: "invalid_integer" }
-    : ok(raw);
+    : { _tag: "ok", value: raw };
 }
 
 function time(raw: unknown): Result<number> {
@@ -84,7 +89,16 @@ function message<M>(
   if (at._tag !== "ok") return at;
   const msg = value(schema, r.msg);
   if (msg._tag !== "ok") return msg;
-  return ok({ _tag: "message", id: id.value, at: at.value, msg: msg.value });
+  const answerTo =
+    r.answerTo === undefined ? ok(undefined) : integer(r.answerTo, 1);
+  if (answerTo._tag !== "ok") return answerTo;
+  return ok({
+    _tag: "message",
+    id: id.value,
+    at: at.value,
+    msg: msg.value,
+    ...(answerTo.value === undefined ? {} : { answerTo: answerTo.value }),
+  });
 }
 
 function record<S, M, C>(
@@ -202,7 +216,12 @@ export function decodeFrame<S, M, C>(
 ): Result<DecodedFrame<S, M, C>> {
   const raw = object(JSON.parse(bytes));
   if (raw._tag !== "ok") return raw;
-  if (raw.value.protocol !== 2) return { _tag: "unsupported_log_protocol" };
+  const protocols = { 2: true, 3: true } satisfies Record<2 | 3, true>;
+  if (
+    typeof raw.value.protocol !== "number" ||
+    !Object.hasOwn(protocols, raw.value.protocol)
+  )
+    return { _tag: "unsupported_log_protocol" };
   const seq = integer(raw.value.seq, 1);
   if (seq._tag !== "ok") return seq;
   const decoded = record(raw.value.record, options);
@@ -224,7 +243,7 @@ export function encodeFrame<S, M, C>(
   options: EventSourcedOptions<S, M, C>,
 ): Result<DecodedFrame<S, M, C> & { readonly bytes: string }> {
   let bytes = JSON.stringify({
-    protocol: 2,
+    protocol: "answerTo" in entry && entry.answerTo !== undefined ? 3 : 2,
     seq,
     record: entry,
     snapshot: null,

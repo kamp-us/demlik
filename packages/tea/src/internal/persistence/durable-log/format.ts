@@ -49,7 +49,10 @@ export function logLedger<S, M, C>(log: LogRead<S, M, C>) {
   const readers: Cases<LogRecord<S, M, C>, void> = {
     birth: owed,
     applied: owed,
-    message: () => {},
+    message: (record) => {
+      if (record.answerTo !== undefined)
+        events.push({ _tag: "effect_confirmed", id: record.answerTo });
+    },
     receipt: () => {},
     confirmed: (record) => {
       events.push(record.event);
