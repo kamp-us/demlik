@@ -277,7 +277,7 @@ function fenceFileStore<S>(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Append encoded JSON text in atomic batches under `dir`.
+ * Append opaque Unicode text in atomic batches under `dir`.
  * Stream file names encode UTF-8 bytes: a-z, 0-9, `-` and `_` stay literal;
  * every other byte is `%` plus two lowercase hex digits, followed by `.jsonl`.
  * Names remain distinct across case-insensitive and Unicode-normalizing volumes.

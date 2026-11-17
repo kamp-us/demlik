@@ -129,8 +129,11 @@ the cheaper fix).
 
 **Journal factories are a separate family from Store factories.** A `Store<S>`
 is whole-load / whole-save of one state value; a `Journal`
-(`src/internal/journal/`) stores encoded JSON text in order. `append` takes
-one nonempty atomic batch and acknowledges its exact text and assigned positions;
+(`src/internal/journal/`) stores opaque, well-formed Unicode text in order.
+A driver returns each record exactly, code unit for code unit; it never parses,
+trims, normalizes or re-encodes it. Tea writes JSON text into it; a driver must
+not rely on that. `append` takes one nonempty atomic batch and acknowledges its
+exact text and assigned positions;
 `read(stream, after)` returns every stored entry whose `seq` is greater than `after`, in order, for ANY number; it never refuses a position.
 Drivers know no log schema or rule. Refusals are tagged data; an uncertain append requires
 reopening and reading before deciding how to recover.

@@ -63,6 +63,9 @@ describeJournalConformance("memory", memoryFixture, {
 
 /** Every unconditional mutation must fail its named case; failures from other cases are also reported. */
 const broken = {
+  normalizesJson: "K1",
+  normalizesUnicode: "K1",
+  trimsRecords: "K1",
   dropsBatchTail: "K3",
   clearsStreamOnInterrupt: "K3",
   checksThenWrites: "K7",
@@ -95,6 +98,24 @@ type MutationContext = {
 };
 type Mutation = (context: MutationContext) => FencedJournal;
 
+function transformRecords(
+  journal: FencedJournal,
+  transform: (record: string) => string,
+): FencedJournal {
+  const batch = ([first, ...rest]: Parameters<
+    Journal["append"]
+  >[1]): Parameters<Journal["append"]>[1] => [
+    transform(first),
+    ...rest.map(transform),
+  ];
+  return {
+    ...journal,
+    append: (stream, records) => journal.append(stream, batch(records)),
+    appendFenced: (stream, records, expected) =>
+      journal.appendFenced(stream, batch(records), expected),
+  };
+}
+
 async function acknowledgeUnstored(
   journal: Journal,
   stream: string,
@@ -110,6 +131,19 @@ async function acknowledgeUnstored(
 }
 
 const mutations = {
+  normalizesJson: ({ journal }) =>
+    transformRecords(journal, (record) => {
+      try {
+        const value: unknown = JSON.parse(record);
+        return JSON.stringify(value) ?? record;
+      } catch {
+        return record;
+      }
+    }),
+  normalizesUnicode: ({ journal }) =>
+    transformRecords(journal, (record) => record.normalize("NFC")),
+  trimsRecords: ({ journal }) =>
+    transformRecords(journal, (record) => record.trim()),
   clearsStreamOnInterrupt: ({ journal, cut, cleared }) => ({
     ...journal,
     async append(stream, records) {

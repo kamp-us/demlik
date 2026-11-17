@@ -1,4 +1,8 @@
-/** Encoded JSON text, opaque to a driver. Single writer per stream is required. */
+/**
+ * Opaque, well-formed Unicode text, returned exactly, code unit for code unit.
+ * A driver never parses, trims, normalizes or re-encodes it. Tea writes JSON
+ * text into it; a driver must not rely on that.
+ */
 export type EncodedRecord = string;
 export type JournalEntry = {
   readonly seq: number;

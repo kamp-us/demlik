@@ -12,7 +12,7 @@ import { … } from "@demlik/tea/node";
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
-| [`fileJournal`](#fileJournal) | Function | experimental | Append encoded JSON text in atomic batches under `dir`. |
+| [`fileJournal`](#fileJournal) | Function | experimental | Append opaque Unicode text in atomic batches under `dir`. |
 | [`FileLockBlock`](#FileLockBlock) | Type | stable | Why a writer could not take a lock: - `another-host`: the lock names another host, which may still be writing. |
 | [`FileLockTimeoutError`](#FileLockTimeoutError) | Class | stable | A write gave up waiting for a lock file. |
 | [`fileStore`](#fileStore) | Function | stable | Persist a machine's state to a JSON file — pass the `path` and a `parse` that validates what comes back, get a `Store<S>` you hand to `run` so the next run resumes where this one stopped. |

@@ -4,7 +4,7 @@
 
 **Breaking (experimental):** replace `fileJournal<R>(dir, parse)` with the calls below.
 
-The new `fileJournal(dir)` call takes encoded JSON text from its callers instead of a record-parser argument.
+The new `fileJournal(dir)` call takes opaque Unicode text from its callers instead of a record-parser argument.
 The unfenced file journal takes no lock (it used to lock every append), so one writer per stream is the caller's precondition.
 `fileJournal(dir, { fenced: true })` gives the checked append, `appendFenced(stream, [encoded], expectedHead)`, under the existing `wx` stream lock.
 

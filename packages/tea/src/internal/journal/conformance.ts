@@ -55,6 +55,7 @@ type CaseContext = {
   readonly fixture: JournalKitFixture;
   readonly scale: number | undefined;
   readonly sample: number;
+  readonly repeat: number;
   readonly stream: string;
   append(
     stream: string,
@@ -137,15 +138,36 @@ const names = [
   "a",
   "b",
 ] as const;
+const noncanonical = '{ "a": 1 }';
+const nonJson = "opaque 半🌱\u0000\n";
 const texts = [
-  JSON.stringify("line\nbreak"),
-  JSON.stringify('a "quote"'),
-  JSON.stringify("半🌱"),
-  JSON.stringify("long".repeat(1024)),
+  "",
+  "🌱",
+  "é",
+  "e\u0301",
+  "\u0000",
+  "\\u0000",
+  "\u0001\b\t\n\v\f\r\u001f\u007f",
+  "\u2028\u2029",
+  "\ufeff",
+  '"',
+  "\\",
+  '["a","b"]\n',
+  '{"seq":1,"record":"a"}\n',
+  noncanonical,
+  "1.0",
+  "1e2",
+  "-0",
+  '["\\u00e9","é"]',
+  '{"a":1,"a":2}',
+  '{"z":1,"a":2}',
+  '{"a":1}\n',
+  nonJson,
+  "long".repeat(1024),
 ] as const;
 const encoded = fc.oneof(
   fc.constantFrom(...texts),
-  fc.string({ maxLength: 40 }).map(JSON.stringify),
+  fc.string({ unit: "binary", maxLength: 40 }),
 );
 const batchArbitrary = fc
   .tuple(encoded, fc.array(encoded, { maxLength: 3 }))
@@ -181,16 +203,20 @@ const scriptArbitrary: fc.Arbitrary<KitScript> = fc.record({
   expected: position,
   contenders: fc.integer({ min: 2, max: 8 }),
 });
-const scaleBatch = (count: number): Batch => [
-  JSON.stringify({ value: 0, pad: "x".repeat(80), unicode: "半🌱" }),
-  ...Array.from({ length: count - 1 }, (_, i) =>
-    JSON.stringify({
-      value: i + 1,
-      pad: "x".repeat(80),
-      unicode: "半🌱",
-    }),
-  ),
-];
+// Rotate all three shapes across first/interior/last and singleton positions
+// over the three fixed runs; each timed pair still appends identical text.
+const scaleBatch = (count: number, variant: number): Batch => {
+  const record = (i: number) =>
+    [
+      JSON.stringify({ value: i, pad: "x".repeat(80), unicode: "半🌱" }),
+      noncanonical,
+      nonJson,
+    ][(i + variant) % 3] ?? nonJson;
+  return [
+    record(0),
+    ...Array.from({ length: count - 1 }, (_, i) => record(i + 1)),
+  ];
+};
 
 function difference(
   actual: unknown,
@@ -238,6 +264,7 @@ async function withModel(
   options: KitOptions,
   scale?: number,
   sample = 0,
+  repeat = 0,
 ): Promise<{ readonly skipped: boolean; readonly detail?: unknown }> {
   const fixture = await make();
   const opened = new Set<Journal>();
@@ -341,6 +368,7 @@ async function withModel(
       fixture,
       scale,
       sample,
+      repeat,
       stream:
         script.history[script.stream % script.history.length]?.stream ?? "s",
       append: (stream, records, interrupted) =>
@@ -402,7 +430,7 @@ async function withModel(
       return { skipped: true };
     // Mandatory values supplement generated histories without constraining their shrinking.
     await context.append("s", texts);
-    await context.append("S", [JSON.stringify("upper")]);
+    await context.append("S", script.records);
     for (const { stream, batches } of script.history)
       for (const records of batches) await context.append(stream, records);
     await verify();
@@ -410,7 +438,7 @@ async function withModel(
     await reopen();
     await verify();
     for (const stream of model.keys()) {
-      await context.append(stream, [JSON.stringify("after reopen")]);
+      await context.append(stream, [script.records[0]]);
       await read(stream, 0);
     }
     // An append on the last stream must not damage an earlier stream either.
@@ -431,12 +459,15 @@ async function withModel(
 }
 
 async function order(c: CaseContext) {
-  const records = c.scale ? scaleBatch(c.scale) : c.script.records;
+  const records = c.scale ? scaleBatch(c.scale, c.repeat) : c.script.records;
   for (const record of records) await c.append(c.stream, [record]);
   await c.read(c.stream, 0);
 }
 async function readFrom(c: CaseContext) {
-  await c.append(c.stream, c.scale ? scaleBatch(c.scale) : c.script.records);
+  await c.append(
+    c.stream,
+    c.scale ? scaleBatch(c.scale, c.repeat) : c.script.records,
+  );
   const head = c.model.get(c.stream)?.length ?? 0;
   for (const after of [
     -1,
@@ -457,7 +488,7 @@ async function readFrom(c: CaseContext) {
     await c.read(c.stream, after);
 }
 async function allOrNone(c: CaseContext) {
-  const records = c.scale ? scaleBatch(3) : c.script.records;
+  const records = c.scale ? scaleBatch(3, c.repeat) : c.script.records;
   const points = c.fixture.writePoints(records);
   const chosen = c.scale
     ? points
@@ -470,7 +501,7 @@ async function allOrNone(c: CaseContext) {
     if (point === undefined)
       throw new Error("Fixture exposes no interruption points");
     // Preserve acknowledged history on the target, including when generated history is empty.
-    await c.append(c.stream, [JSON.stringify("old")]);
+    await c.append(c.stream, [c.script.records[0]]);
     c.interrupt(point);
     await c.append(c.stream, records, true);
     await c.reopen();
@@ -479,7 +510,10 @@ async function allOrNone(c: CaseContext) {
   return { physicalCuts: chosen.length };
 }
 async function reopen(c: CaseContext) {
-  await c.append(c.stream, c.scale ? scaleBatch(c.scale) : c.script.records);
+  await c.append(
+    c.stream,
+    c.scale ? scaleBatch(c.scale, c.repeat) : c.script.records,
+  );
   await c.read(c.stream, 0);
   await c.reopen();
   await c.verify();
@@ -496,9 +530,9 @@ async function flatCost(c: CaseContext) {
     await c.append(c.stream, c.script.records);
     return;
   }
-  const encoded = scaleBatch(1);
+  const encoded = scaleBatch(1, c.repeat);
   for (const n of [10, 10000] as const)
-    await c.append(`n${n}`, scaleBatch(n - 1));
+    await c.append(`n${n}`, scaleBatch(n - 1, c.repeat));
   for (let warm = 0; warm < 10; warm++) await c.append("warm", encoded);
   const times: Record<10 | 10000, number> = { 10: 0, 10000: 0 };
   const order: readonly (10 | 10000)[] =
@@ -552,7 +586,7 @@ async function tornTail(c: CaseContext) {
   await c.read(c.stream, c.script.after);
   await c.read(c.stream, 0);
   await c.read(c.stream, 0, true);
-  await c.append(c.stream, [JSON.stringify("repair")]);
+  await c.append(c.stream, [c.script.records[0]]);
 }
 const cases = {
   K1: { run: order },
@@ -626,6 +660,7 @@ export async function journalConformance(
             options,
             options.records,
             sample,
+            repeat,
           );
           skipped = result.skipped;
           if (result.detail !== undefined) samples.push(result.detail);

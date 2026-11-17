@@ -314,19 +314,21 @@ function openTurn(path: string) {
     "CREATE TABLE IF NOT EXISTS entries(stream TEXT, id TEXT, body TEXT, pos INTEGER, PRIMARY KEY(stream,id), UNIQUE(stream,pos))",
   );
   const read = db.prepare(
-    "SELECT pos, body FROM entries WHERE stream=? AND pos>? ORDER BY pos",
+    "SELECT pos, CAST(body AS BLOB) AS body FROM entries WHERE stream=? AND pos>? ORDER BY pos",
   );
   const get = db.prepare(
-    "SELECT pos, body FROM entries WHERE stream=? AND id=?",
+    "SELECT pos, CAST(body AS BLOB) AS body FROM entries WHERE stream=? AND id=?",
   );
   const head = db.prepare(
     "SELECT COALESCE(MAX(pos),0) AS pos FROM entries WHERE stream=?",
   );
   const put = db.prepare("INSERT INTO entries VALUES(?,?,?,?)");
+  // Node 22's TEXT reader stops at NUL; the stored UTF-8 bytes are complete.
+  const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
   function stored(row: Record<string, unknown>): StoredRow {
-    if (typeof row.pos !== "number" || typeof row.body !== "string")
+    if (typeof row.pos !== "number" || !(row.body instanceof Uint8Array))
       throw new Error("Invalid stored row");
-    return { pos: row.pos, body: row.body };
+    return { pos: row.pos, body: decoder.decode(row.body) };
   }
   const turn = {
     read: (stream: string, after: number) =>
