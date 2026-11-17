@@ -215,7 +215,7 @@ finish across stages), see the `agent-resilient-and-durable` example.
 
 ## 5. End each call and return the next alarm
 
-Use the [executable per-call recipe](../../src/docs/how-to/make-durable.test.ts)
+Use the [executable per-call recipe](https://github.com/kamp-us/demlik/blob/main/packages/tea/src/docs/how-to/make-durable.test.ts)
 (the `per-call` region) when the host destroys its activation between calls:
 
 1. Keep absolute deadlines in State. Give the feature one `deadlinesFor` selector,
