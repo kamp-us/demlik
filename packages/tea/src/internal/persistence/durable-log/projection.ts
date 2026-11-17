@@ -65,13 +65,54 @@ export type CheckpointPosition = {
   readonly through: number;
   readonly snapshot: { readonly through: number } | null;
 };
-export type Checkpoint<S> = {
+export type CheckpointInput<S, M, C> = {
   readonly through: number;
-  readonly state: S;
+  readonly rawState: unknown;
+  readonly source: CheckpointBoundary<S, M, C>;
+};
+
+export type CheckpointState<S> =
+  | { readonly _tag: "state_rejected" }
+  | { readonly _tag: "decoded"; readonly state: S };
+
+export type FoldBoundary<S> = {
+  readonly decodeCheckpointState: (rawState: unknown) => CheckpointState<S>;
+};
+
+export type CheckpointOutcome<S> =
+  | { readonly _tag: "skipped" }
+  | { readonly _tag: "state_rejected" }
+  | {
+      readonly _tag: "decoded";
+      readonly through: number;
+      readonly state: S;
+      readonly baseline: number;
+    };
+
+type CheckpointFields<S> = {
+  readonly snapshot: { readonly through: number; readonly state: S };
   readonly baseline: number;
 };
 
-export function checkpointEligibility<S, M, C>(
+type CheckpointCases<S> = {
+  [K in CheckpointOutcome<S>["_tag"]]: (
+    outcome: Extract<CheckpointOutcome<S>, { _tag: K }>,
+  ) => CheckpointFields<S> | null;
+};
+
+const keep = () => null;
+export const checkpointCases = {
+  skipped: keep,
+  state_rejected: keep,
+  decoded: <S>(
+    outcome: Extract<CheckpointOutcome<S>, { _tag: "decoded" }>,
+  ) => ({
+    snapshot: { through: outcome.through, state: outcome.state },
+    baseline: outcome.baseline,
+  }),
+} satisfies CheckpointCases<unknown>;
+
+function checkpointEligibility<S, M, C>(
   position: CheckpointPosition,
   through: number,
   source: CheckpointBoundary<S, M, C>,
@@ -87,25 +128,42 @@ export function checkpointEligibility<S, M, C>(
   );
 }
 
-function checkpointFields<S>(checkpoint: Result<Checkpoint<S> | null>) {
-  if (checkpoint._tag === "payload_rejected") return ok(null);
-  if (checkpoint._tag !== "ok") return checkpoint;
-  const accepted = checkpoint.value;
-  return ok(
-    accepted === null
-      ? null
-      : ({
-          snapshot: { through: accepted.through, state: accepted.state },
-          baseline: accepted.baseline,
-        } as const),
+function checkpointOutcome<S, M, C>(
+  position: CheckpointPosition,
+  checkpoint: CheckpointInput<S, M, C> | null,
+  boundary: FoldBoundary<S>,
+): Result<CheckpointOutcome<S>> {
+  if (checkpoint === null) return ok({ _tag: "skipped" });
+  const eligible = checkpointEligibility(
+    position,
+    checkpoint.through,
+    checkpoint.source,
   );
+  if (eligible._tag !== "ok") return eligible;
+  if (eligible.value === null) return ok({ _tag: "skipped" });
+  return ok({
+    ...boundary.decodeCheckpointState(checkpoint.rawState),
+    through: checkpoint.through,
+    baseline: eligible.value,
+  });
+}
+
+function checkpointFields<S, M, C>(
+  position: CheckpointPosition,
+  checkpoint: CheckpointInput<S, M, C> | null,
+  boundary: FoldBoundary<S>,
+): Result<CheckpointFields<S> | null> {
+  const outcome = checkpointOutcome(position, checkpoint, boundary);
+  if (outcome._tag !== "ok") return outcome;
+  return ok(checkpointCases[outcome.value._tag](outcome.value as never));
 }
 
 export function installCheckpoint<S, M, C>(
   p: Projection<S, M, C>,
-  checkpoint: Result<Checkpoint<S> | null>,
+  checkpoint: CheckpointInput<S, M, C> | null,
+  boundary: FoldBoundary<S>,
 ): Projection<S, M, C> | LogRefusal {
-  const fields = checkpointFields(checkpoint);
+  const fields = checkpointFields(p, checkpoint, boundary);
   if (fields._tag !== "ok") return fields;
   return fields.value === null ? p : { ...p, ...fields.value };
 }
@@ -114,15 +172,7 @@ export type FoldInput<S, M, C> = {
   readonly row: PersistedLogRecord<LogRecord<S, M, C>>;
   readonly storedState: unknown;
   readonly stored: Admission<M> | null;
-  readonly snapshot: unknown;
-};
-
-/** Deferred codec work: record rules must precede checkpoint parsing. */
-export type FoldBoundary<S> = {
-  readonly checkpointSource: (
-    raw: unknown,
-    position: CheckpointPosition,
-  ) => Result<Checkpoint<S> | null>;
+  readonly snapshot: CheckpointInput<S, M, C> | null;
 };
 
 /** Fold a whole newly observed batch with one invocation-local accumulator. */
@@ -220,12 +270,7 @@ export function fold<S, M, C>(
     if (refusal) return refusal;
     draft.version = seq;
     if (input.snapshot !== null) {
-      const checkpoint = checkpointFields(
-        boundary.checkpointSource(input.snapshot, {
-          through: draft.through,
-          snapshot: draft.snapshot,
-        }),
-      );
+      const checkpoint = checkpointFields(draft, input.snapshot, boundary);
       if (checkpoint._tag !== "ok") return checkpoint;
       if (checkpoint.value !== null) {
         Object.assign(draft, checkpoint.value);

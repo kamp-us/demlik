@@ -5,6 +5,7 @@ import { memoryEventSourcedStore } from "../../../mem";
 import { deepFreeze } from "../../../pure/core";
 import type { LogMessage, Schema } from "../../../runtime-types";
 import { op, optionsFor } from "../durable-wake.fixture";
+import { checkpointState } from "./codec";
 import { memoryLog } from "./memory-log";
 import * as operations from "./operations";
 import * as projection from "./projection";
@@ -531,29 +532,35 @@ function admittedProjection() {
     birth: true,
     state: { n: 0 },
     storedState: { n: 0 },
-    pending: [{ seq: 2, record: message("a") }],
+    pending: [{ seq: 2, record: message("a") }] as const,
   };
 }
 
 test("pure fold ignores a schema-rejected checkpoint after applying its record", () => {
   const before = admittedProjection();
+  const record = {
+    _tag: "applied",
+    sourceId: "a",
+    state: { n: 1 },
+    owed: [],
+    timers: [],
+  } as const;
   const input = {
-    row: {
-      seq: 3,
-      record: {
-        _tag: "applied",
-        sourceId: "a",
-        state: { n: 1 },
-        owed: [],
-        timers: [],
-      },
-    },
+    row: { seq: 3, record },
     storedState: { n: 1 },
     stored: null,
-    snapshot: { through: 2, state: { n: 1 } },
+    snapshot: {
+      through: 2,
+      rawState: { n: 1 },
+      source: {
+        admission: before.pending[0],
+        committed: record,
+        appliedCount: 1,
+      },
+    },
   } as const;
   const boundary: projection.FoldBoundary<{ n: number }> = {
-    checkpointSource: () => ({ _tag: "payload_rejected" }),
+    decodeCheckpointState: () => ({ _tag: "state_rejected" }),
   };
   const expected = projection.fold(
     before,
@@ -564,21 +571,101 @@ test("pure fold ignores a schema-rejected checkpoint after applying its record",
     checkPure((p, row) => projection.fold(p, [row], boundary), before, input),
   ).toEqual(expected);
   expect(
-    projection.fold(before, [input], {
-      checkpointSource: () => ({ _tag: "invalid_checkpoint_boundary" }),
-    }),
+    projection.fold(
+      before,
+      [{ ...input, snapshot: { ...input.snapshot, source: null } }],
+      boundary,
+    ),
   ).toEqual({ _tag: "invalid_checkpoint_boundary" });
 });
 
 test("pure sibling installation ignores a schema-rejected checkpoint", () => {
-  const before = admittedProjection();
-  const rejected = { _tag: "payload_rejected" } as const;
-  expect(checkPure(projection.installCheckpoint, before, rejected)).toEqual(
-    before,
-  );
+  const before = { ...admittedProjection(), through: 2 };
+  const rejected = {
+    through: 2,
+    rawState: { n: 1 },
+    source: {
+      admission: before.pending[0],
+      committed: { _tag: "receipt", sourceId: "a", disposition: "ignored" },
+      appliedCount: 0,
+    },
+  } as const;
+  const boundary: projection.FoldBoundary<{ n: number }> = {
+    decodeCheckpointState: () => ({ _tag: "state_rejected" }),
+  };
   expect(
-    projection.installCheckpoint(before, {
-      _tag: "invalid_checkpoint_boundary",
-    }),
+    checkPure(
+      (p, checkpoint) => projection.installCheckpoint(p, checkpoint, boundary),
+      before,
+      rejected,
+    ),
+  ).toEqual(before);
+  expect(
+    projection.installCheckpoint(
+      before,
+      { ...rejected, source: null },
+      boundary,
+    ),
   ).toEqual({ _tag: "invalid_checkpoint_boundary" });
+});
+
+test("the checkpoint decoder reports schema rejection as a fact", () => {
+  expect(checkpointState({ n: "invalid" }, options.state)).toEqual({
+    _tag: "state_rejected",
+  });
+});
+
+test("an older checkpoint never calls the State decoder", () => {
+  const before = {
+    ...admittedProjection(),
+    version: 6,
+    through: 4,
+    snapshot: { through: 4, state: { n: 0 } },
+    pending: [{ seq: 6, record: message("b") }],
+  };
+  const decodeCheckpointState = vi.fn(() => ({
+    _tag: "decoded" as const,
+    state: { n: 1 },
+  }));
+  const checkpoint = {
+    through: 2,
+    rawState: { n: 1 },
+    source: {
+      admission: { seq: 2, record: message("a") },
+      committed: { _tag: "receipt", sourceId: "a", disposition: "ignored" },
+      appliedCount: 0,
+    },
+  } as const;
+  expect(
+    projection.installCheckpoint(before, checkpoint, { decodeCheckpointState }),
+  ).toEqual(before);
+  const input = {
+    row: {
+      seq: 7,
+      record: {
+        _tag: "applied",
+        sourceId: "b",
+        state: { n: 1 },
+        owed: [],
+        timers: [],
+      },
+    },
+    storedState: { n: 1 },
+    stored: null,
+    snapshot: checkpoint,
+  } as const;
+  expect(projection.fold(before, [input], { decodeCheckpointState })).toEqual(
+    projection.fold(before, [{ ...input, snapshot: null }], {
+      decodeCheckpointState,
+    }),
+  );
+  expect(decodeCheckpointState).toHaveBeenCalledTimes(0);
+});
+
+test("checkpoint handling requires every outcome row", () => {
+  const { skipped, decoded } = projection.checkpointCases;
+  const incomplete = { skipped, decoded };
+  // @ts-expect-error A schema rejection needs its own row.
+  incomplete satisfies typeof projection.checkpointCases;
+  expect(Object.keys(incomplete)).toEqual(["skipped", "decoded"]);
 });

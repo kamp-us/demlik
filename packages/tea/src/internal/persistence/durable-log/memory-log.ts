@@ -9,7 +9,7 @@ import {
   schemaMigrate,
 } from "../../../runtime-types";
 import {
-  checkpointMetadata,
+  type CheckpointMetadata,
   checkpointState,
   type DecodedFrame,
   decodeCheckpoint,
@@ -24,7 +24,7 @@ import {
   type Admission,
   type Birth,
   type CheckpointBoundary,
-  checkpointEligibility,
+  type CheckpointInput,
   emptyProjection,
   type FoldBoundary,
   type FoldInput,
@@ -36,7 +36,6 @@ import {
 import {
   isRefusal,
   type LogRefusal,
-  ok,
   type Result,
   refusalMessage,
 } from "./refusals";
@@ -105,23 +104,15 @@ export function memoryLog<S, M extends { _tag: string }, C extends Cmd>(
         };
   };
   const boundary: FoldBoundary<S> = {
-    checkpointSource: (raw, position) => {
-      const metadata = checkpointMetadata(raw);
-      if (metadata._tag !== "ok") return metadata;
-      if (metadata.value === null) return ok(null);
-      const { through, state } = metadata.value;
-      const eligibility = checkpointEligibility(
-        position,
-        through,
-        checkpointSource(through),
-      );
-      if (eligibility._tag !== "ok") return eligibility;
-      if (eligibility.value === null) return ok(null);
-      const decoded = checkpointState(state, options.state);
-      if (decoded._tag !== "ok") return decoded;
-      return ok({ through, state: decoded.value, baseline: eligibility.value });
-    },
+    decodeCheckpointState: (rawState) =>
+      checkpointState(rawState, options.state),
   };
+  const checkpointInput = (
+    metadata: CheckpointMetadata | null,
+  ): CheckpointInput<S, M, C> | null =>
+    metadata === null
+      ? null
+      : { ...metadata, source: checkpointSource(metadata.through) };
 
   const indexRecord = (row: Row): Admission<M> | null => {
     type Cases = {
@@ -161,17 +152,18 @@ export function memoryLog<S, M extends { _tag: string }, C extends Cmd>(
     readModel.records.push(row);
     return previous;
   };
-  const add = (frame: DecodedFrame<S, M, C>): FoldInput<S, M, C> => ({
-    ...frame,
-    stored: indexRecord(frame.row),
-  });
+  const add = (frame: DecodedFrame<S, M, C>): FoldInput<S, M, C> => {
+    const stored = indexRecord(frame.row);
+    return { ...frame, stored, snapshot: checkpointInput(frame.snapshot) };
+  };
   const apply = (inputs: Iterable<FoldInput<S, M, C> | LogRefusal>): void => {
     [projection] = requireVerb(fold(projection, inputs, boundary));
   };
   const acceptCheckpoint = (bytes: string): void => {
-    const raw = requireValue(decodeCheckpoint(bytes));
-    const checkpoint = boundary.checkpointSource(raw, projection);
-    projection = requireVerb(installCheckpoint(projection, checkpoint));
+    const checkpoint = checkpointInput(requireValue(decodeCheckpoint(bytes)));
+    projection = requireVerb(
+      installCheckpoint(projection, checkpoint, boundary),
+    );
   };
   const read = (): void => {
     try {

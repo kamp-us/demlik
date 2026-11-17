@@ -8,6 +8,7 @@ import type {
   Schema,
 } from "../../../runtime-types";
 import type { EffectOwed } from "./durable-effects";
+import type { CheckpointState } from "./projection";
 import { ok, type Result } from "./refusals";
 
 function object(raw: unknown): Result<Readonly<Record<string, unknown>>> {
@@ -187,7 +188,12 @@ function record<S, M, C>(
 export type DecodedFrame<S, M, C> = {
   readonly row: PersistedLogRecord<LogRecord<S, M, C>>;
   readonly storedState: unknown;
-  readonly snapshot: unknown;
+  readonly snapshot: CheckpointMetadata | null;
+};
+
+export type CheckpointMetadata = {
+  readonly through: number;
+  readonly rawState: unknown;
 };
 
 export function decodeFrame<S, M, C>(
@@ -203,10 +209,12 @@ export function decodeFrame<S, M, C>(
   if (decoded._tag !== "ok") return decoded;
   const stored = object(raw.value.record);
   if (stored._tag !== "ok") return stored;
+  const snapshot = checkpointMetadata(raw.value.snapshot ?? null);
+  if (snapshot._tag !== "ok") return snapshot;
   return ok({
     row: { seq: seq.value, record: decoded.value },
     storedState: stored.value.state,
-    snapshot: raw.value.snapshot === undefined ? null : raw.value.snapshot,
+    snapshot: snapshot.value,
   });
 }
 
@@ -234,35 +242,45 @@ export function encodeFrame<S, M, C>(
   }
   const decoded = record(stored.value, options);
   if (decoded._tag !== "ok") return decoded;
+  const snapshot = checkpointMetadata(raw.snapshot);
+  if (snapshot._tag !== "ok") return snapshot;
   return ok({
     bytes,
     row: { seq, record: decoded.value },
     storedState: stored.value.state,
-    snapshot: raw.snapshot,
+    snapshot: snapshot.value,
   });
 }
 
-export function decodeCheckpoint(bytes: string): Result<unknown> {
+export function decodeCheckpoint(
+  bytes: string,
+): Result<CheckpointMetadata | null> {
   const raw = object(JSON.parse(bytes));
   if (raw._tag !== "ok") return raw;
   return raw.value.protocol === 2
-    ? ok(raw.value.snapshot)
+    ? checkpointMetadata(raw.value.snapshot)
     : { _tag: "unsupported_checkpoint_protocol" };
 }
 
 export function checkpointMetadata(
   raw: unknown,
-): Result<{ readonly through: number; readonly state: unknown } | null> {
+): Result<CheckpointMetadata | null> {
   if (raw === null) return ok(null);
   const r = object(raw);
   if (r._tag !== "ok") return r;
   const through = integer(r.value.through, 1);
   if (through._tag !== "ok") return through;
-  return ok({ through: through.value, state: r.value.state });
+  return ok({ through: through.value, rawState: r.value.state });
 }
 
-export function checkpointState<S>(raw: unknown, schema: Schema<S>): Result<S> {
-  return value(schema, raw);
+export function checkpointState<S>(
+  raw: unknown,
+  schema: Schema<S>,
+): CheckpointState<S> {
+  const parsed = schema.safeParse(structuredClone(raw));
+  return parsed.success
+    ? { _tag: "decoded", state: parsed.data }
+    : { _tag: "state_rejected" };
 }
 
 export function encodeCheckpoint(
