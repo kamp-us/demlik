@@ -254,6 +254,30 @@ it occurs at more sites than its superset. It also lists `repeatedArguments` whe
 a name, string or number occurs across different arguments of one call, for
 example `run(value, "Item.name", { label: "Item.name" })`.
 
+A positional clump also finds the same call shape with different names per site.
+Calls must share a callee, argument count, reference positions and static
+options-object keys; key order and literal values do not matter. Only direct
+references and direct object-property references count for this shape analysis.
+Slots with the same name everywhere are omitted. At least `clumpMinValues`
+varying slots and `clumpMinSites` sites are required, using the existing floors.
+An unchanged tuple produces no second finding. Options objects with computed,
+spread, duplicate or method keys are excluded from shape analysis.
+
+For example, three calls each to
+`run(c, sA, tA, ctx, "A.a", { outage: OA })` and its B/C variants produce:
+
+```json
+{ "kind": "positional", "callee": "run", "slots": [1, 2, "5.outage"],
+  "siteCount": 9, "distinctTupleCount": 3, "sites": [] }
+```
+
+`sites` above is abbreviated; real JSON lists all nine coordinates. Numeric slots
+are zero-based argument positions; `"5.outage"` is the `outage` property of
+argument 5. Human output prints `slots [1, 2, 5.outage] at 9 sites, 3 distinct tuples`.
+Exact-name rows keep their original fields and order. Both row kinds rank
+together by site count, then value/slot count, callee and lexical values/slots;
+exact rows precede positional rows when those keys tie.
+
 [Data Clumps](https://refactoring.guru/smells/data-clumps) describes the smell and
 the candidate treatments, Introduce Parameter Object and Preserve Whole Object.
 Names here are syntax spellings: unrelated locals with the same name can match;
@@ -271,7 +295,7 @@ or invalid values exit 2. Defaults live in
 | `cloneMinFiles` | Minimum distinct files per clone group |
 | `cloneIgnoreIdentifiers` | Replace identifier names with a placeholder |
 | `cloneIgnoreLiterals` | Ignore literal values while retaining their types |
-| `clumpMinValues` | Minimum distinct named values per group |
+| `clumpMinValues` | Minimum distinct named values, or varying reference slots per positional group |
 | `clumpMinSites` | Minimum distinct call sites per group |
 
 JSON contains `settings`, `parseFailures`, and the requested `clones` and/or
@@ -279,7 +303,7 @@ JSON contains `settings`, `parseFailures`, and the requested `clones` and/or
 enclosing function IDs, 1-based lines/columns and UTF-16 start/end offsets
 (exclusive end). Argument indexes are zero-based. JSON lists every site. Human
 text shows the top 20 groups per kind. Clone groups rank by files then nodes;
-clumps rank by sites then values. Ties have deterministic lexical ordering.
+clumps rank by sites then values/slots. Ties have deterministic lexical ordering.
 
 These views do not add candidates to collapse JSON; `structure-sweep pairs`
 continues to consume whole-function comparisons.

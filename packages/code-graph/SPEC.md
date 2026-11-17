@@ -1297,7 +1297,24 @@ expressions are not followed. Literals are excluded from cross-site groups.
 Report closed frequent sets of at least `clumpMinValues` (3) names at
 `clumpMinSites` (3) distinct call sites. A subset with the same sites as its
 superset is redundant; a subset with more sites remains useful and is retained.
-Groups rank by site count, then value count, callee and values.
+Exact-name groups keep their shape and relative order: site count, then value
+count, callee and values.
+
+The same callee also groups calls by argument count, reference positions and
+static options-object keys (key order is irrelevant). Only direct references
+and direct object-property references count here, not nested calls or arrays.
+Within each shape, discard slots whose name is constant across all sites.
+Report a `kind: "positional"` row when at least `clumpMinValues` varying reference
+slots remain at `clumpMinSites` sites. A single exact tuple produces no extra row.
+No new threshold is needed. Rows carry `slots`, `distinctTupleCount`, `siteCount`
+and all `sites`; numeric slots are zero-based arguments and `"5.outage"` means
+the `outage` key of argument 5. Thus three occurrences each of
+`run(c, sA, tA, ctx, "A.a", { outage: OA })` and its B/C variants produce
+slots `[1, 2, "5.outage"]`, 9 sites and 3 distinct tuples. Positional rows merge
+beside exact-name rows by site count, then slot/value count, callee and lexical
+slot/value order; exact rows precede positional rows at otherwise equal rank.
+Unsupported options keys (computed, spread, duplicate or method) exclude a call
+from shape grouping. Literal values do not affect shape or tuple counts.
 
 `repeatedArguments` reports a name, string or number present in two or more
 different arguments of a single call, including nested object values. Argument

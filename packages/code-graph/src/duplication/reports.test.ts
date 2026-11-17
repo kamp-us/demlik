@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadCheapProject } from "../extract/project.js";
 import { nodeField } from "../syntax/file.js";
-import { CLONE_FILES, CLUMP_FILES } from "./acceptance.fixture.js";
+import { CLONE_FILES, CLUMP_FILES, POSITIONAL_CALLS } from "./acceptance.fixture.js";
 import { siteOf } from "./scan.js";
 import { argumentValues } from "./values.js";
 
@@ -337,5 +337,98 @@ describe("data clump reports", () => {
       site: { file: "a.ts", startLine: 1 },
       arguments: [{ index: 3 }, { index: 4 }],
     });
+  });
+});
+
+describe("positional data clumps", () => {
+  it("ranks nine sites across three name tuples above the unchanged exact-name groups", () => {
+    const root = fixture({ "calls.ts": POSITIONAL_CALLS });
+    const result = report(root, "--clumps");
+    expect(result.clumps[0]).toMatchObject({
+      kind: "positional",
+      callee: "run",
+      slots: [1, 2, "5.outage"],
+      siteCount: 9,
+      distinctTupleCount: 3,
+    });
+    expect(result.clumps[0].sites).toHaveLength(9);
+    expect(
+      result.clumps
+        .slice(1)
+        .map(({ values, siteCount }: { values: string[]; siteCount: number }) => ({
+          values,
+          siteCount,
+        })),
+    ).toEqual([
+      { values: ["OA", "c", "ctx", "sA", "tA"], siteCount: 3 },
+      { values: ["OB", "c", "ctx", "sB", "tB"], siteCount: 3 },
+      { values: ["OC", "c", "ctx", "sC", "tC"], siteCount: 3 },
+    ]);
+    expect(
+      result.clumps.filter((clump: { kind?: string }) => clump.kind === "positional"),
+    ).toHaveLength(1);
+    expect(run(root, "--clumps").stdout).toContain(
+      "run: slots [1, 2, 5.outage] at 9 sites, 3 distinct tuples",
+    );
+    fs.writeFileSync(path.join(root, "settings.json"), JSON.stringify({ clumpMinSites: 10 }));
+    expect(
+      report(root, "--clumps", "--duplication-config", path.join(root, "settings.json")).clumps,
+    ).toEqual([]);
+  });
+
+  it("combines 144 sites across ten member-reference tuples despite options-key order", () => {
+    const source = Array.from({ length: 144 }, (_, i) => {
+      const tuple = `bundle${i % 10}`;
+      const entries = [`outage: ${tuple}.outage`, "presentation: render()"];
+      return `run(c, ${tuple}.schema, ${tuple}.table, ctx, "Item.${i}", { ${(i % 2 ? entries.reverse() : entries).join(", ")} });`;
+    }).join("\n");
+    const root = fixture({ "calls.ts": source });
+    const result = report(root, "--clumps");
+    expect(result.clumps[0]).toMatchObject({
+      kind: "positional",
+      callee: "run",
+      slots: [1, 2, "5.outage"],
+      siteCount: 144,
+      distinctTupleCount: 10,
+    });
+    expect(result.clumps[0].sites).toHaveLength(144);
+    expect(result.clumps[0].sites[143]).toMatchObject({ file: "calls.ts", startLine: 144 });
+    expect(run(root, "--clumps").stdout).toContain("at 144 sites, 10 distinct tuples");
+    fs.writeFileSync(path.join(root, "settings.json"), JSON.stringify({ clumpMinValues: 4 }));
+    const configured = report(
+      root,
+      "--clumps",
+      "--duplication-config",
+      path.join(root, "settings.json"),
+    );
+    expect(
+      configured.clumps.filter((clump: { kind?: string }) => clump.kind === "positional"),
+    ).toEqual([]);
+  });
+
+  it.each([
+    [
+      "different options keys",
+      ["outage", "failure", "fallback"]
+        .flatMap((key, i) =>
+          Array.from({ length: 3 }, () => `run(a${i}, b${i}, { ${key}: c${i} });`),
+        )
+        .join("\n"),
+    ],
+    [
+      "derived expressions",
+      Array.from({ length: 9 }, (_, i) => `run(a${i}, b${i}, derive(c${i}));`).join("\n"),
+    ],
+    ["two slots", Array.from({ length: 10 }, (_, i) => `f(a${i}, b${i});`).join("\n")],
+    ["one exact tuple", Array.from({ length: 9 }, () => "g(x, y, z);").join("\n")],
+    [
+      "different callees",
+      Array.from({ length: 9 }, (_, i) => `h${i}(a${i}, b${i}, c${i});`).join("\n"),
+    ],
+  ])("does not add positional findings for %s", (_name, source) => {
+    const result = report(fixture({ "calls.ts": source }), "--clumps");
+    expect(result.clumps.filter((clump: { kind?: string }) => clump.kind === "positional")).toEqual(
+      [],
+    );
   });
 });

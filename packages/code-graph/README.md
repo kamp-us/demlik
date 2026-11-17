@@ -40,7 +40,10 @@ changes where the tsconfig is found, without adding files to the scan.
 
 Use `--json` for machine-readable reports and `--out <file>` to save them.
 `--clones` and `--clumps` need no tsconfig and never gate. They report syntax
-matches for review, including every matching site in JSON. See
+matches for review, including every matching site in JSON. `--clumps` also ranks
+repeated call shapes whose reference names differ: positional rows list the
+varying argument slots (including options keys), site count and distinct-tuple
+count beside the existing exact-name groups. See
 [duplication reports](docs/reference/analyses.md#expression-clones-and-data-clumps)
 for normalization, size floors and limits.
 The [CLI reference](docs/reference/cli.md) lists every flag, scope rule, and exit code.

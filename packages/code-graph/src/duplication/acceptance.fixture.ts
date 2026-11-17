@@ -9,3 +9,12 @@ export const CLUMP_FILES: Readonly<Record<string, string>> = {
   "b.ts": 'run(y, schemaA, tableA, other, "C.d", { outage: O });',
   "c.ts": 'run(z, schemaA, tableA, next, "E.f", { outage: O });',
 };
+
+export const POSITIONAL_CALLS = ["A", "B", "C"]
+  .flatMap((tag) =>
+    Array.from(
+      { length: 3 },
+      () => `run(c, s${tag}, t${tag}, ctx, "${tag}.a", { outage: O${tag} });`,
+    ),
+  )
+  .join("\n");

@@ -2,6 +2,7 @@ import type { LoadedProject } from "../extract/project.js";
 import type { Graph } from "../schema.js";
 import { nodeField } from "../syntax/file.js";
 import { closedClumps } from "./itemsets.js";
+import { type CallShape, callShape, type PositionalClump, positionalClumps } from "./positional.js";
 import { compareSites, type Site, scan } from "./scan.js";
 import type { DuplicationSettings } from "./settings.js";
 import { type ArgumentValue, argumentValues, referenceName } from "./values.js";
@@ -13,7 +14,8 @@ export type RepeatedArgument = {
   site: Site;
   arguments: { index: number; line: number; column: number }[];
 };
-type Call = { site: Site; values: ArgumentValue[] };
+type Call = { site: Site; values: ArgumentValue[]; shape: CallShape | null };
+type Clump = DataClump | PositionalClump;
 
 function repeatedAt(callee: string, call: Call): RepeatedArgument[] {
   const byValue = new Map<string, Map<number, ArgumentValue>>();
@@ -40,7 +42,7 @@ function collectCalls(loaded: LoadedProject, graph: Graph): Map<string, Call[]> 
     const callee = calleeNode === null ? null : referenceName(calleeNode);
     if (callee === null) return;
     const group = calls.get(callee) ?? [];
-    group.push({ site, values: argumentValues(unit, node) });
+    group.push({ site, values: argumentValues(unit, node), shape: callShape(node) });
     calls.set(callee, group);
   });
   return calls;
@@ -60,12 +62,16 @@ function clumpsFor(
   });
 }
 
-function compareClumps(a: DataClump, b: DataClump): number {
+function compareClumps(a: Clump, b: Clump): number {
+  const aValues = "values" in a ? a.values : a.slots;
+  const bValues = "values" in b ? b.values : b.slots;
   return (
     b.siteCount - a.siteCount ||
-    b.values.length - a.values.length ||
+    bValues.length - aValues.length ||
     a.callee.localeCompare(b.callee) ||
-    a.values.join("\0").localeCompare(b.values.join("\0"))
+    aValues.join("\0").localeCompare(bValues.join("\0")) ||
+    Number("slots" in a) - Number("slots" in b) ||
+    compareSites(a.sites[0], b.sites[0])
   );
 }
 
@@ -73,13 +79,16 @@ export function findDataClumps(
   loaded: LoadedProject,
   graph: Graph,
   settings: DuplicationSettings,
-): { clumps: DataClump[]; repeatedArguments: RepeatedArgument[] } {
-  const clumps: DataClump[] = [];
+): { clumps: Clump[]; repeatedArguments: RepeatedArgument[] } {
+  const clumps: Clump[] = [];
   const repeatedArguments: RepeatedArgument[] = [];
   for (const [callee, group] of collectCalls(loaded, graph)) {
     group.sort((a, b) => compareSites(a.site, b.site));
     for (const call of group) repeatedArguments.push(...repeatedAt(callee, call));
-    clumps.push(...clumpsFor(callee, group, settings));
+    clumps.push(
+      ...clumpsFor(callee, group, settings),
+      ...positionalClumps(callee, group, settings),
+    );
   }
   clumps.sort(compareClumps);
   repeatedArguments.sort((a, b) => compareSites(a.site, b.site) || a.value.localeCompare(b.value));

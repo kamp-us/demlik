@@ -54,7 +54,11 @@ function cloneLines(clones: ReturnType<typeof findExpressionClones>): string[] {
 function clumpLines(report: ReturnType<typeof findDataClumps>): string[] {
   const lines = [`data clumps: ${report.clumps.length}`];
   for (const clump of report.clumps.slice(0, HUMAN_LIMIT)) {
-    lines.push(`  ${clump.callee}: {${clump.values.join(", ")}} at ${clump.siteCount} sites`);
+    const description =
+      "values" in clump
+        ? `{${clump.values.join(", ")}} at ${clump.siteCount} sites`
+        : `slots [${clump.slots.join(", ")}] at ${clump.siteCount} sites, ${clump.distinctTupleCount} distinct tuples`;
+    lines.push(`  ${clump.callee}: ${description}`);
     lines.push(...clump.sites.map((site) => `    ${location(site)}`));
   }
   lines.push(`repeated arguments: ${report.repeatedArguments.length}`);
