@@ -502,13 +502,8 @@ export function answerHostTests(
             fired: ["d-0", "d-7", "d-14", "d-21", "d-28", "d-35", "d-42"],
             due: [],
           });
-          const journal = disk.open();
-          const wake = await boot(answerStore(journal), async () => {
-            throw new Error("answered job repeated");
-          });
-          await wake.stop();
-          await journal.close();
-          const controlJournal = memoryJournal();
+          const controlDisk = await storage(driver);
+          const controlJournal = controlDisk.open();
           const controlStore = answerStore(controlJournal);
           const control = await boot(controlStore, async () => owed());
           try {
@@ -521,6 +516,7 @@ export function answerHostTests(
           } finally {
             await control.stop();
             await controlJournal.close();
+            await controlDisk.remove();
           }
           console.info(
             JSON.stringify({

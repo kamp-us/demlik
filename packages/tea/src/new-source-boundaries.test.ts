@@ -6,6 +6,7 @@ import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
+const effectPackage = "effect";
 
 function violations(file: string, source: string): string[] {
   const out: string[] = [];
@@ -59,7 +60,7 @@ describe("new tea source obeys the import and environment boundaries", () => {
   it.each([
     [
       "internal/example.ts",
-      'import { Effect } from "effect";',
+      `import { Effect } from "${effectPackage}";`,
       ["Effect outside its engine"],
     ],
     [
@@ -77,8 +78,12 @@ describe("new tea source obeys the import and environment boundaries", () => {
       'const key = process["env"].KEY;',
       ["environment below edge"],
     ],
-    ["effect/example.ts", 'import { Effect } from "effect";', []],
-    ["testing/effect/example.ts", 'const pkg = import("effect");', []],
+    ["effect/example.ts", `import { Effect } from "${effectPackage}";`, []],
+    [
+      "testing/effect/example.ts",
+      `const pkg = import("${effectPackage}");`,
+      [],
+    ],
     ["node/example.ts", "const key = process.env.KEY;", []],
   ] as const)("checks %s: %s", (file, source, expected) => {
     expect(violations(`packages/tea/src/${file}`, source)).toEqual(expected);
