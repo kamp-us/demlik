@@ -1,5 +1,5 @@
 ---
-"@demlik/tea": patch
+"@demlik/tea": minor
 ---
 
 **Breaking (experimental):** replace `fileJournal<R>(dir, parse)` with the calls below.
