@@ -16,6 +16,7 @@ export interface JournalKitFixture {
   dispose(): Promise<void>;
   readonly byteFile: boolean;
   tearTail?(): Promise<void>;
+  readStoredBytes?(stream: string): Promise<Uint8Array>;
 }
 export type JournalKitFactory = () => Promise<JournalKitFixture>;
 export type KitResult = {
@@ -274,20 +275,32 @@ async function fenced({ open }: KitContext): Promise<KitResult> {
 }
 async function tornTail({ open, fixture }: KitContext): Promise<KitResult> {
   if (!fixture.byteFile) return { id: "K8", status: "skipped" };
-  if (!fixture.tearTail)
-    throw new Error("A byte-file fixture must provide tearTail");
+  const readStoredBytes = fixture.readStoredBytes;
+  if (!fixture.tearTail || !readStoredBytes)
+    throw new Error(
+      "A byte-file fixture must provide tearTail and readStoredBytes",
+    );
+  const snapshot = readStoredBytes.bind(fixture);
+  async function unchangedRead(reader: Journal, count: number) {
+    const before = new Uint8Array(await snapshot("s"));
+    expect(read(await reader.read("s", 0))).toEqual({
+      _tag: "read",
+      head: count,
+      entries: entries(count),
+    });
+    const after = new Uint8Array(await snapshot("s"));
+    expect(after).toEqual(before);
+  }
   let journal = await open();
   appended(await journal.append("s", batch(2)));
   await close(journal);
   await fixture.tearTail();
   journal = await open();
-  for (let repeat = 0; repeat < 2; repeat++) {
-    expect(read(await journal.read("s", 0))).toEqual({
-      _tag: "read",
-      head: 2,
-      entries: entries(2),
-    });
-  }
+  await unchangedRead(journal, 2);
+  await unchangedRead(journal, 2);
+  const secondReader = await open();
+  await unchangedRead(secondReader, 2);
+  await close(secondReader);
   expect(appended(await journal.append("s", [record(3)]))).toEqual({
     _tag: "appended",
     head: 3,
@@ -295,11 +308,7 @@ async function tornTail({ open, fixture }: KitContext): Promise<KitResult> {
   });
   await close(journal);
   journal = await open();
-  expect(read(await journal.read("s", 0))).toEqual({
-    _tag: "read",
-    head: 3,
-    entries: entries(3),
-  });
+  await unchangedRead(journal, 3);
   await close(journal);
   return passed("K8");
 }

@@ -74,12 +74,14 @@ const broken = {
   crossesStreams: "K6",
   acceptsStaleExpected: "K7",
   returnsTornTail: "K8",
+  truncatesOnRead: "K8",
 } satisfies Record<string, KitCase>;
 type Broken = keyof typeof broken;
 type MutationContext = {
   readonly journal: FencedJournal;
   readonly cut: () => number | undefined;
   readonly torn: () => boolean;
+  readonly truncateTail: () => void;
   readonly opens: () => number;
   readonly batches: Map<string, number>;
   readonly clock: { ticks: number };
@@ -171,6 +173,13 @@ const mutations = {
     ...journal,
     appendFenced: (stream, records) => journal.append(stream, records),
   }),
+  truncatesOnRead: ({ journal, torn, truncateTail }) => ({
+    ...journal,
+    async read(stream, after) {
+      if (torn()) truncateTail();
+      return journal.read(stream, after);
+    },
+  }),
   returnsTornTail: ({ journal, torn }) => ({
     ...journal,
     async read(stream, after) {
@@ -195,17 +204,24 @@ async function brokenFixture(name: Broken, clock: { ticks: number }) {
   const fixture = await memoryFixture();
   let cut: number | undefined;
   let torn = false;
+  // Portable byte-image test double; the Node fixtures expose actual disk bytes.
+  let storedBytes = Uint8Array.of(1, 2);
+
   let opens = 0;
   const batches = new Map<string, number>();
   return {
     ...fixture,
-    byteFile: name === "returnsTornTail",
+    byteFile: broken[name] === "K8",
     interruptAt(point: number | undefined) {
       cut = point;
       if (name !== "dropsBatchTail") fixture.interruptAt(point);
     },
     async tearTail() {
       torn = true;
+      storedBytes = Uint8Array.of(1, 2, 0xe5, 0x8d);
+    },
+    async readStoredBytes() {
+      return storedBytes.slice();
     },
     async open(): Promise<Journal> {
       opens++;
@@ -221,6 +237,9 @@ async function brokenFixture(name: Broken, clock: { ticks: number }) {
         journal,
         cut: () => cut,
         torn: () => torn,
+        truncateTail: () => {
+          storedBytes = storedBytes.slice(0, 2);
+        },
         opens: () => opens,
         batches,
         clock,

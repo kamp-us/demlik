@@ -221,6 +221,11 @@ const fileFixture =
           { length: Buffer.byteLength(`${JSON.stringify(records)}\n`) + 1 },
           (_, i) => i,
         ),
+      async readStoredBytes(stream) {
+        return fs.readFileSync(
+          join(dir, `${encodeURIComponent(stream)}.jsonl`),
+        );
+      },
       async tearTail() {
         fs.appendFileSync(
           join(dir, "s.jsonl"),
