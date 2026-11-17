@@ -221,11 +221,22 @@ async function flatCost({ make, now }: KitContext): Promise<KitResult> {
     const order: readonly (10 | 10000)[] =
       sample % 2 ? [10000, 10] : [10, 10000];
     for (const n of order) {
-      read(await journal.read(`n${n}`, n - 1));
+      const before = read(await journal.read(`n${n}`, n - 1));
+      expect(before.head).toBe(n - 1);
       const start = now();
       const ack = await journal.append(`n${n}`, encoded);
       const elapsed = now() - start;
-      appended(ack);
+      const stored = appended(ack);
+      expect(stored).toEqual({
+        _tag: "appended",
+        head: n,
+        entries: [{ seq: n, record: encoded[0] }],
+      });
+      const after = read(await journal.read(`n${n}`, n - 1));
+      expect(after.head).toBe(stored.head);
+      expect(after.entries.filter((entry) => entry.seq > n - 1)).toEqual(
+        stored.entries,
+      );
       if (sample >= 5) samples[n].push(elapsed);
     }
     await close(journal);

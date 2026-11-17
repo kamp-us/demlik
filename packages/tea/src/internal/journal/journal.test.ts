@@ -67,6 +67,7 @@ const broken = {
   dropsBatchTail: "K3",
   acknowledgesUnstored: "K3",
   rewritesWholeLog: "K5",
+  acknowledgesMeasuredUnstored: "K5",
   losesOnReopen: "K4",
   misreportsBatchAcknowledgement: "K4",
   reordersRead: "K1",
@@ -88,6 +89,20 @@ type MutationContext = {
   readonly clock: { ticks: number };
 };
 type Mutation = (context: MutationContext) => FencedJournal;
+
+async function acknowledgeUnstored(
+  journal: Journal,
+  stream: string,
+  records: Parameters<Journal["append"]>[1],
+): ReturnType<Journal["append"]> {
+  const prior = await journal.read(stream, 0);
+  if (prior._tag !== "read") return prior;
+  return {
+    _tag: "appended",
+    head: prior.head + records.length,
+    entries: records.map((record, i) => ({ seq: prior.head + i + 1, record })),
+  };
+}
 
 const mutations = {
   dropsBatchTail: ({ journal, cut }) => ({
@@ -112,16 +127,7 @@ const mutations = {
     ...journal,
     async append(stream, records) {
       if (cut() === undefined) return journal.append(stream, records);
-      const prior = await journal.read(stream, 0);
-      if (prior._tag !== "read") return prior;
-      return {
-        _tag: "appended",
-        head: prior.head + records.length,
-        entries: records.map((record, i) => ({
-          seq: prior.head + i + 1,
-          record,
-        })),
-      };
+      return acknowledgeUnstored(journal, stream, records);
     },
   }),
   rewritesWholeLog: ({ journal, clock }) => ({
@@ -131,6 +137,13 @@ const mutations = {
       if (prior._tag === "read") clock.ticks += prior.entries.length;
       return journal.append(stream, records);
     },
+  }),
+  acknowledgesMeasuredUnstored: ({ journal }) => ({
+    ...journal,
+    append: (stream, records) =>
+      stream.startsWith("n") && records.length === 1
+        ? acknowledgeUnstored(journal, stream, records)
+        : journal.append(stream, records),
   }),
   losesOnReopen: ({ journal, opens }) => ({
     ...journal,
