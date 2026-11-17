@@ -8,14 +8,26 @@ Tier: `stable`
 import { … } from "@demlik/tea/mem";
 ```
 
-## Exports (2)
+## Exports (3)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
+| [`memoryJournal`](#memoryJournal) | Variable | experimental | Store opaque journal text in process memory, with explicit opt-in fencing. |
 | [`memoryStore`](#memoryStore) | Function | stable | Build an in-memory `Store<S>`. |
 | [`MemoryStoreOptions`](#MemoryStoreOptions) | Interface | stable | Options for memoryStore. |
 
 ## Declarations
+
+<a id="memoryJournal"></a>
+
+### `memoryJournal`
+
+```ts
+const memoryJournal: {
+  (options: { readonly fenced: true }): FencedJournal;
+  (options?: { readonly fenced?: false }): Journal;
+}
+```
 
 <a id="memoryStore"></a>
 

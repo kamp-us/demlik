@@ -30,6 +30,7 @@
 
 import type { DeletableStore, FencedStore, Migrated } from "../index";
 import { StoreConflictError } from "../index";
+import { memoryJournal as createMemoryJournal } from "../internal/journal";
 
 /** Options for {@link memoryStore}. */
 export interface MemoryStoreOptions {
@@ -120,3 +121,9 @@ export function memoryStore<S>(
     },
   };
 }
+
+/**
+ * Store opaque journal text in process memory, with explicit opt-in fencing.
+ * @experimental
+ */
+export const memoryJournal = createMemoryJournal;

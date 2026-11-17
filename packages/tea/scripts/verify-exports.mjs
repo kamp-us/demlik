@@ -1,3 +1,5 @@
+import assert from "node:assert/strict";
+import { execFileSync, spawnSync } from "node:child_process";
 // prepublishOnly guard: every `exports` target must exist in the built dist/.
 // v0.1.1 shipped a stale build missing dist/retry-to-success/ — a broken
 // published subpath. This walker makes that failure class unshippable (#274).
@@ -33,3 +35,45 @@ if (missing.length > 0) {
   process.exit(1);
 }
 console.log(`verify-exports: all ${targets.length} exports targets exist`);
+
+// This consumer resolves the published specifiers against dist, with no source aliases.
+execFileSync(
+  "pnpm",
+  [
+    "exec",
+    "tsc",
+    "--noEmit",
+    "--strict",
+    "--target",
+    "ES2022",
+    "--module",
+    "NodeNext",
+    "--moduleResolution",
+    "NodeNext",
+    "--skipLibCheck",
+    "examples/journal-store.ts",
+  ],
+  { cwd: pkgDir, stdio: "inherit" },
+);
+execFileSync(
+  process.execPath,
+  ["--experimental-strip-types", "examples/journal-store.ts"],
+  { cwd: pkgDir, stdio: "inherit" },
+);
+const kit = spawnSync(
+  process.execPath,
+  [
+    "--input-type=module",
+    "-e",
+    'import { journalConformance } from "@demlik/tea/testing";',
+  ],
+  { cwd: pkgDir, encoding: "utf8" },
+);
+assert.notEqual(kit.status, 0);
+assert.match(
+  kit.stderr,
+  /does not provide an export named 'journalConformance'/,
+);
+console.log(
+  "verify-exports: journalConformance remains unavailable on ./testing",
+);

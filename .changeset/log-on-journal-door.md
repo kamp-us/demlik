@@ -4,6 +4,8 @@
 
 Add the experimental `eventSourcedStore(journal, options)` on `@demlik/tea/persistence`. Supply the State, message and command schemas with any conforming journal driver. Logged runs save messages before reduction, atomically commit State, owed work, receipt and automatic checkpoint, initialize once at birth, and recover committed State and stable delivery IDs on wake. Manual checkpoints use a sibling stream. Memory and file drivers share the durable assertions.
 
+Publish experimental `Journal`, `FencedJournal`, `JournalEntry`, `JournalRead`, `JournalAppend`, `JournalRefusal`, `JournalConflict` and `EncodedRecord` types on `@demlik/tea/persistence`, and `memoryJournal` on `@demlik/tea/mem`. Driver authors use the same contract types as the factory. The conformance kit remains internal; `journalConformance` is not exported from `@demlik/tea/testing`.
+
 **Breaking:** `fileJournal` on `@demlik/tea/node` takes opaque text batches and optional `{ fenced: true }` instead of a record parser; remove `memoryEventSourcedStore` from `@demlik/tea/mem`; use `eventSourcedStore` with a memory journal instead. There is no compatibility facade or migration reader for the unreleased Map-cell format; consumers pin their package version until they adopt the replacement.
 
 Plain journals require one writer per stream. Pass a `FencedJournal` and explicit `{ fenced: true }` to the factory to refuse a stale writer through the existing store-failure protocol. A fenced run requires `onError` as before.
