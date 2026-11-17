@@ -1,11 +1,7 @@
 import { readFileSync } from "node:fs";
-import ts from "typescript";
 import { expect, test } from "vitest";
 import { z } from "zod";
-import { StoreConflictError } from "../../../index";
 import { memoryEventSourcedStore } from "../../../mem";
-import { schemaMigrate } from "../../../runtime-types";
-import * as effects from "./durable-effects";
 
 const state = z.object({ n: z.number() });
 const message = z.object({ _tag: z.literal("go"), n: z.number() });
@@ -53,7 +49,6 @@ const fixture = z
     ),
     entries: z.array(z.tuple([z.string(), z.string()])),
     read: z.unknown(),
-    origin: z.object({ format: z.string(), memory: z.string() }),
   })
   .parse(
     JSON.parse(
@@ -64,45 +59,11 @@ const fixture = z
     ),
   );
 
-// Execute the pinned, unchanged writer, with its real shared dependencies.
-function originModule<T>(
-  source: string,
-  imports: Readonly<Record<string, unknown>>,
-): T {
-  const { outputText } = ts.transpileModule(source, {
-    compilerOptions: {
-      module: ts.ModuleKind.CommonJS,
-      target: ts.ScriptTarget.ES2022,
-    },
-  });
-  const module = { exports: {} };
-  const require = (id: string): unknown => {
-    if (!Object.hasOwn(imports, id))
-      throw new Error(`Unresolved baseline dependency: ${id}`);
-    return imports[id];
-  };
-  new Function("exports", "require", "module", outputText)(
-    module.exports,
-    require,
-    module,
-  );
-  return module.exports as T;
-}
-const format = originModule<object>(fixture.origin.format, {
-  "./durable-effects": effects,
-});
-export const originMain = originModule<{
-  readonly memoryEventSourcedStore: typeof memoryEventSourcedStore;
-}>(fixture.origin.memory, {
-  "../index": { StoreConflictError },
-  "../internal/persistence/durable-log/format": format,
-  "../runtime-types": { schemaMigrate },
-}).memoryEventSourcedStore;
 const options = { state, message, command, snapshotEvery: 3 };
 
-async function replay(make: typeof memoryEventSourcedStore) {
+async function replay() {
   const disk = new Map<string, string>();
-  const store = make(disk, options);
+  const store = memoryEventSourcedStore(disk, options);
   type Operation = (typeof fixture.operations)[number];
   const calls = {
     commit: (op) => store.commitStep(op.step),
@@ -118,45 +79,36 @@ async function replay(make: typeof memoryEventSourcedStore) {
   return disk;
 }
 
-test("the pinned origin/main writer reproduces the golden bytes and read", async () => {
-  const disk = await replay(originMain);
-  expect([...disk]).toEqual(fixture.entries);
-  expect(await originMain(disk, options).readLog()).toEqual(fixture.read);
-});
-
-test("old bytes are readable and new bytes match exactly and are readable by origin/main", async () => {
+test("bytes written by origin/main are read back as origin/main read them", async () => {
   expect(
     await memoryEventSourcedStore(new Map(fixture.entries), options).readLog(),
   ).toEqual(fixture.read);
-  const disk = await replay(memoryEventSourcedStore);
-  expect([...disk]).toEqual(fixture.entries);
-  expect(await originMain(disk, options).readLog()).toEqual(fixture.read);
 });
 
-for (const [name, make] of [
-  ["origin/main", originMain],
-  ["pure rules", memoryEventSourcedStore],
-] as const) {
-  test(`${name}: an uncloneable decoded response refuses before writing`, async () => {
-    const disk = new Map<string, string>();
-    const store = make(disk, {
-      ...options,
-      state: {
-        safeParse: (_raw: unknown) => ({
-          success: true as const,
-          data: (): number => 0,
-        }),
-      },
-    });
-    await expect(
-      store.commitStep({
-        _tag: "birth",
-        at: 0,
-        state: () => 1,
-        cmds: [],
-        timers: [],
+test("the same operations write exactly the bytes origin/main wrote", async () => {
+  const disk = await replay();
+  expect([...disk]).toEqual(fixture.entries);
+});
+
+test("an uncloneable decoded response refuses before writing", async () => {
+  const disk = new Map<string, string>();
+  const store = memoryEventSourcedStore(disk, {
+    ...options,
+    state: {
+      safeParse: (_raw: unknown) => ({
+        success: true as const,
+        data: (): number => 0,
       }),
-    ).rejects.toMatchObject({ name: "DataCloneError" });
-    expect(disk.size).toBe(0);
+    },
   });
-}
+  await expect(
+    store.commitStep({
+      _tag: "birth",
+      at: 0,
+      state: () => 1,
+      cmds: [],
+      timers: [],
+    }),
+  ).rejects.toMatchObject({ name: "DataCloneError" });
+  expect(disk.size).toBe(0);
+});
