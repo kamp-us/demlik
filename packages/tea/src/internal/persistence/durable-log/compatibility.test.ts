@@ -1,7 +1,12 @@
+// The frozen origin/main key and byte pairs are this test's subject.
 import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
 import { z } from "zod";
-import { memoryEventSourcedStore } from "../../../mem";
+import {
+  createStorage,
+  durableStore,
+  storageBytes,
+} from "../durable-store.fixture";
 
 const state = z.object({ n: z.number() });
 const message = z.object({ _tag: z.literal("go"), n: z.number() });
@@ -62,8 +67,8 @@ const fixture = z
 const options = { state, message, command, snapshotEvery: 3 };
 
 async function replay() {
-  const disk = new Map<string, string>();
-  const store = memoryEventSourcedStore(disk, options);
+  const disk = createStorage();
+  const store = durableStore(disk, options);
   type Operation = (typeof fixture.operations)[number];
   const calls = {
     commit: (op) => store.commitStep(op.step),
@@ -81,18 +86,18 @@ async function replay() {
 
 test("bytes written by origin/main are read back as origin/main read them", async () => {
   expect(
-    await memoryEventSourcedStore(new Map(fixture.entries), options).readLog(),
+    await durableStore(createStorage(fixture.entries), options).readLog(),
   ).toEqual(fixture.read);
 });
 
 test("the same operations write exactly the bytes origin/main wrote", async () => {
-  const disk = await replay();
+  const disk = storageBytes(await replay());
   expect([...disk]).toEqual(fixture.entries);
 });
 
 test("an uncloneable decoded response refuses before writing", async () => {
-  const disk = new Map<string, string>();
-  const store = memoryEventSourcedStore(disk, {
+  const storage = createStorage();
+  const store = durableStore(storage, {
     ...options,
     state: {
       safeParse: (_raw: unknown) => ({
@@ -110,5 +115,6 @@ test("an uncloneable decoded response refuses before writing", async () => {
       timers: [],
     }),
   ).rejects.toMatchObject({ name: "DataCloneError" });
+  const disk = storageBytes(storage);
   expect(disk.size).toBe(0);
 });

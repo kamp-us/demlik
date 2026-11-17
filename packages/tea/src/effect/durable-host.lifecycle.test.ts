@@ -8,7 +8,10 @@ import {
   type State,
   type Upload,
 } from "../internal/persistence/durable-host.fixture";
-import { memoryEventSourcedStore } from "../mem";
+import {
+  createStorage,
+  durableStore,
+} from "../internal/persistence/durable-store.fixture";
 import type { LoggedStore } from "../runtime-types";
 import { StoreRefusedError } from "../runtime-types";
 import { run, StoreFailed } from "./index";
@@ -25,8 +28,8 @@ test("Effect dispatchOnce preserves caller IDs and the handler receives its invo
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const disk = new Map<string, string>();
-        const store = memoryEventSourcedStore(disk, options);
+        const disk = createStorage();
+        const store = durableStore(disk, options);
         const ids: (number | undefined)[] = [];
         const booting = yield* run(machine(), {
           store,
@@ -64,10 +67,7 @@ test("Effect logged read and write failures keep their operation and cause, and 
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const inner = memoryEventSourcedStore(
-          new Map<string, string>(),
-          options,
-        );
+        const inner = durableStore(createStorage(), options);
         const readCause = new Error("read");
         const unreadable: LoggedStore<State, Msg, Upload> = {
           ...inner,

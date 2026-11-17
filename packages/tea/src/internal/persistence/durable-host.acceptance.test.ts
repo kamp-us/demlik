@@ -1,8 +1,12 @@
 import { expect, test } from "vitest";
 import { z } from "zod";
 import { defineMachine, deliveryIdOf } from "../../index";
-import { memoryEventSourcedStore } from "../../mem";
 import { run } from "../../promise";
+import {
+  copyStorage,
+  createStorage,
+  durableStore,
+} from "./durable-store.fixture";
 
 const state = z.object({ files: z.array(z.string()) });
 const message = z.object({ _tag: z.literal("picked"), file: z.string() });
@@ -25,20 +29,20 @@ const uploader = () =>
   });
 
 test("T1: picked is durable before upload starts and a crash there preserves State and redelivers", async () => {
-  const disk = new Map<string, string>();
-  let atWork = new Map<string, string>();
+  const disk = createStorage();
+  let atWork = createStorage();
   let firstId: number | undefined;
   const rt = await run(uploader(), {
-    store: memoryEventSourcedStore(disk, options),
+    store: durableStore(disk, options),
     interpret: {
       upload: async (_, ctx) => {
-        atWork = new Map(disk);
+        atWork = copyStorage(disk);
         firstId = deliveryIdOf(ctx);
       },
     },
   }).ready;
   await rt.dispatch({ _tag: "picked", file: "a.png" });
-  const recoveredStore = memoryEventSourcedStore(new Map(atWork), options);
+  const recoveredStore = durableStore(copyStorage(atWork), options);
   const messages = (await recoveredStore.readLog()).records.filter(
     ({ record }) => record._tag === "message",
   );

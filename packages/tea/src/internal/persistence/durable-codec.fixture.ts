@@ -2,7 +2,13 @@ import { isDeepStrictEqual } from "node:util";
 import { expect, test } from "vitest";
 import { z } from "zod";
 import { defineMachine, type LoggedStore } from "../../index";
-import { memoryEventSourcedStore } from "../../mem";
+import {
+  copyStorage,
+  createStorage,
+  type DurableStorage,
+  durableStore,
+  onStorageWrite,
+} from "./durable-store.fixture";
 
 type State = { value: unknown };
 type Msg =
@@ -152,23 +158,20 @@ async function exercise(
 ) {
   const original = row.make();
   const seen: unknown[] = [];
-  const disk = new Map<string, string>();
-  let crash: Map<string, string> | undefined;
-  let before = new Map(disk);
+  const disk = createStorage();
+  let crash: DurableStorage | undefined;
+  let before = copyStorage(disk);
   let writes = 0;
   let writesBefore = 0;
-  const set = disk.set.bind(disk);
-  disk.set = (key, bytes) => {
+  onStorageWrite(disk, (bytes) => {
     writes += 1;
-    set(key, bytes);
     const record = JSON.parse(bytes).record;
-    if (role === "Msg" && record?._tag === "message") crash = new Map(disk);
-    return disk;
-  };
+    if (role === "Msg" && record?._tag === "message") crash = copyStorage(disk);
+  });
   const options = optionsFor(row.decode);
-  const store = memoryEventSourcedStore(disk, options);
+  const store = durableStore(disk, options);
   const boundary = () => {
-    before = new Map(disk);
+    before = copyStorage(disk);
     writesBefore = writes;
   };
   const checked: typeof store = {
@@ -194,7 +197,7 @@ async function exercise(
   try {
     live = await driver(program, checked, (cmd) => {
       seen.push(cmd.value);
-      crash = new Map(disk);
+      crash = copyStorage(disk);
     });
     if (phase === "step")
       await live.dispatch(
@@ -209,14 +212,14 @@ async function exercise(
   }
   if (row.refused) throw new Error("Codec/schema refusal was accepted");
   if (role === "State") {
-    crash = new Map(disk);
+    crash = copyStorage(disk);
     await live.dispatch({ _tag: "inspect" });
   }
   await live.stop();
   if (!crash) throw new Error("Missing persisted observation boundary");
   const wake = await driver(
     program,
-    memoryEventSourcedStore(new Map(crash), options),
+    durableStore(copyStorage(crash), options),
     (cmd) => seen.push(cmd.value),
   );
   if (role === "State") await wake.dispatch({ _tag: "inspect" });
@@ -243,10 +246,10 @@ export function codecContract(engine: string, driver: CodecDriver): void {
   });
   test(`${engine}: Msg pending undefined uses the admitted value live and after wake`, async () => {
     const seen: unknown[] = [];
-    const disk = new Map<string, string>();
-    let crash = new Map(disk);
+    const disk = createStorage();
+    let crash = copyStorage(disk);
     const options = optionsFor();
-    const store = memoryEventSourcedStore(disk, options);
+    const store = durableStore(disk, options);
     const program = programFor("Msg", "step", null, () => {});
     const observing = defineMachine({
       ...program,
@@ -264,7 +267,7 @@ export function codecContract(engine: string, driver: CodecDriver): void {
         ...store,
         appendMessage: async (message) => {
           const result = await store.appendMessage(message);
-          crash = new Map(disk);
+          crash = copyStorage(disk);
           return result;
         },
       },
@@ -275,7 +278,7 @@ export function codecContract(engine: string, driver: CodecDriver): void {
     await live.stop();
     const wake = await driver(
       observing,
-      memoryEventSourcedStore(new Map(crash), options),
+      durableStore(copyStorage(crash), options),
       () => {},
     );
     await wake.stop();

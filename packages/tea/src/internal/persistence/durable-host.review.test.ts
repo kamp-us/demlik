@@ -8,7 +8,6 @@ import {
   type LogStep,
   type Settled,
 } from "../../index";
-import { memoryEventSourcedStore } from "../../mem";
 import { run } from "../../promise";
 import { detachWorkOf, OutcomeContractError } from "../../pure/core";
 import {
@@ -19,6 +18,11 @@ import {
   type State,
   type Upload,
 } from "./durable-host.fixture";
+import {
+  copyStorage,
+  createStorage,
+  durableStore,
+} from "./durable-store.fixture";
 
 test("detached invalid own-outcome callback stays owed without an admitted answer", async () => {
   const upload = Cmd.define("upload", {
@@ -36,7 +40,7 @@ test("detached invalid own-outcome callback stays owed without an admitted answe
       upload_err: (s) => [s, []],
     },
   });
-  const disk = new Map<string, string>();
+  const disk = createStorage();
   const options = {
     state: z.object({ n: z.number() }),
     message: {
@@ -44,7 +48,7 @@ test("detached invalid own-outcome callback stays owed without an admitted answe
     },
     command: z.object({ _tag: z.literal("upload"), file: z.string() }),
   };
-  const store = memoryEventSourcedStore(disk, options);
+  const store = durableStore(disk, options);
   let release!: () => void;
   const blocked = new Promise<void>((resolve) => {
     release = resolve;
@@ -76,7 +80,7 @@ test("detached invalid own-outcome callback stays owed without an admitted answe
   let retried: number | undefined;
   const lost = new Error("drop activation");
   const wake = await run(program, {
-    store: memoryEventSourcedStore(new Map(disk), options),
+    store: durableStore(copyStorage(disk), options),
     onError: () => {},
     interpret: {
       upload: async (_, ctx) => {
