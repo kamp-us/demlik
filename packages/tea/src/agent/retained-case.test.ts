@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { fileJournal } from "@demlik/tea/node";
 import { build } from "vite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { z } from "zod";
 import {
   committedView,
   fixturePorts,
@@ -19,7 +20,10 @@ import {
   MAX_PENDING_VIEWS,
   openCase,
 } from "../../examples/retained-case/host";
-import { parseRecord } from "../../examples/retained-case/source";
+import {
+  decodeRecord,
+  encodeRecord,
+} from "../../examples/retained-case/source";
 
 function gate() {
   let resolve!: () => void;
@@ -115,13 +119,13 @@ describe("the retained investigation case", { timeout: 30_000 }, () => {
   });
 
   it("keeps publication behind a pending source append and surfaces a failed save", async () => {
-    const backing = fileJournal(join(work, "failed-save"), parseRecord);
+    const backing = fileJournal(join(work, "failed-save"), z.string().parse);
     const reached = gate();
     const release = gate();
     const journal: CaseJournal = {
       ...backing,
       async append(stream, record) {
-        if (record.msg._tag === "resilient_run_ok") {
+        if (decodeRecord(record).msg._tag === "resilient_run_ok") {
           reached.resolve();
           await release.promise;
           throw new Error("source append failed: disk full");
@@ -157,7 +161,7 @@ describe("the retained investigation case", { timeout: 30_000 }, () => {
   });
 
   it("observes an update during attachment once, under the snapshot's own lock", async () => {
-    const backing = fileJournal(join(work, "attach"), parseRecord);
+    const backing = fileJournal(join(work, "attach"), z.string().parse);
     const modelEntered = gate();
     const releaseModel = gate();
     const ports = fixturePorts();
@@ -199,7 +203,7 @@ describe("the retained investigation case", { timeout: 30_000 }, () => {
 
   it("bounds lagging output, converges with full views, and cancels the SSE connection", async () => {
     const host = await openCase(
-      fileJournal(join(work, "overflow"), parseRecord),
+      fileJournal(join(work, "overflow"), z.string().parse),
       "overflow",
       fixturePorts(),
     );
@@ -233,27 +237,51 @@ describe("the retained investigation case", { timeout: 30_000 }, () => {
   it.each([
     [
       "shape",
-      '{"seq":1,"record":{"version":1,"msg":{"_tag":"agent_start","runId":42,"at":1}}}\n',
+      `${JSON.stringify({
+        seq: 1,
+        record: JSON.stringify({
+          version: 1,
+          msg: { _tag: "agent_start", runId: 42, at: 1 },
+        }),
+      })}\n`,
     ],
     [
       "sequence",
-      '{"seq":2,"record":{"version":1,"msg":{"_tag":"agent_start","runId":"corrupt","at":1}}}\n',
+      `${JSON.stringify({
+        seq: 2,
+        record: encodeRecord({
+          version: 1,
+          msg: { _tag: "agent_start", runId: "corrupt", at: 1 },
+        }),
+      })}\n`,
     ],
     [
       "owner",
-      '{"seq":1,"record":{"version":1,"msg":{"_tag":"agent_start","runId":"foreign","at":1}}}\n',
+      `${JSON.stringify({
+        seq: 1,
+        record: encodeRecord({
+          version: 1,
+          msg: { _tag: "agent_start", runId: "foreign", at: 1 },
+        }),
+      })}\n`,
     ],
   ])("refuses a corrupt persisted %s without overwriting it", async (name, bytes) => {
-    const journal = fileJournal(join(work, `corrupt-${name}`), parseRecord);
-    await journal.append("corrupt", {
-      version: 1,
-      msg: { _tag: "agent_start", runId: "corrupt", at: 1 },
-    });
+    const journal = fileJournal(
+      join(work, `corrupt-${name}`),
+      z.string().parse,
+    );
+    await journal.append(
+      "corrupt",
+      encodeRecord({
+        version: 1,
+        msg: { _tag: "agent_start", runId: "corrupt", at: 1 },
+      }),
+    );
     const path = join(work, `corrupt-${name}`, "corrupt.jsonl");
     await writeFile(path, bytes);
     await expect(
       openCase(
-        fileJournal(join(work, `corrupt-${name}`), parseRecord),
+        fileJournal(join(work, `corrupt-${name}`), z.string().parse),
         "corrupt",
         fixturePorts(),
       ),
@@ -277,7 +305,9 @@ describe("the retained investigation case", { timeout: 30_000 }, () => {
       const boundary = await messageFrom(first);
       expect(boundary).toEqual({ kind: "committed", seq: 2, published: 1 });
       expect(
-        await fileJournal(directory, parseRecord).list("investigation-593"),
+        await fileJournal(directory, z.string().parse).list(
+          "investigation-593",
+        ),
       ).toHaveLength(2);
       first.kill("SIGKILL");
       await exited;
@@ -290,7 +320,7 @@ describe("the retained investigation case", { timeout: 30_000 }, () => {
       });
       expect((await finished)[0]).toBe(0);
       const fresh = await openCase(
-        fileJournal(directory, parseRecord),
+        fileJournal(directory, z.string().parse),
         "investigation-593",
         fixturePorts(),
       );

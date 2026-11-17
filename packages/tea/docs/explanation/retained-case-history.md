@@ -8,10 +8,10 @@ both the agent Model and a separate review view can be reconstructed.
 
 ## One source, two derived values
 
-The authoritative source is the case's Node file-journal stream. Each versioned
-record contains one validated agent input message. The run ID selects the
-stream; its contiguous sequence numbers order messages. History entry IDs use
-the run ID, source sequence, and event index within that transition.
+The authoritative source is the case's Node file-journal stream. Each record is
+JSON text encoding one versioned, validated agent input message. The run ID
+selects the stream; its contiguous sequence numbers order messages. History entry
+IDs use the run ID, source sequence, and event index within that transition.
 
 The [consumer machine](https://github.com/kamp-us/demlik/blob/main/packages/tea/examples/retained-case/agent.ts) delegates each
 message to the existing pure agent reducer. Its parent state carries the agent
@@ -32,7 +32,7 @@ the host.
 Each save holds the journal's per-stream lock for this sequence:
 
 ```text
-validate message → await journal append → fold view → publish complete view
+validate message → encode JSON text → await journal append → fold view → publish complete view
 ```
 
 The example never publishes `runtime.getState()` or archives from an observer.
@@ -40,7 +40,7 @@ The runtime can install its next Model before saving finishes, so that Model
 alone cannot establish a committed case update.
 
 If the process dies after append but before folding or publishing, the source
-already contains the message. A fresh host validates and folds the entire
+already contains the message. A fresh host decodes, validates and folds the entire
 stream from sequence zero, rebuilding both values without executing replayed
 commands. There is no separately persisted projection cursor that can get ahead
 of its view. Stable source identities reconstruct the same history entries.

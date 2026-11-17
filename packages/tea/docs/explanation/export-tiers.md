@@ -81,9 +81,9 @@ So `fileStore` from `./node` is the `stable` promise; `fileJournal` from the sam
 import is not. Treat it the way you would treat `./agent`: pin an exact version
 and read the changelog before you bump.
 
-The rest of the journal — the in-memory factory, the remote-sync half, the
-conformance suite — is internal in the ordinary way described above: not in the
-export map, so not yours.
+The rest of the journal — the in-memory factory and the conformance suite — is
+internal in the ordinary way described above: not in the export map, so not
+yours.
 
 ## Why not one flat promise
 
