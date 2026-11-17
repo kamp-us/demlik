@@ -6,8 +6,8 @@ import type { LogMessage, Schema } from "../../../runtime-types";
 import {
   copyStorage,
   createStorage,
-  durableStore as memoryEventSourcedStore,
-  durableLog as memoryLog,
+  durableLog,
+  durableStore,
   seedStorage,
   storageBytes,
 } from "../durable-store.fixture";
@@ -58,7 +58,7 @@ test("purity, whole projection replay, and cold cache equals incremental cache a
         async (decoder, every, actions) => {
           const options = optionsFor(decoder, every);
           const disk = createStorage();
-          let live = memoryLog(disk, options);
+          let live = durableLog(disk, options);
           type Msg = Parameters<typeof live.store.appendMessage>[0]["msg"];
           let last: LogMessage<Msg> | undefined;
           let n = 0;
@@ -71,7 +71,7 @@ test("purity, whole projection replay, and cold cache equals incremental cache a
           });
           const verify = () => {
             const current = live.inspect();
-            const cold = memoryLog(copyStorage(disk), options).inspect();
+            const cold = durableLog(copyStorage(disk), options).inspect();
             expect(current.projection).toEqual(cold.projection);
             expect(current.readModel).toEqual(cold.readModel);
           };
@@ -123,7 +123,7 @@ test("purity, whole projection replay, and cold cache equals incremental cache a
               await live.store.checkpoint();
             },
             wake: async () => {
-              live = memoryLog(disk, options);
+              live = durableLog(disk, options);
             },
           } satisfies {
             [K in Action["op"]]: (
@@ -175,10 +175,10 @@ test("purity, whole projection replay, and cold cache equals incremental cache a
           command: schema("command", base.command),
         };
         const disk = createStorage();
-        let live = memoryLog(disk, faultOptions);
+        let live = durableLog(disk, faultOptions);
         const verify = () => {
           const current = live.inspect();
-          const cold = memoryLog(copyStorage(disk), base).inspect();
+          const cold = durableLog(copyStorage(disk), base).inspect();
           expect(current).toEqual(cold);
           return current;
         };
@@ -272,7 +272,7 @@ test("purity, whole projection replay, and cold cache equals incremental cache a
             await attempt(() => live.store.checkpoint());
           },
           wake: async () => {
-            live = memoryLog(disk, faultOptions);
+            live = durableLog(disk, faultOptions);
             verify();
           },
         } satisfies {
@@ -308,7 +308,7 @@ const options = {
   snapshotEvery: 1,
 };
 async function projectionAfter(n: number) {
-  const live = memoryLog(createStorage(), {
+  const live = durableLog(createStorage(), {
     ...options,
     snapshotEvery: Number.MAX_SAFE_INTEGER,
   });
@@ -369,12 +369,12 @@ test("consumed duplicate storage IDs are refused without overwriting, and a fail
     [`${key}/4`, frame(4, message("a"))],
   ]);
   const before = copyStorage(disk);
-  const live = memoryLog(disk, options);
+  const live = durableLog(disk, options);
   await expect(live.store.readLog()).rejects.toThrow("Duplicate log source");
   expect(disk).toEqual(before);
   seedStorage(disk, `${key}/4`, frame(4, message("b")));
   const copied = copyStorage(disk);
-  expect(live.inspect()).toEqual(memoryLog(copied, options).inspect());
+  expect(live.inspect()).toEqual(durableLog(copied, options).inspect());
 });
 
 test("receipt commitment at applied count zero is a valid checkpoint boundary", async () => {
@@ -393,14 +393,14 @@ test("receipt commitment at applied count zero is a valid checkpoint boundary", 
       }),
     ],
   ]);
-  expect((await memoryLog(disk, options).store.readLog()).snapshot).toEqual({
+  expect((await durableLog(disk, options).store.readLog()).snapshot).toEqual({
     through: 2,
     state: { n: 0 },
   });
 });
 
 test("stored original commitments win across requested dispositions at the current version", async () => {
-  const { store } = memoryLog(createStorage(), options);
+  const { store } = durableLog(createStorage(), options);
   await store.commitStep({
     _tag: "birth",
     at: 0,
@@ -446,7 +446,7 @@ test("delivery gaps preserve high-water allocation and invalid stored confirmati
     id,
     effect: { _tag: "work", n: 0 },
   }));
-  const { store } = memoryLog(
+  const { store } = durableLog(
     createStorage([[key, frame(1, { ...birth, owed })]]),
     options,
   );
@@ -473,7 +473,7 @@ test("delivery gaps preserve high-water allocation and invalid stored confirmati
       }),
     ],
   ]);
-  await expect(memoryLog(invalid, options).store.readLog()).rejects.toThrow(
+  await expect(durableLog(invalid, options).store.readLog()).rejects.toThrow(
     "Invalid delivery receipt",
   );
 });
@@ -494,7 +494,7 @@ function throwsOnSecondDecodeOf(expected: {
 
 test("a commit that fails after its write leaves the next read equal to a cold open", async () => {
   const disk = createStorage();
-  const store = memoryEventSourcedStore(disk, {
+  const store = durableStore(disk, {
     ...options,
     snapshotEvery: 1,
     state: throwsOnSecondDecodeOf({ n: 1 }),
@@ -522,7 +522,7 @@ test("a commit that fails after its write leaves the next read equal to a cold o
     }),
   ).rejects.toThrow("State decode failed after the write");
   const live = await store.readLog();
-  const cold = await memoryEventSourcedStore(copyStorage(disk), {
+  const cold = await durableStore(copyStorage(disk), {
     ...options,
     snapshotEvery: 1,
   }).readLog();
@@ -688,7 +688,7 @@ const trapReplacement = <T extends object>(base: T): T =>
   });
 
 test("a repeated commit answers from storage and never reads the replacement", async () => {
-  const store = memoryEventSourcedStore(createStorage(), options);
+  const store = durableStore(createStorage(), options);
   const born = await store.commitStep({
     _tag: "birth",
     at: 0,
@@ -729,7 +729,7 @@ test("a repeated commit answers from storage and never reads the replacement", a
 });
 
 test("a repeated receipt never reads the replacement", async () => {
-  const store = memoryEventSourcedStore(createStorage(), options);
+  const store = durableStore(createStorage(), options);
   await store.commitStep({
     _tag: "birth",
     at: 0,
@@ -755,7 +755,7 @@ test("a repeated receipt never reads the replacement", async () => {
 });
 
 test("a repeated applied commitment never reads the replacement", async () => {
-  const store = memoryEventSourcedStore(createStorage(), options);
+  const store = durableStore(createStorage(), options);
   await store.commitStep({
     _tag: "birth",
     at: 0,
@@ -796,7 +796,7 @@ test("record rules precede a structurally rejected checkpoint", async () => {
       }),
     ],
   ]);
-  await expect(
-    memoryEventSourcedStore(disk, options).readLog(),
-  ).rejects.toThrow("Invalid durable log ordering");
+  await expect(durableStore(disk, options).readLog()).rejects.toThrow(
+    "Invalid durable log ordering",
+  );
 });

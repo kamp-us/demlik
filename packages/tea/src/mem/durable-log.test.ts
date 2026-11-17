@@ -16,7 +16,7 @@ import {
 import {
   copyStorage,
   createStorage,
-  durableStore as memoryEventSourcedStore,
+  durableStore,
   onStorageWrite,
   seedStorage,
   storageBytes,
@@ -40,7 +40,7 @@ const birth = {
 
 test("one atomic Map write stores State, all deliveries and the source receipt; retries return original deliveries", async () => {
   const disk = createStorage();
-  const store = memoryEventSourcedStore(disk, options);
+  const store = durableStore(disk, options);
   await store.commitStep(birth);
   const source = await store.appendMessage(input("one"));
   const before = await store.readLog();
@@ -99,7 +99,7 @@ test("one atomic Map write stores State, all deliveries and the source receipt; 
 
 test("manual and automatic checkpoints share an applied-message baseline and retain queries and receipts", async () => {
   const disk = createStorage();
-  const store = memoryEventSourcedStore(disk, { ...options, snapshotEvery: 3 });
+  const store = durableStore(disk, { ...options, snapshotEvery: 3 });
   await store.commitStep(birth);
   expect(await store.checkpoint()).toBe(false);
   const consume = async (
@@ -158,8 +158,8 @@ test("manual and automatic checkpoints share an applied-message baseline and ret
 
 test("two keyed drivers share a Map while isolating history, dedup, revisions, checkpoints and delivery high-water", async () => {
   const storage = createStorage();
-  const left = memoryEventSourcedStore(storage, { ...options, key: "a/b" });
-  const right = memoryEventSourcedStore(storage, { ...options, key: "a%2Fb" });
+  const left = durableStore(storage, { ...options, key: "a/b" });
+  const right = durableStore(storage, { ...options, key: "a%2Fb" });
   await left.commitStep(birth);
   await right.commitStep(birth);
   const rightBefore = await right.readLog();
@@ -175,7 +175,7 @@ test("two keyed drivers share a Map while isolating history, dedup, revisions, c
   expect(await right.readLog()).toEqual(rightBefore);
   expect((await right.appendMessage(input("same"))).appended).toBe(true);
   expect(
-    await memoryEventSourcedStore(copyStorage(storage), {
+    await durableStore(copyStorage(storage), {
       ...options,
       key: "a/b",
     }).load(),
@@ -196,7 +196,7 @@ test("schema transformations supply canonical admitted messages to the reducer",
     ]),
   };
   const live = await run(machine(), {
-    store: memoryEventSourcedStore(disk, transformed),
+    store: durableStore(disk, transformed),
     interpret: { upload: async () => {} },
   }).ready;
   await live.dispatch({ _tag: "picked", file: " a.png " });
@@ -206,7 +206,7 @@ test("schema transformations supply canonical admitted messages to the reducer",
 
 test("invalid derived checkpoint State falls back to committed records; malformed protocol refuses without mutation", async () => {
   const disk = createStorage();
-  const store = memoryEventSourcedStore(disk, { ...options, snapshotEvery: 1 });
+  const store = durableStore(disk, { ...options, snapshotEvery: 1 });
   const live = await run(machine(), {
     store,
     interpret: { upload: async () => {} },
@@ -223,7 +223,7 @@ test("invalid derived checkpoint State falls back to committed records; malforme
   const raw = JSON.parse(valid);
   raw.snapshot.state = { retired: true };
   seedStorage(disk, key, JSON.stringify(raw));
-  expect(await memoryEventSourcedStore(disk, options).load()).toEqual({
+  expect(await durableStore(disk, options).load()).toEqual({
     files: ["one"],
     uploaded: [],
   });
@@ -238,7 +238,7 @@ test("invalid derived checkpoint State falls back to committed records; malforme
   ]) {
     seedStorage(disk, key, bytes);
     const before = copyStorage(disk);
-    const invalid = memoryEventSourcedStore(disk, options);
+    const invalid = durableStore(disk, options);
     await expect(invalid.readLog()).rejects.toThrow();
     await expect(invalid.commitStep(birth)).rejects.toThrow();
     expect(disk).toEqual(before);
@@ -252,7 +252,7 @@ test.each([
   ["step", "command"],
 ] as const)("schema-normalized %s %s returns decoded State and Cmd", async (phase, changed) => {
   const disk = createStorage();
-  const store = memoryEventSourcedStore(disk, {
+  const store = durableStore(disk, {
     state: z.object({ value: z.string().trim() }),
     message: z.object({ _tag: z.literal("go") }),
     command: z.object({ _tag: z.literal("upload"), value: z.string().trim() }),
@@ -296,7 +296,7 @@ test.each([
     { id: 1, effect: { _tag: "upload", value: "hello" } },
   ]);
   expect(
-    await memoryEventSourcedStore(copyStorage(disk), {
+    await durableStore(copyStorage(disk), {
       state: z.object({ value: z.string().trim() }),
       message: z.object({ _tag: z.literal("go") }),
       command: z.object({
@@ -329,7 +329,7 @@ test("valid delivered payload is identical live and after wake for the same deli
   const handouts: unknown[] = [];
   const interrupted = new Error("drop");
   for (let activation = 0; activation < 2; activation += 1) {
-    const store = memoryEventSourcedStore(
+    const store = durableStore(
       activation === 0 ? disk : copyStorage(disk),
       typed,
     );
@@ -355,7 +355,7 @@ test("valid delivered payload is identical live and after wake for the same deli
 test("appending a fixed-size record validates and writes only that record, independent of retained history", async () => {
   const disk = createStorage();
   const validate = vi.fn((raw: unknown) => options.message.safeParse(raw));
-  const store = memoryEventSourcedStore(disk, {
+  const store = durableStore(disk, {
     ...options,
     message: { safeParse: validate },
   });
@@ -371,7 +371,6 @@ test("appending a fixed-size record validates and writes only that record, indep
   expect(Math.max(...sizes) - Math.min(...sizes)).toBeLessThanOrEqual(2);
   expect(Math.max(...sizes)).toBeLessThan(256);
   expect(
-    (await memoryEventSourcedStore(copyStorage(disk), options).readLog())
-      .records,
+    (await durableStore(copyStorage(disk), options).readLog()).records,
   ).toHaveLength(201);
 });

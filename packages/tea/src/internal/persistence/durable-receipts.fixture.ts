@@ -9,7 +9,7 @@ import {
   copyStorage,
   createStorage,
   type DurableStorage,
-  durableStore as memoryEventSourcedStore,
+  durableStore,
   storageBytes,
 } from "./durable-store.fixture";
 
@@ -78,7 +78,7 @@ export function receiptContract(engine: string, driver: ReceiptDriver): void {
   ] as const)(`${engine}: %s receipt preserves State and the last subscribed value without notifying`, async (kind) => {
     const disk = createStorage();
     const program = programFor();
-    const store = memoryEventSourcedStore(disk, options);
+    const store = durableStore(disk, options);
     const live = await driver(program, store);
     const heard: State[] = [];
     live.subscribe(() => heard.push(live.getState()));
@@ -97,7 +97,7 @@ export function receiptContract(engine: string, driver: ReceiptDriver): void {
     expect(result.owed).toEqual([]);
     const wake = await driver(
       program,
-      memoryEventSourcedStore(copyStorage(disk), options),
+      durableStore(copyStorage(disk), options),
     );
     expect(wake.getState()).toEqual(stable);
     expect(wake.getState()).toEqual(heard.at(-1));
@@ -109,10 +109,7 @@ export function receiptContract(engine: string, driver: ReceiptDriver): void {
     "reject",
   ] as const)(`${engine}: %s receipt bytes contain no State, deliveries or timers`, async (kind) => {
     const disk = createStorage();
-    const live = await driver(
-      programFor(),
-      memoryEventSourcedStore(disk, options),
-    );
+    const live = await driver(programFor(), durableStore(disk, options));
     await sendReceipt(live, kind);
     const saved = records(disk).find(({ record }) => record.sourceId);
     expect(saved).toBeDefined();
@@ -125,7 +122,7 @@ export function receiptContract(engine: string, driver: ReceiptDriver): void {
     "automatic",
   ] as const)(`${engine}: %s checkpoint copies stored State across a trailing ignored receipt`, async (kind) => {
     const disk = createStorage();
-    const store = memoryEventSourcedStore(disk, {
+    const store = durableStore(disk, {
       ...options,
       snapshotEvery: kind === "automatic" ? 2 : 100,
     });
@@ -135,9 +132,7 @@ export function receiptContract(engine: string, driver: ReceiptDriver): void {
     const stable = live.getState();
     await sendReceipt(live, "ignore");
     if (kind === "manual")
-      expect(await memoryEventSourcedStore(disk, options).checkpoint()).toBe(
-        true,
-      );
+      expect(await durableStore(disk, options).checkpoint()).toBe(true);
     const frames = records(disk);
     const lastAppliedMessage = frames
       .filter(
@@ -155,7 +150,7 @@ export function receiptContract(engine: string, driver: ReceiptDriver): void {
     expect(checkpoint.state).toEqual(applied.record.state);
     const wake = await driver(
       program,
-      memoryEventSourcedStore(copyStorage(disk), options),
+      durableStore(copyStorage(disk), options),
     );
     expect(wake.getState()).toEqual(stable);
     expect(wake.getState()).toEqual({ n: 9 });
@@ -166,7 +161,7 @@ export function receiptContract(engine: string, driver: ReceiptDriver): void {
     const disk = createStorage();
     const visits = { ignored: 0, rejected: 0 };
     const program = programFor(visits);
-    const store = memoryEventSourcedStore(disk, options);
+    const store = durableStore(disk, options);
     const live = await driver(program, store);
     const stable = live.getState();
     await sendReceipt(live, "ignore");
@@ -176,7 +171,7 @@ export function receiptContract(engine: string, driver: ReceiptDriver): void {
     if (input?.record._tag !== "message")
       throw new Error("Missing ignored admission");
     const copied = copyStorage(disk);
-    const fresh = memoryEventSourcedStore(copied, options);
+    const fresh = durableStore(copied, options);
     const before = copyStorage(copied);
     const duplicate = await fresh.appendMessage(input.record);
     expect(duplicate.appended).toBe(false);
