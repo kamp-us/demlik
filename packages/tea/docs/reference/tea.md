@@ -147,7 +147,7 @@ import { … } from "@demlik/tea";
 | [`OnError`](#OnError) | Type | stable | Sink for runtime failures that have no caller to reject at. |
 | [`Outcome`](#Outcome) | Type | stable | The result a `Cmd.define`d handler returns: its value, or a declared failure. |
 | [`Outcome`](#Outcome) | Variable | stable | Build an Outcome outside a handler's helpers — in a test that calls a handler directly, or in an adapter converting another result type. |
-| [`OutcomeContractError`](#OutcomeContractError) | Class | stable | A `Cmd.define`d handler returned something the engine cannot settle: any Msg (the engine mints the Cmd's `<name>_ok` / `<name>_err`, never the handler — ADR 0021), or any other value that is neither an Outcome nor nothing. |
+| [`OutcomeContractError`](#OutcomeContractError) | Class | stable | A `Cmd.define`d handler returned something the engine cannot settle: any Msg (the engine mints the Cmd's `<name>_ok` / `<name>_err`, never the handler — ADR 0021), or any other value that is neither an Outcome, the owed marker, nor nothing. |
 | [`OutcomeHelpers`](#OutcomeHelpers) | Interface | stable | The two builders the Promise engine hands a `Cmd.define`d handler on its ctx: `ok(value)` and `err({ _tag })`, with `err` typed to the def's declared tags. |
 | [`owed`](#owed) | Function | stable | End this logged invocation without a Msg or automatic delivery confirmation. |
 | [`Owed`](#Owed) | Type | stable | A logged Cmd handed to an external owner without completing its delivery. |

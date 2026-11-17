@@ -345,7 +345,8 @@ function describeTag(failure: unknown): string {
 /**
  * A `Cmd.define`d handler returned something the engine cannot settle: any Msg
  * (the engine mints the Cmd's `<name>_ok` / `<name>_err`, never the handler —
- * ADR 0021), or any other value that is neither an {@link Outcome} nor nothing.
+ * ADR 0021), or any other value that is neither an {@link Outcome}, the
+ * {@link owed} marker, nor nothing.
  * Also thrown when such a handler dispatches its own `_ok` / `_err` Msg.
  */
 export class OutcomeContractError extends Error {
