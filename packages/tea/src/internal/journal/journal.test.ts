@@ -68,6 +68,7 @@ const broken = {
   acknowledgesUnstored: "K3",
   rewritesWholeLog: "K5",
   losesOnReopen: "K4",
+  misreportsBatchAcknowledgement: "K4",
   reordersRead: "K1",
   ignoresAfter: "K2",
   slicesFromEnd: "K2",
@@ -138,6 +139,15 @@ const mutations = {
       return result._tag === "read" && opens() > 1 && result.head > 32
         ? { _tag: "read", head: 0, entries: [] }
         : result;
+    },
+  }),
+  misreportsBatchAcknowledgement: ({ journal }) => ({
+    ...journal,
+    async append(stream, records) {
+      const ack = await journal.append(stream, records);
+      return ack._tag === "appended" && stream === "s" && records.length > 3
+        ? { ...ack, head: ack.head + 1 }
+        : ack;
     },
   }),
   reordersRead: ({ journal, batches }) => ({

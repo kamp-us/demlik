@@ -189,7 +189,12 @@ async function allOrNone({ make }: KitContext): Promise<KitResult> {
 }
 async function reopen({ open, records }: KitContext): Promise<KitResult> {
   let journal = await open();
-  appended(await journal.append("s", batch(records)));
+  const ack = appended(await journal.append("s", batch(records)));
+  expect(ack).toEqual({
+    _tag: "appended",
+    head: records,
+    entries: entries(records),
+  });
   const before = read(await journal.read("s", 0));
   expect(before).toEqual({
     _tag: "read",
