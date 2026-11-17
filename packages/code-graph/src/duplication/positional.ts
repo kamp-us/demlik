@@ -24,8 +24,16 @@ function optionsKey(property: SyntaxNode): string | null {
     return null;
   const key = nodeField(property, "key");
   const name =
-    key?.type === "Identifier" ? field(key, "name") : key === null ? null : field(key, "value");
+    key?.type === "Identifier"
+      ? field(key, "name")
+      : key === null
+        ? null
+        : (field(key, "bigint") ?? field(key, "value"));
   return typeof name === "string" || typeof name === "number" ? String(name) : null;
+}
+
+function byCodeUnit(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
 }
 
 function optionsShape(argument: SyntaxNode, index: number) {
@@ -41,14 +49,15 @@ function optionsShape(argument: SyntaxNode, index: number) {
     const name = value === null ? null : referenceName(value);
     if (name !== null) references.push({ slot: `${index}.${key}`, name });
   }
-  references.sort((a, b) => String(a.slot).localeCompare(String(b.slot)));
-  return { keys: keys.sort(), references };
+  references.sort((a, b) => byCodeUnit(String(a.slot), String(b.slot)));
+  return { keys: keys.sort(byCodeUnit), references };
 }
 
 export function callShape(call: SyntaxNode): CallShape | null {
   const references: CallShape["references"] = [];
   const objects: [number, string[]][] = [];
   const args = argumentsOf(call);
+  if (args.some((argument) => argument.type === "SpreadElement")) return null;
   for (const [index, wrapped] of args.entries()) {
     const argument = unwrap(wrapped);
     const name = referenceName(argument);

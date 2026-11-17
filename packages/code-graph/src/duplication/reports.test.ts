@@ -413,6 +413,7 @@ describe("positional data clumps", () => {
     ["a numeric options key", (t: number) => `{ 0: o${t} }`],
     ["the same key as a string", (t: number) => `{ "0": o${t} }`],
     ["a wrapped options object", (t: number) => `({ 0: o${t} } satisfies Opts)`],
+    ["the same key as a bigint", (t: number) => `{ 0n: o${t} }`],
   ])("groups nine sites by slot for %s", (_name, options) => {
     const source = Array.from(
       { length: 9 },
@@ -438,6 +439,14 @@ describe("positional data clumps", () => {
       ["outage", "failure", "fallback"]
         .flatMap((key, i) =>
           Array.from({ length: 3 }, () => `run(a${i}, b${i}, c${i}, ({ ${key}: d${i} } as Opts));`),
+        )
+        .join("\n"),
+    ],
+    [
+      "calls whose spread arguments move the reference slots",
+      ["...[10, 20], ", "...rest, ", "...[], "]
+        .flatMap((prefix, i) =>
+          Array.from({ length: 3 }, (_, j) => `run(${prefix}a${i}${j}, b${i}${j}, c${i}${j});`),
         )
         .join("\n"),
     ],
