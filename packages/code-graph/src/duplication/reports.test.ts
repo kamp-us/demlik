@@ -10,7 +10,9 @@ import { CLONE_FILES, CLUMP_FILES, POSITIONAL_CALLS } from "./acceptance.fixture
 import { siteOf } from "./scan.js";
 import { argumentValues } from "./values.js";
 
-const CLI = fileURLToPath(new URL("../index.ts", import.meta.url));
+const here = path.dirname(fileURLToPath(import.meta.url));
+const PACKAGE_DIR = path.resolve(here, "..", "..");
+const CLI = path.join(PACKAGE_DIR, "src", "index.ts");
 const roots: string[] = [];
 
 function fixture(files: Readonly<Record<string, string>>): string {
@@ -25,6 +27,7 @@ function fixture(files: Readonly<Record<string, string>>): string {
 
 function run(root: string, ...flags: string[]) {
   return spawnSync(process.execPath, ["--import", "tsx", CLI, root, ...flags], {
+    cwd: PACKAGE_DIR,
     encoding: "utf8",
     timeout: 20_000,
     maxBuffer: 4 * 1024 * 1024,
