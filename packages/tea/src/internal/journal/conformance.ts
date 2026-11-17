@@ -249,9 +249,29 @@ async function flatCost({ make, now }: KitContext): Promise<KitResult> {
 }
 async function streams({ open }: KitContext): Promise<KitResult> {
   const journal = await open();
-  appended(await journal.append("b", [record(1)]));
-  const before = await journal.read("b", 0);
-  appended(await journal.append("a", batch(3, 2)));
+  expect(appended(await journal.append("b", [record(1)]))).toEqual({
+    _tag: "appended",
+    head: 1,
+    entries: [{ seq: 1, record: record(1) }],
+  });
+  const before = read(await journal.read("b", 0));
+  expect(before).toEqual({
+    _tag: "read",
+    head: 1,
+    entries: [{ seq: 1, record: record(1) }],
+  });
+  const records = batch(3, 2);
+  const expected = records.map((record, i) => ({ seq: i + 1, record }));
+  expect(appended(await journal.append("a", records))).toEqual({
+    _tag: "appended",
+    head: 3,
+    entries: expected,
+  });
+  expect(read(await journal.read("a", 0))).toEqual({
+    _tag: "read",
+    head: 3,
+    entries: expected,
+  });
   expect(await journal.read("b", 0)).toEqual(before);
   await close(journal);
   return passed("K6");

@@ -74,6 +74,7 @@ const broken = {
   ignoresAfter: "K2",
   slicesFromEnd: "K2",
   crossesStreams: "K6",
+  dropsIsolatedStream: "K6",
   acceptsStaleExpected: "K7",
   returnsTornTail: "K8",
   truncatesOnRead: "K8",
@@ -191,6 +192,13 @@ const mutations = {
     ...journal,
     append: (stream, records) =>
       journal.append(stream === "a" ? "b" : stream, records),
+  }),
+  dropsIsolatedStream: ({ journal }) => ({
+    ...journal,
+    append: (stream, records) =>
+      stream === "a"
+        ? acknowledgeUnstored(journal, stream, records)
+        : journal.append(stream, records),
   }),
   acceptsStaleExpected: ({ journal }) => ({
     ...journal,
