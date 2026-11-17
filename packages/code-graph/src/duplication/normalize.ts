@@ -15,6 +15,7 @@ const readIdentifier: SemanticReader = (node, key, settings) =>
 const SEMANTIC_READERS: ReadonlyMap<string, SemanticReader> = new Map([
   ["Identifier", readIdentifier],
   ["JSXIdentifier", readIdentifier],
+  ["PrivateIdentifier", readIdentifier],
   [
     "Literal",
     (node, key, settings) =>

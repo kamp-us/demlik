@@ -18,8 +18,15 @@ const WRAPPERS = new Set([
   "ChainExpression",
 ]);
 
+const REFERENCE_READERS: ReadonlyMap<string, (node: SyntaxNode) => string> = new Map([
+  ["Identifier", (node) => String(field(node, "name"))],
+  ["ThisExpression", () => "this"],
+  ["Super", () => "super"],
+]);
+
 export function referenceName(node: SyntaxNode): string | null {
-  if (node.type === "Identifier") return String(field(node, "name"));
+  const read = REFERENCE_READERS.get(node.type);
+  if (read !== undefined) return read(node);
   if (WRAPPERS.has(node.type)) {
     const expression = nodeField(node, "expression");
     return expression === null ? null : referenceName(expression);

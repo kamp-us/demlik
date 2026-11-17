@@ -57,6 +57,36 @@ describe("expression clone reports", () => {
     });
   });
 
+  it("ignores private identifiers only when configured", () => {
+    const files: Record<string, string> = {
+      "settings.json": JSON.stringify({ cloneIgnoreIdentifiers: true }),
+    };
+    for (const name of ["a", "b", "c"]) {
+      files[`${name}.ts`] = [
+        "export class Sample {",
+        `#${name};`,
+        `read() { return { kind: "Item", text: this.#${name}, list: this.#${name} }; }`,
+        "}",
+      ].join("\n");
+    }
+    const root = fixture(files);
+    expect(report(root, "--clones").clones).toEqual([]);
+    const result = report(
+      root,
+      "--clones",
+      "--duplication-config",
+      path.join(root, "settings.json"),
+    );
+    expect(result.parseFailures).toEqual([]);
+    expect(result.clones).toMatchObject([
+      {
+        nodeCount: 14,
+        fileCount: 3,
+        sites: [{ file: "a.ts" }, { file: "b.ts" }, { file: "c.ts" }],
+      },
+    ]);
+  });
+
   it("ignores JSX identifiers only when configured", () => {
     const root = fixture({
       "a.tsx": "export const first = <Alpha one={x} two={y} three={z} />;",
@@ -244,6 +274,44 @@ describe("duplication report boundaries", () => {
 });
 
 describe("data clump reports", () => {
+  it("reports this and super callees and their static member argument values", () => {
+    const root = fixture({
+      "calls.ts": [
+        "class Sample extends Base { check() {",
+        'this.run("A", "A");',
+        'super.run("B", "B");',
+        "run(this.a, this.a);",
+        "run(super.a, super.a);",
+        ...Array.from({ length: 3 }, () => "this.run(this.a, this.b, this.c);"),
+        ...Array.from({ length: 3 }, () => "super.run(super.a, super.b, super.c);"),
+        "} }",
+      ].join("\n"),
+    });
+    const result = report(root, "--clumps");
+    expect(result.parseFailures).toEqual([]);
+    expect(result.clumps).toHaveLength(2);
+    expect(result.clumps).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          callee: "this.run",
+          values: ["this.a", "this.b", "this.c"],
+          siteCount: 3,
+        }),
+        expect.objectContaining({
+          callee: "super.run",
+          values: ["super.a", "super.b", "super.c"],
+          siteCount: 3,
+        }),
+      ]),
+    );
+    expect(result.repeatedArguments).toMatchObject([
+      { callee: "this.run", value: '"A"', arguments: [{ index: 0 }, { index: 1 }] },
+      { callee: "super.run", value: '"B"', arguments: [{ index: 0 }, { index: 1 }] },
+      { callee: "run", value: "this.a", arguments: [{ index: 0 }, { index: 1 }] },
+      { callee: "run", value: "super.a", arguments: [{ index: 0 }, { index: 1 }] },
+    ]);
+  });
+
   it("finds three named values travelling together, including an object property value", () => {
     const result = report(fixture(CLUMP_FILES), "--clumps");
     expect(result.clumps).toHaveLength(1);
