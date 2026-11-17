@@ -1,0 +1,277 @@
+/** Pure decisions describe writes; responses use the decoded acknowledgement. */
+import type { DeliveryId } from "../../../pure/core";
+import type {
+  LogAppend,
+  LogCommit,
+  LogConfirmation,
+  LogMessage,
+  LogRecord,
+  LogStep,
+  PersistedLogRecord,
+} from "../../../runtime-types";
+import { pendingEffectsLedger } from "./durable-effects";
+import type { Admission, Birth, Projection, SourceCommit } from "./projection";
+import type { LogRefusal } from "./refusals";
+
+export type Operation<S, M, C> =
+  | {
+      readonly _tag: "append_message";
+      readonly message: LogMessage<M>;
+      readonly stored: Admission<M> | null;
+    }
+  | (Extract<LogStep<S, M, C>, { _tag: "birth" }> & {
+      readonly committed: Birth<S, M, C> | null;
+    })
+  | (Extract<LogStep<S, M, C>, { _tag: "applied" | "receipt" }> & {
+      readonly committed: SourceCommit<S, M, C> | null;
+    })
+  | { readonly _tag: "confirm_effect"; readonly id: DeliveryId }
+  | { readonly _tag: "checkpoint" };
+export type Write<S, M, C> =
+  | {
+      readonly _tag: "append_record";
+      readonly record: LogRecord<S, M, C>;
+      readonly checkpointThrough: number | null;
+    }
+  | {
+      readonly _tag: "write_checkpoint";
+      readonly through: number;
+      readonly storedState: unknown;
+    };
+export type Verb<S, M, C> =
+  | readonly [Projection<S, M, C>, readonly Write<S, M, C>[]]
+  | LogRefusal;
+export type Policy = { readonly snapshotEvery: number };
+
+type Replies<S, M, C> = {
+  readonly append_message: LogAppend<M>;
+  readonly birth: LogCommit<S, C>;
+  readonly applied: LogCommit<S, C>;
+  readonly receipt: LogCommit<S, C>;
+  readonly confirm_effect: LogConfirmation;
+  readonly checkpoint: boolean;
+};
+type Tag = Operation<unknown, unknown, unknown>["_tag"];
+type Table<S, M, C> = {
+  [K in Tag]: {
+    readonly decide: (
+      p: Projection<S, M, C>,
+      op: Extract<Operation<S, M, C>, { _tag: K }>,
+      policy: Policy,
+    ) => Verb<S, M, C>;
+    readonly response: (
+      p: Projection<S, M, C>,
+      op: Extract<Operation<S, M, C>, { _tag: K }>,
+      stored: PersistedLogRecord<LogRecord<S, M, C>> | null,
+      writes: readonly Write<S, M, C>[],
+    ) => Replies<S, M, C>[K] | LogRefusal;
+  };
+};
+
+function committed<S, M, C>(
+  record: LogRecord<S, M, C> | null,
+  p: Projection<S, M, C>,
+  version: number,
+): LogCommit<S, C> | LogRefusal {
+  if (record === null) return { _tag: "invalid_committed_record" };
+  const withState = (
+    r: Birth<S, M, C> | Extract<LogRecord<S, M, C>, { _tag: "applied" }>,
+  ): LogCommit<S, C> => ({
+    version,
+    state: r.state,
+    owed: r.owed.map(({ id, effect }) => ({ id, effect })),
+  });
+  const invalid = (): LogRefusal => ({ _tag: "invalid_committed_record" });
+  const readers = {
+    birth: withState,
+    applied: withState,
+    receipt: (): LogCommit<S, C> => ({
+      version,
+      state: p.state as S,
+      owed: [],
+    }),
+    message: invalid,
+    confirmed: invalid,
+  } satisfies {
+    [K in LogRecord<S, M, C>["_tag"]]: (
+      r: Extract<LogRecord<S, M, C>, { _tag: K }>,
+    ) => LogCommit<S, C> | LogRefusal;
+  };
+  return readers[record._tag](record as never);
+}
+
+function cases<S, M, C>(): Table<S, M, C> {
+  const owe = (p: Projection<S, M, C>, cmds: readonly C[]) => {
+    const recorder = pendingEffectsLedger<C>({ lastId: p.high });
+    return cmds.map((cmd) => recorder.owe(cmd).event);
+  };
+  const source = (p: Projection<S, M, C>, sourceId: string) =>
+    p.pending[0]?.record.id === sourceId ? p.pending[0] : null;
+  const commitment = (
+    p: Projection<S, M, C>,
+    op: { readonly committed: Birth<S, M, C> | SourceCommit<S, M, C> | null },
+    stored: PersistedLogRecord<LogRecord<S, M, C>> | null,
+  ) =>
+    committed(
+      op.committed ?? stored?.record ?? null,
+      p,
+      stored?.seq ?? p.version,
+    );
+  const operationCases = {
+    append_message: {
+      decide: (p, op) => {
+        if (!p.birth) return { _tag: "admission_before_birth" };
+        return [
+          p,
+          op.stored === null
+            ? [
+                {
+                  _tag: "append_record",
+                  record: op.message,
+                  checkpointThrough: null,
+                },
+              ]
+            : [],
+        ];
+      },
+      response: (p, op, stored) => {
+        if (op.stored !== null)
+          return { version: p.version, appended: false, entry: op.stored };
+        if (stored?.record._tag !== "message")
+          return { _tag: "invalid_committed_record" };
+        return {
+          version: stored.seq,
+          appended: true,
+          entry: { seq: stored.seq, record: stored.record },
+        };
+      },
+    },
+    birth: {
+      decide: (p, op) => {
+        if (op.committed !== null) return [p, []];
+        if (p.version !== 0) return { _tag: "birth_on_nonempty_log" };
+        return [
+          p,
+          [
+            {
+              _tag: "append_record",
+              record: {
+                _tag: "birth",
+                at: op.at,
+                state: op.state,
+                owed: owe(p, op.cmds),
+                timers: op.timers,
+              },
+              checkpointThrough: null,
+            },
+          ],
+        ];
+      },
+      response: commitment,
+    },
+    applied: {
+      decide: (p, op, policy) => {
+        if (op.committed !== null) return [p, []];
+        const admission = source(p, op.sourceId);
+        if (admission === null) return { _tag: "not_first_pending_source" };
+        return [
+          p,
+          [
+            {
+              _tag: "append_record",
+              record: {
+                _tag: "applied",
+                sourceId: op.sourceId,
+                state: op.state,
+                owed: owe(p, op.cmds),
+                timers: op.timers,
+              },
+              checkpointThrough:
+                p.applied + 1 - p.baseline >= policy.snapshotEvery
+                  ? admission.seq
+                  : null,
+            },
+          ],
+        ];
+      },
+      response: commitment,
+    },
+    receipt: {
+      decide: (p, op) => {
+        if (op.committed !== null) return [p, []];
+        if (source(p, op.sourceId) === null)
+          return { _tag: "not_first_pending_source" };
+        return [
+          p,
+          [
+            {
+              _tag: "append_record",
+              record: {
+                _tag: "receipt",
+                sourceId: op.sourceId,
+                disposition: op.disposition,
+                ...(op.failure ? { failure: op.failure } : {}),
+              },
+              checkpointThrough: null,
+            },
+          ],
+        ];
+      },
+      response: commitment,
+    },
+    confirm_effect: {
+      decide: (p, op) => [
+        p,
+        p.owed.some(({ id }) => id === op.id)
+          ? [
+              {
+                _tag: "append_record",
+                record: {
+                  _tag: "confirmed",
+                  event: { _tag: "effect_confirmed", id: op.id },
+                },
+                checkpointThrough: null,
+              },
+            ]
+          : [],
+      ],
+      response: (p, _op, stored) => ({
+        version: stored?.seq ?? p.version,
+        confirmed: stored !== null,
+      }),
+    },
+    checkpoint: {
+      decide: (p) => [
+        p,
+        p.applied === p.baseline || !p.birth
+          ? []
+          : [
+              {
+                _tag: "write_checkpoint",
+                through: p.through,
+                storedState: p.storedState,
+              },
+            ],
+      ],
+      response: (_p, _op, _stored, writes) => writes.length !== 0,
+    },
+  } satisfies Table<S, M, C> satisfies Record<Tag, Table<S, M, C>[Tag]>;
+  return operationCases;
+}
+
+export function decide<S, M, C>(
+  p: Projection<S, M, C>,
+  op: Operation<S, M, C>,
+  policy: Policy,
+): Verb<S, M, C> {
+  return cases<S, M, C>()[op._tag].decide(p, op as never, policy);
+}
+
+export function response<S, M, C, K extends Tag>(
+  p: Projection<S, M, C>,
+  op: Operation<S, M, C> & { readonly _tag: K },
+  stored: PersistedLogRecord<LogRecord<S, M, C>> | null,
+  writes: readonly Write<S, M, C>[],
+): Replies<S, M, C>[K] | LogRefusal {
+  return cases<S, M, C>()[op._tag].response(p, op as never, stored, writes);
+}
