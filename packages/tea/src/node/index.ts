@@ -397,7 +397,9 @@ export function fileJournal(
     async read(stream, after) {
       try {
         const { rows } = refresh(stream);
-        return { _tag: "read", head: rows.length, entries: rows.slice(after) };
+        const start =
+          after < rows.length ? Math.max(0, Math.floor(after)) : rows.length;
+        return { _tag: "read", head: rows.length, entries: rows.slice(start) };
       } catch (error) {
         return refusal(error, "read");
       }

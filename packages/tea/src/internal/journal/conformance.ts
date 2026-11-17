@@ -110,6 +110,32 @@ async function readFrom({ open, records }: KitContext): Promise<KitResult> {
       entries: entries(records, after),
     });
   }
+  const stream = "positions";
+  appended(await journal.append(stream, ['"a"', '"b"', '"c"']));
+  expect(
+    read(await journal.read(stream, -1)).entries.map((entry) => entry.seq),
+  ).toEqual([1, 2, 3]);
+  expect(
+    read(await journal.read(stream, 1.5)).entries.map((entry) => entry.seq),
+  ).toEqual([2, 3]);
+  const beyond = await journal.read(stream, 8);
+  expect(beyond).toMatchObject({ _tag: "read", head: 3, entries: [] });
+  for (const after of [
+    Number.NEGATIVE_INFINITY,
+    -0.5,
+    0,
+    2.5,
+    Number.POSITIVE_INFINITY,
+    Number.NaN,
+  ]) {
+    expect(read(await journal.read(stream, after))).toEqual({
+      _tag: "read",
+      head: 3,
+      entries: ['"a"', '"b"', '"c"']
+        .map((record, i) => ({ seq: i + 1, record }))
+        .filter((entry) => entry.seq > after),
+    });
+  }
   await close(journal);
   return passed("K2");
 }

@@ -131,8 +131,8 @@ the cheaper fix).
 is whole-load / whole-save of one state value; a `Journal`
 (`src/internal/journal/`) stores encoded JSON text in order. `append` takes
 one nonempty atomic batch and acknowledges its exact text and assigned positions;
-`read(stream, after)` returns entries strictly after that position. Drivers know
-no log schema or rule. Refusals are tagged data; an uncertain append requires
+`read(stream, after)` returns every stored entry whose `seq` is greater than `after`, in order, for ANY number; it never refuses a position.
+Drivers know no log schema or rule. Refusals are tagged data; an uncertain append requires
 reopening and reading before deciding how to recover.
 
 `fileJournal(dir)` (`./node`, beside `fileStore`) is the one journal factory

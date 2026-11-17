@@ -30,8 +30,9 @@ export type JournalAppend = {
 
 /**
  * Ordered storage of opaque text. One active writer per stream is required.
- * An append stores the entire nonempty batch or none of it. A read is strictly
- * after its exclusive position. After an uncertain append, reopen and read;
+ * An append stores the entire nonempty batch or none of it.
+ * `read(stream, after)` returns every stored entry whose `seq` is greater than `after`, in order, for ANY number; it never refuses a position.
+ * After an uncertain append, reopen and read;
  * the refusal does not authorize blindly retrying the batch.
  */
 export interface Journal {

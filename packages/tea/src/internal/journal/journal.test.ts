@@ -69,6 +69,7 @@ const broken = {
   losesOnReopen: "K4",
   reordersRead: "K1",
   ignoresAfter: "K2",
+  slicesFromEnd: "K2",
   crossesStreams: "K6",
   acceptsStaleExpected: "K7",
   returnsTornTail: "K8",
@@ -134,6 +135,15 @@ const mutations = {
   ignoresAfter: ({ journal }) => ({
     ...journal,
     read: (stream) => journal.read(stream, 0),
+  }),
+  slicesFromEnd: ({ journal }) => ({
+    ...journal,
+    async read(stream, after) {
+      const result = await journal.read(stream, 0);
+      return result._tag === "read"
+        ? { ...result, entries: result.entries.slice(after) }
+        : result;
+    },
   }),
   crossesStreams: ({ journal }) => ({
     ...journal,
