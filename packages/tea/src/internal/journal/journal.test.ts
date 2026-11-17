@@ -1,4 +1,4 @@
-import { expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   describeJournalConformance,
   type JournalKitFactory,
@@ -372,22 +372,29 @@ async function brokenFixture(name: Broken, clock: { ticks: number }) {
   };
 }
 
-it.each(Object.entries(broken) as [Broken, KitCase][])(
-  "%s is detected by %s",
-  async (name, expected) => {
-    const clock = { ticks: 0 };
-    const results = await journalConformance(() => brokenFixture(name, clock), {
-      records: 64,
-      now: () => clock.ticks,
-      repeats: 1,
+describe(
+  "every broken driver is caught by its named case",
+  { timeout: 120_000 },
+  () => {
+    it.each(
+      Object.entries(broken) as [Broken, KitCase][],
+    )("%s is detected by %s", async (name, expected) => {
+      const clock = { ticks: 0 };
+      const results = await journalConformance(
+        () => brokenFixture(name, clock),
+        {
+          records: 64,
+          now: () => clock.ticks,
+          repeats: 1,
+        },
+      );
+      const failed = results
+        .filter((result) => result.status === "failed")
+        .map((result) => result.id);
+      console.info(JSON.stringify({ broken: name, expected, failed }));
+      expect(failed).toContain(expected);
     });
-    const failed = results
-      .filter((result) => result.status === "failed")
-      .map((result) => result.id);
-    console.info(JSON.stringify({ broken: name, expected, failed }));
-    expect(failed).toContain(expected);
   },
-  120_000,
 );
 
 it("refuses a racing expected head on shared memory storage", async () => {

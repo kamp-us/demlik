@@ -11,7 +11,7 @@ export type JournalEntry = {
 export type JournalRefusal =
   | {
       readonly _tag: "journal_io";
-      readonly operation: "read" | "append" | "close";
+      readonly operation: "read" | "append";
       readonly message: string;
       readonly uncertain: boolean;
     }
@@ -45,7 +45,7 @@ export interface Journal {
     stream: string,
     records: readonly [EncodedRecord, ...EncodedRecord[]],
   ): Promise<JournalAppend | JournalRefusal>;
-  close(): Promise<void | JournalRefusal>;
+  close(): Promise<void>;
 }
 /** Methods beside the base methods, matching FencedStore's widening pattern. */
 export interface FencedJournal extends Journal {
