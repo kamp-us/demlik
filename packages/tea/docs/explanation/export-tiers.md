@@ -66,10 +66,10 @@ that happens by drift.
   can only reach something by a deep path into files, that is the library telling
   you it is not yours.
 
-## The one symbol whose tier is not its subpath's
+## When a symbol's tier differs from its subpath's
 
 `fileJournal` is exported from `./node`, beside `fileStore`, and it is the
-exception to reading the tier off the subpath. `./node` is stamped `stable`;
+one exception to reading the tier off the subpath. `./node` is stamped `stable`;
 `fileJournal` is not. It carries the **journal's own `experimental` promise** —
 it may change or disappear in any release — because its tier travels with the
 journal feature rather than with the host adapter it happens to be published
@@ -81,9 +81,10 @@ So `fileStore` from `./node` is the `stable` promise; `fileJournal` from the sam
 import is not. Treat it the way you would treat `./agent`: pin an exact version
 and read the changelog before you bump.
 
-The rest of the journal — the in-memory factory and the conformance suite — is
-internal in the ordinary way described above: not in the export map, so not
-yours.
+`eventSourcedStore` and the journal types on `./persistence`, `memoryJournal`
+on `./mem`, and `journalConformance` with its fixture, result and option types
+on `./pbt` also carry `@experimental`. The conformance runner uses `fast-check`;
+its Vitest wrapper `describeJournalConformance` stays internal.
 
 ## Why not one flat promise
 
