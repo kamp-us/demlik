@@ -96,3 +96,11 @@ export function parseRecord(raw: unknown): CaseRecord {
   z.json().parse(raw);
   return recordSchema.parse(raw);
 }
+
+export function encodeRecord(record: CaseRecord): string {
+  return JSON.stringify(record);
+}
+
+export function decodeRecord(text: string): CaseRecord {
+  return parseRecord(JSON.parse(text));
+}

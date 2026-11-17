@@ -9,12 +9,14 @@ import { run } from "@demlik/tea/promise";
 import { investigation, type Ports, reason } from "./agent";
 import {
   type CaseRecord,
+  decodeRecord,
   type Evidence,
+  encodeRecord,
   parseRecord,
   runIdSchema,
 } from "./source";
 
-export type CaseJournal = ReturnType<typeof fileJournal<CaseRecord>>;
+export type CaseJournal = ReturnType<typeof fileJournal<string>>;
 type Wiring = ReturnType<typeof investigation>;
 type Model = ReturnType<Wiring["agent"]["init"]>;
 type State = ReturnType<Wiring["machine"]["init"]>[0];
@@ -239,7 +241,7 @@ export async function openCase(
         for (const entry of await journal.list(runId)) {
           if (entry.stream !== runId)
             throw new Error("case source has a foreign stream");
-          const record = parseRecord(entry.record);
+          const record = decodeRecord(entry.record);
           validate(record, committed);
           const [next] = applyCell(
             wired.machine,
@@ -279,7 +281,7 @@ export async function openCase(
           }
           const record = parseRecord({ version: 1, msg: next.msg });
           validate(record, previous);
-          const { seq } = await journal.append(runId, record);
+          const { seq } = await journal.append(runId, encodeRecord(record));
           const committed = fold(previous, record, seq, next.agent);
           state = { kind: "ready", committed };
           for (const client of clients)

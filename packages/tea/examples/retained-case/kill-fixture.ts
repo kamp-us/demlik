@@ -1,12 +1,12 @@
 import { fileJournal } from "@demlik/tea/node";
+import { z } from "zod";
 import { committedView, fixturePorts, verifyCase } from "./fixture";
 import { type CaseHost, type CaseJournal, openCase } from "./host";
-import { parseRecord } from "./source";
 
 const [directory, mode] = process.argv.slice(2);
 if (!directory || (mode !== "crash" && mode !== "resume"))
   throw new Error("expected directory and crash|resume");
-const backing = fileJournal(directory, parseRecord);
+const backing = fileJournal(directory, z.string().parse);
 let host: CaseHost | undefined;
 const journal: CaseJournal = {
   ...backing,
