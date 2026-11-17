@@ -20,7 +20,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { defineMachine, type Reducer, StoreConflictError } from "../index";
 import { run } from "../promise";
 import { FileLockTimeoutError, withFileLock } from "./file-lock";
-import { fileJournal, fileStore } from "./index";
+import { fileStore } from "./index";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DEAD_PID = 2147483647;
@@ -45,8 +45,6 @@ const fromAnotherHost = (): string =>
 
 type Notes = { readonly notes: readonly string[] };
 const parseNotes = (raw: unknown): Notes => raw as Notes;
-const parseRecord = (raw: unknown): { readonly tag: string } =>
-  raw as { readonly tag: string };
 
 const update: Reducer<Notes, { _tag: "note" }, never> = {
   note: (state) => [{ notes: [...state.notes, "note"] }, []],
@@ -77,16 +75,12 @@ describe("a folder restored from another machine", { timeout: 30_000 }, () => {
         store: fileStore(path, parseNotes, { fenced: true }),
       };
     });
-    const journalLock = join(dir, "s.jsonl.lock");
-    writeFileSync(journalLock, fromAnotherHost());
-    const journal = fileJournal(dir, parseRecord);
-    const leftovers = [...stores.map((s) => s.lockPath), journalLock];
+    const leftovers = stores.map((s) => s.lockPath);
     const before = leftovers.map((p) => readFileSync(p, "utf8"));
 
     const startedAt = performance.now();
     const writes = await Promise.allSettled([
       ...stores.map((s) => s.store.saveFenced({ notes: [] }, 0)),
-      journal.append("s", { tag: "a" }),
     ]);
     const elapsedMs = performance.now() - startedAt;
 
@@ -110,7 +104,6 @@ describe("a folder restored from another machine", { timeout: 30_000 }, () => {
     await expect(
       stores[0]?.store.saveFenced({ notes: ["back"] }, 0),
     ).resolves.toBe(1);
-    expect(await journal.append("s", { tag: "a" })).toEqual({ seq: 1 });
   });
 
   it.concurrent("a run's final save over a held lock reaches onError with the typed error", async () => {

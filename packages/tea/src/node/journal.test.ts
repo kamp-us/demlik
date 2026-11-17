@@ -1,129 +1,142 @@
-// ───────────────────────────────────────────────────────────────────────────
-// @demlik/tea/node — fileJournal, the on-disk journal substrate beside
-// fileStore. Drives the shared behavioural conformance suite (equivalence with
-// memoryJournal), then pins the properties that are the file substrate's own:
-// readable JSONL on disk, the stale-PID lock steal, and — the real local twin
-// of phoenix spike #6673 — two SEPARATE journal instances over one directory
-// racing to append, where only the file lock (not a shared in-process mutex)
-// serialises them into one order.
-// ───────────────────────────────────────────────────────────────────────────
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import * as fs from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, describe, expect, it } from "vitest";
-import { describeJournalConformance } from "../internal/journal/conformance";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { fileJournal } from "./index";
+
+const writes = vi.hoisted(() => ({
+  cut: undefined as number | undefined,
+  short: false,
+  zero: false,
+}));
+vi.mock("node:fs", async (original) => {
+  const native = await original<typeof import("node:fs")>();
+  return {
+    ...native,
+    writeSync(fd: number, buffer: Uint8Array, offset: number, length: number) {
+      if (writes.zero) return 0;
+      const limit = writes.cut ?? buffer.length;
+      if (offset >= limit) throw new Error("interrupted write");
+      const count = native.writeSync(
+        fd,
+        buffer,
+        offset,
+        Math.min(length, limit - offset, writes.short ? 3 : length),
+      );
+      if (writes.cut !== undefined && offset + count >= limit)
+        throw new Error("interrupted write");
+      return count;
+    },
+  };
+});
 
 const dirs: string[] = [];
 const freshDir = (): string => {
-  const dir = mkdtempSync(join(tmpdir(), "tea-journal-"));
+  const dir = fs.mkdtempSync(join(tmpdir(), "tea-journal-"));
   dirs.push(dir);
   return dir;
 };
-
-const parseRec = (raw: unknown): { readonly tag: string } => {
-  if (typeof raw !== "object" || raw === null || !("tag" in raw)) {
-    throw new Error("fileJournal record is not a { tag } shape");
-  }
-  return { tag: String((raw as { tag: unknown }).tag) };
-};
-
-afterAll(() => {
-  for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
+afterEach(() => {
+  writes.cut = undefined;
+  writes.short = false;
+  writes.zero = false;
+  for (const dir of dirs.splice(0))
+    fs.rmSync(dir, { recursive: true, force: true });
 });
 
-describeJournalConformance("fileJournal", () =>
-  fileJournal(freshDir(), parseRec),
-);
-
-describe("fileJournal: readable JSONL on disk", () => {
-  it("writes one { seq, record } JSON object per line", async () => {
+describe("fileJournal", () => {
+  it("stores one atomic batch frame per line without parsing its records", async () => {
     const dir = freshDir();
-    const journal = fileJournal(dir, parseRec);
-    await journal.append("s", { tag: "a" });
-    await journal.append("s", { tag: "b" });
-    const lines = readFileSync(join(dir, "s.jsonl"), "utf8")
-      .split("\n")
-      .filter((line) => line.length > 0);
-    expect(lines.map((line) => JSON.parse(line))).toEqual([
-      { seq: 1, record: { tag: "a" } },
-      { seq: 2, record: { tag: "b" } },
-    ]);
-  });
-});
-
-describe("fileJournal: the lock steals a dead holder's stale lock", () => {
-  it("appends past a lock file left by a PID that is not alive", async () => {
-    const dir = freshDir();
-    const journal = fileJournal(dir, parseRec);
-    // A PID above the max is never a live process → process.kill(pid, 0) throws
-    // ESRCH, so the lock is proven stale and stolen rather than waited on.
-    writeFileSync(join(dir, "s.jsonl.lock"), "2147483647");
-    expect(await journal.append("s", { tag: "a" })).toEqual({ seq: 1 });
-    expect((await journal.list("s")).map((e) => e.record.tag)).toEqual(["a"]);
-  });
-});
-
-describe("fileJournal: an interleaved second append does not steal the seq", () => {
-  it("serialises a second append DISPATCHED while the first holds the lock", async () => {
-    const dir = freshDir();
-    const journal = fileJournal(dir, parseRec);
-
-    // A deterministic handshake, not a wall-clock spin on the lock file: A takes
-    // the stream lock via `withLock` and parks inside the critical section until
-    // B is proven dispatched. Only once A provably holds the lock (`aHasLock`
-    // resolved) is B initiated — a second, INDEPENDENT top-level append that
-    // must queue on the lock rather than race it. This is the shape a
-    // re-entrancy check keyed on an instance-wide "held" Set waves through
-    // inline: it sees "s" already held (by A) and runs B's append concurrently,
-    // so both read length 0, both compute seq 1, and A's record is clobbered.
-    // Serialisation keyed on the async call chain queues B on the mutex instead.
-    //
-    // Every ordering point here is a resolved promise, never elapsed time: the
-    // earlier spin-until-`existsSync(lockPath)` could miss the brief window in
-    // which the lock file exists (A's whole append can complete within one
-    // event-loop turn), then spin ~10_000 iterations past the 5s timeout — a
-    // concurrency proof that intermittently timed out and proved nothing.
-    let signalAHasLock!: () => void;
-    let signalBDispatched!: () => void;
-    const aHasLock = new Promise<void>((resolve) => {
-      signalAHasLock = resolve;
+    const journal = fileJournal(dir);
+    const records = ['{ "value": 1 }', '"半🌱"'] as const;
+    expect(await journal.append("s", records)).toEqual({
+      _tag: "appended",
+      head: 2,
+      entries: [
+        { seq: 1, record: records[0] },
+        { seq: 2, record: records[1] },
+      ],
     });
-    const bDispatched = new Promise<void>((resolve) => {
-      signalBDispatched = resolve;
-    });
-
-    const a = journal.withLock("s", async () => {
-      signalAHasLock(); // A now holds the stream lock, mid-critical-section
-      await bDispatched; // …and keeps holding it until B is proven dispatched
-      return journal.append("s", { tag: "A" }); // re-entrant append under the held lock
-    });
-
-    await aHasLock; // A provably holds the lock before B is initiated
-    const b = journal.append("s", { tag: "B" }); // dispatched while A holds it —
-    signalBDispatched(); // B is already queued on the mutex; let A finish and release
-
-    const [ra, rb] = await Promise.all([a, b]);
-    expect(new Set([ra.seq, rb.seq])).toEqual(new Set([1, 2])); // no collision
-    const entries = await journal.list("s");
-    expect(entries.map((e) => e.seq)).toEqual([1, 2]); // gapless
-    expect(entries.map((e) => e.record.tag).sort()).toEqual(["A", "B"]); // both kept
-  });
-});
-
-describe("fileJournal: two instances race, the file lock picks one order", () => {
-  it("serialises separate instances over one directory into a gapless seq", async () => {
-    const dir = freshDir();
-    const a = fileJournal(dir, parseRec);
-    const b = fileJournal(dir, parseRec);
-    const perWriter = 12;
-    await Promise.all([
-      ...Array.from({ length: perWriter }, () => a.append("s", { tag: "A" })),
-      ...Array.from({ length: perWriter }, () => b.append("s", { tag: "B" })),
-    ]);
-    const seqs = (await a.list("s")).map((e) => e.seq);
-    expect(seqs).toEqual(
-      Array.from({ length: perWriter * 2 }, (_v, i) => i + 1),
+    expect(fs.readFileSync(join(dir, "s.jsonl"), "utf8")).toBe(
+      `${JSON.stringify(records)}\n`,
     );
+    await journal.close();
+    expect(await fileJournal(dir).read("s", 0)).toEqual({
+      _tag: "read",
+      head: 2,
+      entries: [
+        { seq: 1, record: records[0] },
+        { seq: 2, record: records[1] },
+      ],
+    });
+  });
+
+  it("completes short writes and refuses a write that makes no progress", async () => {
+    const dir = freshDir();
+    const journal = fileJournal(dir);
+    writes.short = true;
+    expect(await journal.append("s", ['"半🌱"'])).toMatchObject({
+      _tag: "appended",
+      head: 1,
+    });
+    expect(await fileJournal(dir).read("s", 0)).toMatchObject({
+      _tag: "read",
+      entries: [{ seq: 1, record: '"半🌱"' }],
+    });
+    writes.zero = true;
+    expect(await journal.append("s", ['"next"'])).toMatchObject({
+      _tag: "journal_io",
+      operation: "append",
+      uncertain: true,
+      message: "Storage write made no progress",
+    });
+  });
+
+  it("refreshes an already open reader and preserves a torn UTF-8 tail until append", async () => {
+    const dir = freshDir();
+    const writer = fileJournal(dir);
+    const reader = fileJournal(dir);
+    expect(await reader.read("s", 0)).toEqual({
+      _tag: "read",
+      head: 0,
+      entries: [],
+    });
+    await writer.append("s", ['"first"']);
+    expect(await reader.read("s", 0)).toMatchObject({ _tag: "read", head: 1 });
+    await writer.append("s", ['"second"']);
+    expect(await reader.read("s", 1)).toEqual({
+      _tag: "read",
+      head: 2,
+      entries: [{ seq: 2, record: '"second"' }],
+    });
+    const path = join(dir, "s.jsonl");
+    fs.appendFileSync(path, Buffer.from('["半🌱').subarray(0, -1));
+    const torn = fs.readFileSync(path);
+    expect(await reader.read("s", 2)).toEqual({
+      _tag: "read",
+      head: 2,
+      entries: [],
+    });
+    expect(fs.readFileSync(path)).toEqual(torn);
+    expect(await writer.append("s", ['"third"'])).toMatchObject({
+      _tag: "appended",
+      head: 3,
+    });
+    await reader.close();
+    expect(await reader.read("s", 0)).toMatchObject({ _tag: "read", head: 3 });
+  });
+
+  it("returns malformed complete frames as corruption without rewriting bytes", async () => {
+    const dir = freshDir();
+    const path = join(dir, "s.jsonl");
+    fs.writeFileSync(path, "[42]\n");
+    const journal = fileJournal(dir);
+    expect(await journal.read("s", 0)).toMatchObject({
+      _tag: "journal_corrupt",
+    });
+    expect(await journal.append("s", ['"next"'])).toMatchObject({
+      _tag: "journal_corrupt",
+    });
+    expect(fs.readFileSync(path, "utf8")).toBe("[42]\n");
   });
 });
