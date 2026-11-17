@@ -306,6 +306,11 @@ async function fenced({ open }: KitContext): Promise<KitResult> {
     head: 2,
     entries: [{ seq: 2, record: record(2) }],
   });
+  expect(read(await journal.read("s", 0))).toEqual({
+    _tag: "read",
+    head: 2,
+    entries: entries(2),
+  });
   await close(journal);
   return passed("K7");
 }

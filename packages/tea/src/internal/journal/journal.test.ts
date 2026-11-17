@@ -76,6 +76,7 @@ const broken = {
   crossesStreams: "K6",
   dropsIsolatedStream: "K6",
   acceptsStaleExpected: "K7",
+  acknowledgesFencedUnstored: "K7",
   returnsTornTail: "K8",
   truncatesOnRead: "K8",
 } satisfies Record<string, KitCase>;
@@ -170,7 +171,7 @@ const mutations = {
       const result = await journal.read(stream, after);
       return result._tag === "read" &&
         after === 0 &&
-        (batches.get(stream) ?? 0) > 1
+        (batches.get(stream) ?? 0) > 2
         ? { ...result, entries: [...result.entries].reverse() }
         : result;
     },
@@ -203,6 +204,15 @@ const mutations = {
   acceptsStaleExpected: ({ journal }) => ({
     ...journal,
     appendFenced: (stream, records) => journal.append(stream, records),
+  }),
+  acknowledgesFencedUnstored: ({ journal }) => ({
+    ...journal,
+    async appendFenced(stream, records, expected) {
+      const prior = await journal.read(stream, 0);
+      return prior._tag === "read" && expected === prior.head
+        ? acknowledgeUnstored(journal, stream, records)
+        : journal.appendFenced(stream, records, expected);
+    },
   }),
   truncatesOnRead: ({ journal, torn, truncateTail }) => ({
     ...journal,
