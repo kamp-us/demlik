@@ -36,8 +36,9 @@ calls. It prints the same view and checks the same reconnect cycles. A case
 interrupted while still running explicitly resumes its saved pending work.
 
 Keep the directory to keep the case. Stop its host before deleting it. Run only
-one live host for a case: the file journal serializes writes, but the example
-does not provide a lease between competing hosts.
+one live host for a case. The runtime serializes its own saves; plain
+`fileJournal(dir)` requires one writer per stream. When two hosts may write,
+use `fileJournal(dir, { fenced: true })` and `appendFenced`; the example provides no lease.
 
 ## 3. Connect a consumer
 
@@ -66,9 +67,15 @@ pnpm exec vitest run packages/tea/src/agent/retained-case.test.ts
 ```
 
 The suite checks an update during attachment, lagging SSE output, a blocked then
-failed append, and malformed persisted shape, sequence, and run ownership. It
-also kills a child process with `SIGKILL` after the journal rename and before
-view publication, then resumes in another process and reopens once more.
+failed append, malformed persisted shape and run ownership, and a reader that
+returns a noncontiguous sequence. It also kills a child process with `SIGKILL`
+after a complete source batch is appended and before view publication, then
+resumes in another process and reopens once more.
+
+The example uses `fileJournal(dir)`, which takes no cross-process lock;
+one writer per stream is the caller's precondition. The opt-in
+`fileJournal(dir, { fenced: true })` offers checked appends under the existing
+`wx` stream lock; the example uses the runtime's serialized saves.
 
 An append failure leaves `read()` explicitly `unavailable`, with the last
 committed state, and fails existing and new connections. A restore failure

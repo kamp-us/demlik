@@ -12,7 +12,7 @@ import { … } from "@demlik/tea/node";
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
-| [`fileJournal`](#fileJournal) | Function | experimental | The Node file substrate for the journal (`src/internal/journal/`), beside `fileStore`. |
+| [`fileJournal`](#fileJournal) | Function | experimental | Append opaque Unicode text in atomic batches under `dir`. |
 | [`FileLockBlock`](#FileLockBlock) | Type | stable | Why a writer could not take a lock: - `another-host`: the lock names another host, which may still be writing. |
 | [`FileLockTimeoutError`](#FileLockTimeoutError) | Class | stable | A write gave up waiting for a lock file. |
 | [`fileStore`](#fileStore) | Function | stable | Persist a machine's state to a JSON file — pass the `path` and a `parse` that validates what comes back, get a `Store<S>` you hand to `run` so the next run resumes where this one stopped. |
@@ -40,7 +40,14 @@ import { … } from "@demlik/tea/node";
 ### `fileJournal`
 
 ```ts
-function fileJournal<R>(dir: string, parse: (raw: unknown) => R): Journal<R>
+function fileJournal(
+  dir: string,
+  options: { readonly fenced: true },
+): FencedJournal
+function fileJournal(
+  dir: string,
+  options?: { readonly fenced?: false },
+): Journal
 ```
 
 <a id="FileLockBlock"></a>

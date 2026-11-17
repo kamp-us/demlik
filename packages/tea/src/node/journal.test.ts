@@ -1,129 +1,473 @@
-// ───────────────────────────────────────────────────────────────────────────
-// @demlik/tea/node — fileJournal, the on-disk journal substrate beside
-// fileStore. Drives the shared behavioural conformance suite (equivalence with
-// memoryJournal), then pins the properties that are the file substrate's own:
-// readable JSONL on disk, the stale-PID lock steal, and — the real local twin
-// of phoenix spike #6673 — two SEPARATE journal instances over one directory
-// racing to append, where only the file lock (not a shared in-process mutex)
-// serialises them into one order.
-// ───────────────────────────────────────────────────────────────────────────
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import * as fs from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, describe, expect, it } from "vitest";
-import { describeJournalConformance } from "../internal/journal/conformance";
+import { DatabaseSync } from "node:sqlite";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type {
+  FencedJournal,
+  Journal,
+  JournalAppend,
+  JournalConflict,
+  JournalRefusal,
+} from "../internal/journal";
+import {
+  describeJournalConformance,
+  type JournalKitFactory,
+} from "../internal/journal/conformance";
 import { fileJournal } from "./index";
+
+const writes = vi.hoisted(() => ({
+  cut: undefined as number | undefined,
+  short: false,
+  zero: false,
+}));
+vi.mock("node:fs", async (original) => {
+  const native = await original<typeof import("node:fs")>();
+  return {
+    ...native,
+    writeSync(fd: number, buffer: Uint8Array, offset: number, length: number) {
+      if (writes.zero) return 0;
+      const limit = writes.cut ?? buffer.length;
+      if (offset >= limit) throw new Error("interrupted write");
+      const count = native.writeSync(
+        fd,
+        buffer,
+        offset,
+        Math.min(length, limit - offset, writes.short ? 3 : length),
+      );
+      if (writes.cut !== undefined && offset + count >= limit)
+        throw new Error("interrupted write");
+      return count;
+    },
+  };
+});
 
 const dirs: string[] = [];
 const freshDir = (): string => {
-  const dir = mkdtempSync(join(tmpdir(), "tea-journal-"));
+  const dir = fs.mkdtempSync(join(tmpdir(), "tea-journal-"));
   dirs.push(dir);
   return dir;
 };
+afterEach(() => {
+  writes.cut = undefined;
+  writes.short = false;
+  writes.zero = false;
+  for (const dir of dirs.splice(0))
+    fs.rmSync(dir, { recursive: true, force: true });
+});
 
-const parseRec = (raw: unknown): { readonly tag: string } => {
-  if (typeof raw !== "object" || raw === null || !("tag" in raw)) {
-    throw new Error("fileJournal record is not a { tag } shape");
+describe("fileJournal", () => {
+  it("stores one atomic batch frame per line without parsing its records", async () => {
+    const dir = freshDir();
+    const journal = fileJournal(dir);
+    const records = ['{ "value": 1 }', '"半🌱"'] as const;
+    expect(await journal.append("s", records)).toEqual({
+      _tag: "appended",
+      head: 2,
+      entries: [
+        { seq: 1, record: records[0] },
+        { seq: 2, record: records[1] },
+      ],
+    });
+    expect(fs.readFileSync(join(dir, "s.jsonl"), "utf8")).toBe(
+      `${JSON.stringify(records)}\n`,
+    );
+    await journal.close();
+    expect(await fileJournal(dir).read("s", 0)).toEqual({
+      _tag: "read",
+      head: 2,
+      entries: [
+        { seq: 1, record: records[0] },
+        { seq: 2, record: records[1] },
+      ],
+    });
+  });
+
+  it("maps UTF-8 stream names distinctly even on a case-insensitive volume", async () => {
+    async function fileNameOf(stream: string) {
+      const dir = freshDir();
+      const journal = fileJournal(dir);
+      expect(await journal.append(stream, ['"name"'])).toMatchObject({
+        _tag: "appended",
+      });
+      await journal.close();
+      return fs.readdirSync(dir)[0] ?? "";
+    }
+    expect(await fileNameOf("s")).not.toBe(await fileNameOf("S"));
+    expect((await fileNameOf("s")).toLowerCase()).not.toBe(
+      (await fileNameOf("S")).toLowerCase(),
+    );
+    expect(await fileNameOf("é")).not.toBe(await fileNameOf("é"));
+    const dir = freshDir();
+    const journal = fileJournal(dir);
+    await journal.append("s", ["a"]);
+    await journal.append("S", ["b"]);
+    expect(await journal.read("s", 0)).toMatchObject({
+      head: 1,
+      entries: [{ seq: 1, record: "a" }],
+    });
+    expect(await journal.read("S", 0)).toMatchObject({
+      head: 1,
+      entries: [{ seq: 1, record: "b" }],
+    });
+    const checked = fileJournal(dir, { fenced: true });
+    expect(await checked.appendFenced("S", ["c"], 1)).toMatchObject({
+      _tag: "appended",
+      head: 2,
+    });
+    expect(await journal.read("s", 0)).toMatchObject({ head: 1 });
+  });
+
+  it.each([
+    false,
+    true,
+  ])("refuses an oversized stream name before writing (fenced=%s)", async (fenced) => {
+    const dir = freshDir();
+    const name = "S".repeat(300);
+    const result = fenced
+      ? await fileJournal(dir, { fenced: true }).appendFenced(name, ["a"], 0)
+      : await fileJournal(dir).append(name, ["a"]);
+    expect(result).toMatchObject({
+      _tag: "journal_io",
+      operation: "append",
+      uncertain: false,
+    });
+    expect(fs.readdirSync(dir)).toEqual([]);
+  });
+
+  it("completes short writes and refuses a write that makes no progress", async () => {
+    const dir = freshDir();
+    const journal = fileJournal(dir);
+    writes.short = true;
+    expect(await journal.append("s", ['"半🌱"'])).toMatchObject({
+      _tag: "appended",
+      head: 1,
+    });
+    expect(await fileJournal(dir).read("s", 0)).toMatchObject({
+      _tag: "read",
+      entries: [{ seq: 1, record: '"半🌱"' }],
+    });
+    writes.zero = true;
+    expect(await journal.append("s", ['"next"'])).toMatchObject({
+      _tag: "journal_io",
+      operation: "append",
+      uncertain: true,
+      message: "Storage write made no progress",
+    });
+  });
+
+  it("refreshes an already open reader and preserves a torn UTF-8 tail until append", async () => {
+    const dir = freshDir();
+    const writer = fileJournal(dir);
+    const reader = fileJournal(dir);
+    expect(await reader.read("s", 0)).toEqual({
+      _tag: "read",
+      head: 0,
+      entries: [],
+    });
+    await writer.append("s", ['"first"']);
+    expect(await reader.read("s", 0)).toMatchObject({ _tag: "read", head: 1 });
+    await writer.append("s", ['"second"']);
+    expect(await reader.read("s", 1)).toEqual({
+      _tag: "read",
+      head: 2,
+      entries: [{ seq: 2, record: '"second"' }],
+    });
+    const path = join(dir, "s.jsonl");
+    fs.appendFileSync(path, Buffer.from('["半🌱').subarray(0, -1));
+    const torn = fs.readFileSync(path);
+    expect(await reader.read("s", 2)).toEqual({
+      _tag: "read",
+      head: 2,
+      entries: [],
+    });
+    expect(fs.readFileSync(path)).toEqual(torn);
+    expect(await writer.append("s", ['"third"'])).toMatchObject({
+      _tag: "appended",
+      head: 3,
+    });
+    await reader.close();
+    expect(await reader.read("s", 0)).toMatchObject({ _tag: "read", head: 3 });
+  });
+
+  it("returns malformed complete frames as corruption without rewriting bytes", async () => {
+    const dir = freshDir();
+    const path = join(dir, "s.jsonl");
+    fs.writeFileSync(path, "[42]\n");
+    const journal = fileJournal(dir);
+    expect(await journal.read("s", 0)).toMatchObject({
+      _tag: "journal_corrupt",
+    });
+    expect(await journal.append("s", ['"next"'])).toMatchObject({
+      _tag: "journal_corrupt",
+    });
+    expect(fs.readFileSync(path, "utf8")).toBe("[42]\n");
+  });
+});
+
+it("fences separate file instances against the real head under the shared lock", async () => {
+  const dir = freshDir();
+  const a = fileJournal(dir, { fenced: true });
+  const b = fileJournal(dir, { fenced: true });
+  await a.read("s", 0);
+  await b.read("s", 0);
+  const results = await Promise.all([
+    a.appendFenced("s", ['"a"'], 0),
+    b.appendFenced("s", ['"b"'], 0),
+  ]);
+  expect(results.filter((result) => result._tag === "appended")).toHaveLength(
+    1,
+  );
+  expect(
+    results.filter((result) => result._tag === "journal_conflict"),
+  ).toEqual([{ _tag: "journal_conflict", expected: 0, head: 1 }]);
+  const before = fs.readFileSync(join(dir, "s.jsonl"));
+  expect(await a.appendFenced("s", ['"ahead"'], 2)).toEqual({
+    _tag: "journal_conflict",
+    expected: 2,
+    head: 1,
+  });
+  expect(fs.readFileSync(join(dir, "s.jsonl"))).toEqual(before);
+  expect(await b.appendFenced("s", ['"next"'], 1)).toEqual({
+    _tag: "appended",
+    head: 2,
+    entries: [{ seq: 2, record: '"next"' }],
+  });
+});
+
+const fileFixture =
+  (fenced: boolean): JournalKitFactory =>
+  async () => {
+    const dir = freshDir();
+    const names = new Map<string, string>();
+    function storedName(stream: string) {
+      const cached = names.get(stream);
+      if (cached !== undefined) return cached;
+      const name = fs
+        .readdirSync(dir)
+        .find(
+          (name) =>
+            name.endsWith(".jsonl") &&
+            decodeURIComponent(name.slice(0, -6)) === stream,
+        );
+      if (name !== undefined) names.set(stream, name);
+      return name;
+    }
+    return {
+      byteFile: true,
+      async open() {
+        if (!fenced) return fileJournal(dir);
+        const journal = fileJournal(dir, { fenced: true });
+        const heads = new Map<string, number>();
+        return {
+          ...journal,
+          async read(stream, after) {
+            const result = await journal.read(stream, after);
+            if (result._tag === "read") heads.set(stream, result.head);
+            return result;
+          },
+          async append(stream, records) {
+            const result = await journal.appendFenced(
+              stream,
+              records,
+              heads.get(stream) ?? 0,
+            );
+            if (result._tag === "journal_conflict")
+              throw new Error(JSON.stringify(result));
+            if (result._tag === "appended") heads.set(stream, result.head);
+            return result;
+          },
+        } satisfies FencedJournal;
+      },
+      interruptAt(point) {
+        writes.cut = point;
+      },
+      writePoints: (records) =>
+        Array.from(
+          { length: Buffer.byteLength(`${JSON.stringify(records)}\n`) + 1 },
+          (_, i) => i,
+        ),
+      async readStoredBytes(stream) {
+        const name = storedName(stream);
+        return name === undefined
+          ? new Uint8Array()
+          : fs.readFileSync(join(dir, name));
+      },
+      async tearTail(stream) {
+        const name = storedName(stream);
+        if (name === undefined) throw new Error("Missing stream to tear");
+        fs.appendFileSync(join(dir, name), Buffer.from('["半').subarray(0, 4));
+      },
+      async dispose() {
+        writes.cut = undefined;
+        fs.rmSync(dir, { recursive: true, force: true });
+      },
+    };
+  };
+
+type StoredRow = { readonly pos: number; readonly body: string };
+function openTurn(path: string) {
+  const db = new DatabaseSync(path);
+  // Keep full synchronization while avoiding a rollback-journal create/delete per transaction.
+  db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL");
+  db.exec(
+    "CREATE TABLE IF NOT EXISTS entries(stream TEXT, id TEXT, body TEXT, pos INTEGER, PRIMARY KEY(stream,id), UNIQUE(stream,pos))",
+  );
+  const read = db.prepare(
+    "SELECT pos, CAST(body AS BLOB) AS body FROM entries WHERE stream=? AND pos>? ORDER BY pos",
+  );
+  const get = db.prepare(
+    "SELECT pos, CAST(body AS BLOB) AS body FROM entries WHERE stream=? AND id=?",
+  );
+  const head = db.prepare(
+    "SELECT COALESCE(MAX(pos),0) AS pos FROM entries WHERE stream=?",
+  );
+  const put = db.prepare("INSERT INTO entries VALUES(?,?,?,?)");
+  // Node 22's TEXT reader stops at NUL; the stored UTF-8 bytes are complete.
+  const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+  function stored(row: Record<string, unknown>): StoredRow {
+    if (typeof row.pos !== "number" || !(row.body instanceof Uint8Array))
+      throw new Error("Invalid stored row");
+    return { pos: row.pos, body: decoder.decode(row.body) };
   }
-  return { tag: String((raw as { tag: unknown }).tag) };
+  const turn = {
+    read: (stream: string, after: number) =>
+      read.all(stream, after).map(stored),
+    get(stream: string, id: string) {
+      const row = get.get(stream, id);
+      return row ? stored(row) : undefined;
+    },
+    head(stream: string): number {
+      const pos = head.get(stream)?.pos;
+      if (typeof pos !== "number") throw new Error("Invalid stored head");
+      return pos;
+    },
+    append(stream: string, id: string, line: string) {
+      const prior = turn.get(stream, id);
+      if (prior) return { rev: prior.pos, pos: prior.pos };
+      const pos = turn.head(stream) + 1;
+      put.run(stream, id, line, pos);
+      return { rev: pos, pos };
+    },
+  };
+  return { turn, db };
+}
+
+function sqliteJournal(
+  path: string,
+  interrupt: (point: number) => void,
+): FencedJournal {
+  const { turn, db } = openTurn(path);
+  let closed = false;
+  async function append(
+    stream: string,
+    records: readonly [string, ...string[]],
+    expected?: number,
+  ): Promise<JournalAppend | JournalRefusal | JournalConflict> {
+    let active = false;
+    let committed = false;
+    try {
+      db.exec("BEGIN IMMEDIATE");
+      active = true;
+      const head = turn.head(stream);
+      if (expected !== undefined && expected !== head) {
+        db.exec("ROLLBACK");
+        active = false;
+        return { _tag: "journal_conflict", expected, head };
+      }
+      const entries = records.map((record, i) => {
+        interrupt(i);
+        const { pos } = turn.append(stream, String(head + i + 1), record);
+        return { seq: pos, record };
+      });
+      interrupt(records.length);
+      db.exec("COMMIT");
+      active = false;
+      committed = true;
+      interrupt(records.length + 1);
+      return { _tag: "appended", head: head + entries.length, entries };
+    } catch (error) {
+      if (active) db.exec("ROLLBACK");
+      return {
+        _tag: "journal_io",
+        operation: "append",
+        message: String(error),
+        uncertain: committed,
+      };
+    }
+  }
+  return {
+    fenced: true,
+    async append(stream, records) {
+      const result = await append(stream, records);
+      if (result._tag === "journal_conflict")
+        throw new Error("Unconditional append cannot conflict");
+      return result;
+    },
+    appendFenced: append,
+    async read(stream, after) {
+      try {
+        return {
+          _tag: "read",
+          head: turn.head(stream),
+          entries: turn
+            .read(stream, after)
+            .map((row) => ({ seq: row.pos, record: row.body })),
+        };
+      } catch (error) {
+        return {
+          _tag: "journal_io",
+          operation: "read",
+          message: String(error),
+          uncertain: false,
+        };
+      }
+    },
+    async close() {
+      if (!closed) {
+        db.close();
+        closed = true;
+      }
+    },
+  };
+}
+
+const sqliteFixture: JournalKitFactory = async () => {
+  const dir = freshDir();
+  const opened = new Set<Journal>();
+  let cut: number | undefined;
+  return {
+    byteFile: false,
+    async open() {
+      const journal = sqliteJournal(join(dir, "journal.db"), (point) => {
+        if (point === cut) throw new Error(`interrupted at write ${cut}`);
+      });
+      opened.add(journal);
+      return journal;
+    },
+    interruptAt(point) {
+      cut = point;
+    },
+    writePoints: (records) =>
+      Array.from({ length: records.length + 2 }, (_, i) => i),
+    async dispose() {
+      for (const journal of opened) await journal.close();
+      fs.rmSync(dir, { recursive: true, force: true });
+    },
+  };
 };
 
-afterAll(() => {
-  for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
-});
-
-describeJournalConformance("fileJournal", () =>
-  fileJournal(freshDir(), parseRec),
-);
-
-describe("fileJournal: readable JSONL on disk", () => {
-  it("writes one { seq, record } JSON object per line", async () => {
-    const dir = freshDir();
-    const journal = fileJournal(dir, parseRec);
-    await journal.append("s", { tag: "a" });
-    await journal.append("s", { tag: "b" });
-    const lines = readFileSync(join(dir, "s.jsonl"), "utf8")
-      .split("\n")
-      .filter((line) => line.length > 0);
-    expect(lines.map((line) => JSON.parse(line))).toEqual([
-      { seq: 1, record: { tag: "a" } },
-      { seq: 2, record: { tag: "b" } },
-    ]);
+type DriverCase = { readonly make: JournalKitFactory; readonly runs?: number };
+const drivers = {
+  file: { make: fileFixture(false) },
+  // At 100 histories, lock acquisition in K1/K7 took this configuration over 15s alone.
+  fileFenced: { make: fileFixture(true), runs: 20 },
+  sqlite: { make: sqliteFixture },
+} satisfies Record<string, DriverCase>;
+for (const [label, { make, runs }] of Object.entries<DriverCase>(drivers)) {
+  describeJournalConformance(label, make, {
+    records: 10000,
+    runs,
+    now: () => performance.now(),
   });
-});
-
-describe("fileJournal: the lock steals a dead holder's stale lock", () => {
-  it("appends past a lock file left by a PID that is not alive", async () => {
-    const dir = freshDir();
-    const journal = fileJournal(dir, parseRec);
-    // A PID above the max is never a live process → process.kill(pid, 0) throws
-    // ESRCH, so the lock is proven stale and stolen rather than waited on.
-    writeFileSync(join(dir, "s.jsonl.lock"), "2147483647");
-    expect(await journal.append("s", { tag: "a" })).toEqual({ seq: 1 });
-    expect((await journal.list("s")).map((e) => e.record.tag)).toEqual(["a"]);
-  });
-});
-
-describe("fileJournal: an interleaved second append does not steal the seq", () => {
-  it("serialises a second append DISPATCHED while the first holds the lock", async () => {
-    const dir = freshDir();
-    const journal = fileJournal(dir, parseRec);
-
-    // A deterministic handshake, not a wall-clock spin on the lock file: A takes
-    // the stream lock via `withLock` and parks inside the critical section until
-    // B is proven dispatched. Only once A provably holds the lock (`aHasLock`
-    // resolved) is B initiated — a second, INDEPENDENT top-level append that
-    // must queue on the lock rather than race it. This is the shape a
-    // re-entrancy check keyed on an instance-wide "held" Set waves through
-    // inline: it sees "s" already held (by A) and runs B's append concurrently,
-    // so both read length 0, both compute seq 1, and A's record is clobbered.
-    // Serialisation keyed on the async call chain queues B on the mutex instead.
-    //
-    // Every ordering point here is a resolved promise, never elapsed time: the
-    // earlier spin-until-`existsSync(lockPath)` could miss the brief window in
-    // which the lock file exists (A's whole append can complete within one
-    // event-loop turn), then spin ~10_000 iterations past the 5s timeout — a
-    // concurrency proof that intermittently timed out and proved nothing.
-    let signalAHasLock!: () => void;
-    let signalBDispatched!: () => void;
-    const aHasLock = new Promise<void>((resolve) => {
-      signalAHasLock = resolve;
-    });
-    const bDispatched = new Promise<void>((resolve) => {
-      signalBDispatched = resolve;
-    });
-
-    const a = journal.withLock("s", async () => {
-      signalAHasLock(); // A now holds the stream lock, mid-critical-section
-      await bDispatched; // …and keeps holding it until B is proven dispatched
-      return journal.append("s", { tag: "A" }); // re-entrant append under the held lock
-    });
-
-    await aHasLock; // A provably holds the lock before B is initiated
-    const b = journal.append("s", { tag: "B" }); // dispatched while A holds it —
-    signalBDispatched(); // B is already queued on the mutex; let A finish and release
-
-    const [ra, rb] = await Promise.all([a, b]);
-    expect(new Set([ra.seq, rb.seq])).toEqual(new Set([1, 2])); // no collision
-    const entries = await journal.list("s");
-    expect(entries.map((e) => e.seq)).toEqual([1, 2]); // gapless
-    expect(entries.map((e) => e.record.tag).sort()).toEqual(["A", "B"]); // both kept
-  });
-});
-
-describe("fileJournal: two instances race, the file lock picks one order", () => {
-  it("serialises separate instances over one directory into a gapless seq", async () => {
-    const dir = freshDir();
-    const a = fileJournal(dir, parseRec);
-    const b = fileJournal(dir, parseRec);
-    const perWriter = 12;
-    await Promise.all([
-      ...Array.from({ length: perWriter }, () => a.append("s", { tag: "A" })),
-      ...Array.from({ length: perWriter }, () => b.append("s", { tag: "B" })),
-    ]);
-    const seqs = (await a.list("s")).map((e) => e.seq);
-    expect(seqs).toEqual(
-      Array.from({ length: perWriter * 2 }, (_v, i) => i + 1),
-    );
-  });
-});
+}

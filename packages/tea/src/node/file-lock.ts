@@ -1,5 +1,5 @@
 /**
- * The cross-process lock under the fenced `fileStore` and `fileJournal`: a file
+ * The cross-process lock under the fenced `fileStore` and the fenced `fileJournal`: a file
  * created with `wx` (O_CREAT|O_EXCL), the one primitive atomic across processes.
  *
  * A lock file left behind is judged by what it can prove about its holder. A

@@ -24,12 +24,15 @@ The [host](https://github.com/kamp-us/demlik/blob/main/packages/tea/examples/ret
 `agentEvents`, retaining settled turns, successful tools, failed tools, and
 terminal outcomes. It also records successful context compactions. Started
 work and partial tokens are not retained outcomes. `read()` exposes the Model
-and view together as plain data; connection handles and file locks belong to
-the host.
+and view together as plain data; connection handles belong to the host.
 
 ## Publication follows the source commit
 
-Each save holds the journal's per-stream lock for this sequence:
+The runtime serializes saves through this sequence. The example's
+`fileJournal(dir)` takes no cross-process lock; one writer per stream is the
+caller's precondition. The opt-in `fileJournal(dir, { fenced: true })` offers
+checked appends under the existing `wx` stream lock. This example uses the
+runtime's serialized saves:
 
 ```text
 validate message → encode JSON text → await journal append → fold view → publish complete view
@@ -54,8 +57,9 @@ caller observed failure.
 
 ## Attachment and bounded output share the host boundary
 
-`connect()` registers the connection and supplies its snapshot while holding
-the same lock as save. A commit must fall before that snapshot or after
+`connect()` registers the connection and supplies its snapshot synchronously,
+without yielding. Publishing a committed view also runs without yielding after
+append acknowledges. A commit must fall before that snapshot or after
 registration; there is no gap between reading the snapshot and observing later
 updates.
 
@@ -81,16 +85,20 @@ bound; it does not establish a memory bound for an uncapped agent or arbitrarily
 large provider output.
 
 The archive grows with the case. Rebuilding it reads the full source, the file
-journal rewrites its JSONL file on append, and sending a complete view costs the
-size of the retained history. Two pending views bound queue count, not bytes.
+journal appends one complete batch frame without rewriting prior records, and
+sending a complete view costs the size of the retained history. Two pending
+views bound queue count, not bytes.
 
 ## What the proof establishes
 
 The [lifecycle suite](https://github.com/kamp-us/demlik/blob/main/packages/tea/src/agent/retained-case.test.ts) exercises actual
 files, a fresh process after `SIGKILL` between source commit and publication,
 fresh hosts, reconnects, attachment interleaving, append failure, corrupt
-restore, and slow output. The file journal's atomic rename covers this tested
-process-crash boundary. No fsync or power-loss guarantee follows from it.
+restore, and slow output. The file journal retains complete LF-terminated batch
+frames and omits an incomplete tail. The next append repairs that tail. The
+conformance kit cuts writes at every byte offset, including inside UTF-8 text.
+These checks cover controlled interruption, without an fsync or power-loss
+guarantee.
 
 The fixture makes no live-provider or production-host claim. One live host per
 case remains a precondition. Replay applies pure transitions without effects;

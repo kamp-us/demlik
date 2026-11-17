@@ -42,6 +42,7 @@
  * socket. Same shape as tea-do's `wsRegistry`.
  */
 
+import * as journalFs from "node:fs";
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
@@ -55,11 +56,11 @@ import type {
   Sub,
 } from "../index";
 import { StoreConflictError } from "../index";
-import {
-  type Journal,
-  type JournalEntry,
-  makeJournal,
-  type Seq,
+import type {
+  FencedJournal,
+  Journal,
+  JournalEntry,
+  JournalRefusal,
 } from "../internal/journal";
 import { dispatchIfPresent } from "../subs/types";
 import { withFileLock } from "./file-lock";
@@ -203,7 +204,7 @@ export interface FileStoreOptions {
  * a file written unfenced resumes fenced and back again; the version lives in a
  * sidecar `<path>.fence` holding a decimal integer, and an absent stamp is `0`.
  *
- * The compare-and-swap is taken under the same `wx` lock file `fileJournal`
+ * The compare-and-swap is taken under the same `wx` lock the fenced `fileJournal`
  * uses, because `open(…, "wx")` is the one primitive that is atomic ACROSS
  * PROCESSES. Without it the read-compare-write is a TOCTOU race and two writers
  * both pass their own check. Rename-over-tmp still does the torn-write work for
@@ -272,93 +273,206 @@ function fenceFileStore<S>(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// fileJournal — a `Journal<R>` over one on-disk JSONL file per stream.
+// fileJournal — encoded atomic batches in one JSONL file per stream.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * The Node file substrate for the journal (`src/internal/journal/`), beside
- * `fileStore`. A
- * stream is one JSONL file under `dir` (`<encoded-stream>.jsonl`), one
- * `{"seq":n,"record":…}` object per line — readable and greppable on disk, no
- * SQLite. `parse` is REQUIRED for the same reason `fileStore` requires it: the
- * bytes read back through `JSON.parse` are structurally `unknown`, and the
- * caller who owns `R` is the only party that can validate a record's shape.
+ * Append opaque Unicode text in atomic batches under `dir`.
+ * Stream file names encode UTF-8 bytes: a-z, 0-9, `-` and `_` stay literal;
+ * every other byte is `%` plus two lowercase hex digits, followed by `.jsonl`.
+ * Names remain distinct across case-insensitive and Unicode-normalizing volumes.
+ * Each LF-terminated frame contains one array of opaque strings.
+ * The driver never parses record bodies.
  *
- * `append` rewrites the whole stream file via a pid-scoped temp + `rename`,
- * exactly as `fileStore.save` does — a reader sees the old file or the new one,
- * never a torn line, and the write survives a crash mid-append. The append is
- * O(n) in the stream's length; a durable record log a machine replays is read
- * whole anyway, so the atomic-rewrite guarantee is worth the cost.
+ * The plain call takes no cross-process lock; one writer per stream is the
+ * caller's precondition. Pass `{ fenced: true }` for `appendFenced`, which
+ * compares the real head and appends under the existing `wx` stream lock.
+ * A stale or ahead expectation refuses without writing; an unavailable lock
+ * returns `journal_io` with `uncertain: false` and the lock's clear step.
+ * Base `append` remains unconditional in either form. Reads refresh incrementally,
+ * omit an incomplete tail without changing it, and the next append truncates
+ * that tail before writing. Short writes are completed before acknowledgement.
+ * Complete batches survive controlled process interruption; no fsync or
+ * power-loss guarantee is made.
  *
- * The ordering key is taken under a `wx` lock file (`<file>.lock`) naming the
- * writer's host, boot and PID: a second writer racing the same stream blocks on
- * the lock, so `seq` is a single total order across processes. This is the lock
- * phoenix spike #6673 proved: its only job is an honest order key, not the win.
- *
- * A leftover lock behaves as it does on a fenced {@link fileStore}: one whose
- * holder is proven gone is stolen, so a crash on this machine does not wedge the
- * stream. Any other lock, including one from another host, is waited on for up
- * to 10 seconds, and then the append rejects with a
- * {@link FileLockTimeoutError} naming the file. See
- * {@link FileStoreOptions.fenced} for the cases and the clear step.
- *
- * `changes` fires for appends made through THIS instance; a cross-process
- * append lands on disk but is not broadcast here (that is a polling concern the
- * log leaves to its consumer, and the remote-journal work downstream).
- *
- * The journal carries no stability promise, and this factory travels with it
- * rather than with `./node`'s `stable` stamp (MAINTAINING.md).
- *
+ * The factory remains experimental on the stable `./node` subpath.
  * @experimental
  */
-export function fileJournal<R>(
+export function fileJournal(
   dir: string,
-  parse: (raw: unknown) => R,
-): Journal<R> {
-  const streamPath = (stream: string): string =>
-    join(dir, `${encodeURIComponent(stream)}.jsonl`);
+  options: { readonly fenced: true },
+): FencedJournal;
+export function fileJournal(
+  dir: string,
+  options?: { readonly fenced?: false },
+): Journal;
+export function fileJournal(
+  dir: string,
+  options: { readonly fenced?: boolean } = {},
+): Journal | FencedJournal {
+  const streams = new Map<
+    string,
+    { end: number; tail: number; rows: JournalEntry[] }
+  >();
+  const fileNameOf = (stream: string) =>
+    `${Array.from(Buffer.from(stream), (byte) => {
+      const char = String.fromCharCode(byte);
+      return /^[a-z0-9_-]$/.test(char)
+        ? char
+        : `%${byte.toString(16).padStart(2, "0")}`;
+    }).join("")}.jsonl`;
+  const path = (stream: string) => join(dir, fileNameOf(stream));
+  const message = (error: unknown) =>
+    error instanceof Error ? error.message : String(error);
+  const corruption = (detail: string) => new SyntaxError(detail);
+  const refusal = (
+    error: unknown,
+    operation: "read" | "append",
+    uncertain = operation === "append",
+  ): JournalRefusal =>
+    error instanceof SyntaxError
+      ? { _tag: "journal_corrupt", message: message(error) }
+      : {
+          _tag: "journal_io",
+          operation,
+          message: message(error),
+          uncertain,
+        };
 
-  const readEntries = async (stream: string): Promise<JournalEntry<R>[]> => {
-    const path = streamPath(stream);
-    let raw: string;
+  journalFs.mkdirSync(dir, { recursive: true });
+  function refresh(stream: string) {
+    const info = streams.get(stream) ?? { end: 0, tail: 0, rows: [] };
+    let fd: number;
     try {
-      raw = await readFile(path, "utf8");
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
-      throw err;
+      fd = journalFs.openSync(path(stream), "r");
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        "code" in error &&
+        error.code === "ENOENT" &&
+        info.end === 0
+      )
+        return info;
+      throw error;
     }
-    return raw
-      .split("\n")
-      .filter((line) => line.length > 0)
-      .map((line) => {
-        const row = JSON.parse(line) as { seq: Seq; record: unknown };
-        return { stream, seq: row.seq, record: parse(row.record) };
-      });
+    try {
+      const size = journalFs.fstatSync(fd).size;
+      if (size < info.end) throw corruption("Storage shrank behind a reader");
+      const raw = Buffer.alloc(size - info.end);
+      let offset = 0;
+      while (offset < raw.length) {
+        const count = journalFs.readSync(
+          fd,
+          raw,
+          offset,
+          raw.length - offset,
+          info.end + offset,
+        );
+        if (count === 0) throw new Error("Unexpected storage end");
+        offset += count;
+      }
+      const end = raw.lastIndexOf(10) + 1;
+      const added: JournalEntry[] = [];
+      let text: string;
+      try {
+        text = new TextDecoder("utf-8", { fatal: true }).decode(
+          raw.subarray(0, end),
+        );
+      } catch {
+        throw corruption("Invalid UTF-8 storage frame");
+      }
+      for (const line of text.split("\n").slice(0, -1)) {
+        const frame: unknown = JSON.parse(line);
+        if (
+          !Array.isArray(frame) ||
+          frame.length === 0 ||
+          !frame.every((value: unknown) => typeof value === "string")
+        ) {
+          throw corruption("Invalid storage frame");
+        }
+        for (const record of frame)
+          added.push({ seq: info.rows.length + added.length + 1, record });
+      }
+      for (const entry of added) info.rows.push(entry);
+      info.end += end;
+      info.tail = raw.length - end;
+      streams.set(stream, info);
+      return info;
+    } finally {
+      journalFs.closeSync(fd);
+    }
+  }
+  const base: Journal = {
+    async read(stream, after) {
+      try {
+        const { rows } = refresh(stream);
+        const start =
+          after < rows.length ? Math.max(0, Math.floor(after)) : rows.length;
+        return { _tag: "read", head: rows.length, entries: rows.slice(start) };
+      } catch (error) {
+        return refusal(error, "read");
+      }
+    },
+    async append(stream, records) {
+      let uncertain = false;
+      try {
+        const info = refresh(stream);
+        const entries = records.map((record, i) => ({
+          seq: info.rows.length + i + 1,
+          record,
+        }));
+        const bytes = Buffer.from(`${JSON.stringify(records)}\n`);
+        const fd = journalFs.openSync(path(stream), "a");
+        uncertain = true;
+        try {
+          if (info.tail) journalFs.ftruncateSync(fd, info.end);
+          let offset = 0;
+          while (offset < bytes.length) {
+            const count = journalFs.writeSync(
+              fd,
+              bytes,
+              offset,
+              bytes.length - offset,
+            );
+            if (count === 0) throw new Error("Storage write made no progress");
+            offset += count;
+          }
+        } finally {
+          journalFs.closeSync(fd);
+        }
+        for (const entry of entries) info.rows.push(entry);
+        info.end += bytes.length;
+        info.tail = 0;
+        streams.set(stream, info);
+        return { _tag: "appended", head: info.rows.length, entries };
+      } catch (error) {
+        streams.delete(stream);
+        return refusal(error, "append", uncertain);
+      }
+    },
+    async close() {
+      streams.clear();
+    },
   };
-
-  return makeJournal<R>({
-    read: readEntries,
-    async append(stream, record) {
-      const entries = await readEntries(stream);
-      const entry: JournalEntry<R> = {
-        stream,
-        seq: entries.length + 1,
-        record,
-      };
-      const path = streamPath(stream);
-      const lines = [...entries, entry]
-        .map((e) => JSON.stringify({ seq: e.seq, record: e.record }))
-        .join("\n");
-      await mkdir(dir, { recursive: true });
-      const tmp = `${path}.${process.pid}.tmp`;
-      await writeFile(tmp, `${lines}\n`, "utf8");
-      await rename(tmp, path);
-      return entry;
+  if (options.fenced !== true) return base;
+  return {
+    ...base,
+    fenced: true,
+    async appendFenced(stream, records, expected) {
+      let attempted = false;
+      try {
+        return await withFileLock(dir, `${path(stream)}.lock`, async () => {
+          const head = refresh(stream).rows.length;
+          if (expected !== head)
+            return { _tag: "journal_conflict", expected, head };
+          attempted = true;
+          return base.append(stream, records);
+        });
+      } catch (error) {
+        return refusal(error, "append", attempted);
+      }
     },
-    async lock(stream, fx) {
-      return withFileLock(dir, `${streamPath(stream)}.lock`, fx);
-    },
-  });
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
