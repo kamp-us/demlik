@@ -33,7 +33,11 @@ import { fileURLToPath } from "node:url";
 const pkgDir = dirname(dirname(fileURLToPath(import.meta.url)));
 
 const run = (cmd, args, cwd) =>
-  execFileSync(cmd, args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
+  execFileSync(cmd, args, {
+    cwd,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "inherit"],
+  });
 
 const fail = (msg) => {
   console.error(`verify-optional-peer-install: ${msg}`);
@@ -42,7 +46,8 @@ const fail = (msg) => {
 
 // ── 1. The static-import check, read straight off the built artifact. ────────
 const nodeEntryPath = join(pkgDir, "dist/node/index.js");
-if (!existsSync(nodeEntryPath)) fail(`${nodeEntryPath} missing — run \`pnpm build\` first`);
+if (!existsSync(nodeEntryPath))
+  fail(`${nodeEntryPath} missing — run \`pnpm build\` first`);
 const nodeEntry = readFileSync(nodeEntryPath, "utf8");
 if (/^\s*import\s[^;]*?["']ws["']/m.test(nodeEntry)) {
   fail('dist/node/index.js has a static top-level import of "ws"');
@@ -50,7 +55,8 @@ if (/^\s*import\s[^;]*?["']ws["']/m.test(nodeEntry)) {
 
 // Every built file but the otel subpath must leave `@opentelemetry/api` alone. A
 // shared chunk naming it would pull it into every subpath that loads the chunk.
-const OTEL_API = /from\s*["']@opentelemetry\/api["']|import\s*\(?\s*["']@opentelemetry\/api["']/;
+const OTEL_API =
+  /from\s*["']@opentelemetry\/api["']|import\s*\(?\s*["']@opentelemetry\/api["']/;
 const builtJs = readdirSync(join(pkgDir, "dist"), { recursive: true })
   .map(String)
   .filter((f) => f.endsWith(".js"));
@@ -71,10 +77,16 @@ const work = mkdtempSync(join(tmpdir(), "tea-clean-install-"));
 run("pnpm", ["pack", "--pack-destination", work], pkgDir);
 const tarball = readdirSync(work).find((f) => f.endsWith(".tgz"));
 if (!tarball) fail("pnpm pack produced no tarball");
-const packedManifest = run("tar", ["-xOzf", join(work, tarball), "package/package.json"], work);
+const packedManifest = run(
+  "tar",
+  ["-xOzf", join(work, tarball), "package/package.json"],
+  work,
+);
 const workspaceOnly = packedManifest.match(/"(catalog|workspace):[^"]*"/);
 if (workspaceOnly) {
-  fail(`the packed package.json still carries ${workspaceOnly[0]}; a consumer cannot install it`);
+  fail(
+    `the packed package.json still carries ${workspaceOnly[0]}; a consumer cannot install it`,
+  );
 }
 
 const project = join(work, "consumer");
@@ -87,11 +99,23 @@ writeFileSync(
 // The tutorial's install line, minus the two packages this check does not need
 // to prove anything about. `ws` is an OPTIONAL peer, so npm leaves it out —
 // which is the whole condition under test.
-run("npm", ["install", "--no-audit", "--no-fund", join(work, tarball)], project);
+run(
+  "npm",
+  ["install", "--no-audit", "--no-fund", join(work, tarball)],
+  project,
+);
 
-for (const peer of ["ws", "@opentelemetry/api", "effect"]) {
+for (const peer of [
+  "ws",
+  "@opentelemetry/api",
+  "effect",
+  "fast-check",
+  "vitest",
+]) {
   if (existsSync(join(project, "node_modules", peer))) {
-    fail(`the clean install pulled in \`${peer}\` — the test proves nothing; is it still an optional peer?`);
+    fail(
+      `the clean install pulled in \`${peer}\` — the test proves nothing; is it still an optional peer?`,
+    );
   }
 }
 
@@ -114,8 +138,12 @@ run("node", [probe], project);
 // import (#321). `./testing` and `./testing/promise` need `vitest`, their own
 // optional peer, so it goes in first — and must not bring `effect` with it.
 run("npm", ["install", "--no-audit", "--no-fund", "vitest@^5"], project);
-if (existsSync(join(project, "node_modules", "effect"))) {
-  fail("installing `vitest` pulled in `effect` — the check below proves nothing");
+for (const peer of ["effect", "fast-check"]) {
+  if (existsSync(join(project, "node_modules", peer))) {
+    fail(
+      `installing \`vitest\` pulled in \`${peer}\` — the check below proves nothing`,
+    );
+  }
 }
 const effectFreeProbe = join(project, "probe-effect-free.mjs");
 writeFileSync(
@@ -125,13 +153,49 @@ writeFileSync(
     'import { run } from "@demlik/tea/promise";',
     'import { expectFinalState } from "@demlik/tea/testing";',
     'import { drive } from "@demlik/tea/testing/promise";',
-    'for (const [name, value] of Object.entries({ defineMachine, run, expectFinalState, drive })) {',
+    "for (const [name, value] of Object.entries({ defineMachine, run, expectFinalState, drive })) {",
     '  if (typeof value !== "function") throw new Error(`${name} is not a function`);',
     "}",
     "",
   ].join("\n"),
 );
 run("node", [effectFreeProbe], project);
+console.log(
+  "verify-optional-peer-install: ./testing imports with vitest and without fast-check",
+);
+
+// A separate consumer proves the converse: ./pbt needs fast-check, not vitest.
+const pbtProject = join(work, "pbt-consumer");
+mkdirSync(pbtProject);
+writeFileSync(
+  join(pbtProject, "package.json"),
+  `${JSON.stringify({ name: "tea-pbt-consumer", private: true, type: "module" }, null, 2)}\n`,
+);
+run(
+  "npm",
+  ["install", "--no-audit", "--no-fund", join(work, tarball), "fast-check@^4"],
+  pbtProject,
+);
+for (const peer of ["vitest", "effect"]) {
+  if (existsSync(join(pbtProject, "node_modules", peer))) {
+    fail(
+      `the pbt consumer pulled in \`${peer}\` — the check below proves nothing`,
+    );
+  }
+}
+const pbtProbe = join(pbtProject, "probe-pbt.mjs");
+writeFileSync(
+  pbtProbe,
+  [
+    'import { journalConformance } from "@demlik/tea/pbt";',
+    'if (typeof journalConformance !== "function") throw new Error("journalConformance is not a function");',
+    "",
+  ].join("\n"),
+);
+run("node", [pbtProbe], pbtProject);
+console.log(
+  "verify-optional-peer-install: ./pbt imports with fast-check and without vitest",
+);
 
 // ── 4. With the peer installed, the otel subpath imports. ─────────────────────
 run(
