@@ -64,7 +64,13 @@ function timer<M>(raw: unknown, schema: Schema<M>): Result<LoggedTimer<M>> {
   if (at._tag !== "ok") return at;
   const msg = value(schema, r.msg);
   if (msg._tag !== "ok") return msg;
-  return ok({ id: id.value, subId: subId.value, at: at.value, msg: msg.value, fired: r.fired });
+  return ok({
+    id: id.value,
+    subId: subId.value,
+    at: at.value,
+    msg: msg.value,
+    fired: r.fired,
+  });
 }
 
 function message<M>(
@@ -120,33 +126,58 @@ function record<S, M, C>(
       if (sourceId._tag !== "ok") return sourceId;
       const decoded = work();
       if (decoded._tag !== "ok") return decoded;
-      return ok({ _tag: "applied", sourceId: sourceId.value, ...decoded.value });
+      return ok({
+        _tag: "applied",
+        sourceId: sourceId.value,
+        ...decoded.value,
+      });
     },
     receipt: (): Result<LogRecord<S, M, C>> => {
       const disposition = r.disposition;
-      if (disposition !== "ignored" && disposition !== "rejected") return { _tag: "invalid_disposition" };
-      if (["state", "owed", "timers", "cmds"].some((key) => Object.hasOwn(r, key))) return { _tag: "receipt_carries_work" };
-      const failure = r.failure === undefined ? ok(undefined) : object(r.failure);
+      if (disposition !== "ignored" && disposition !== "rejected")
+        return { _tag: "invalid_disposition" };
+      if (
+        ["state", "owed", "timers", "cmds"].some((key) => Object.hasOwn(r, key))
+      )
+        return { _tag: "receipt_carries_work" };
+      const failure =
+        r.failure === undefined ? ok(undefined) : object(r.failure);
       if (failure._tag !== "ok") return failure;
       const kind = failure.value?.kind;
-      if (failure.value && kind !== "reduce" && kind !== "no_cell") return { _tag: "invalid_failure" };
+      if (failure.value && kind !== "reduce" && kind !== "no_cell")
+        return { _tag: "invalid_failure" };
       const sourceId = identity(r.sourceId);
       if (sourceId._tag !== "ok") return sourceId;
-      if (!failure.value) return ok({ _tag: "receipt", sourceId: sourceId.value, disposition });
+      if (!failure.value)
+        return ok({ _tag: "receipt", sourceId: sourceId.value, disposition });
       const description = identity(failure.value.message);
       if (description._tag !== "ok") return description;
-      return ok({ _tag: "receipt", sourceId: sourceId.value, disposition,
-        failure: { kind: kind as "reduce" | "no_cell", message: description.value } });
+      return ok({
+        _tag: "receipt",
+        sourceId: sourceId.value,
+        disposition,
+        failure: {
+          kind: kind as "reduce" | "no_cell",
+          message: description.value,
+        },
+      });
     },
     confirmed: (): Result<LogRecord<S, M, C>> => {
       const event = object(r.event);
       if (event._tag !== "ok") return event;
-      if (event.value._tag !== "effect_confirmed") return { _tag: "invalid_confirmation" };
+      if (event.value._tag !== "effect_confirmed")
+        return { _tag: "invalid_confirmation" };
       const id = integer(event.value.id, 1);
       if (id._tag !== "ok") return id;
-      return ok({ _tag: "confirmed", event: { _tag: "effect_confirmed", id: id.value } });
+      return ok({
+        _tag: "confirmed",
+        event: { _tag: "effect_confirmed", id: id.value },
+      });
     },
-  } satisfies Record<LogRecord<S, M, C>["_tag"], () => Result<LogRecord<S, M, C>>>;
+  } satisfies Record<
+    LogRecord<S, M, C>["_tag"],
+    () => Result<LogRecord<S, M, C>>
+  >;
   const tag = identity(r._tag);
   if (tag._tag !== "ok") return tag;
   if (!Object.hasOwn(parsers, tag.value)) return { _tag: "unknown_record" };
@@ -172,8 +203,11 @@ export function decodeFrame<S, M, C>(
   if (decoded._tag !== "ok") return decoded;
   const stored = object(raw.value.record);
   if (stored._tag !== "ok") return stored;
-  return ok({ row: { seq: seq.value, record: decoded.value }, storedState: stored.value.state,
-    snapshot: raw.value.snapshot === undefined ? null : raw.value.snapshot });
+  return ok({
+    row: { seq: seq.value, record: decoded.value },
+    storedState: stored.value.state,
+    snapshot: raw.value.snapshot === undefined ? null : raw.value.snapshot,
+  });
 }
 
 export function encodeFrame<S, M, C>(
@@ -182,8 +216,16 @@ export function encodeFrame<S, M, C>(
   checkpointThrough: number | null,
   options: EventSourcedOptions<S, M, C>,
 ): Result<DecodedFrame<S, M, C> & { readonly bytes: string }> {
-  let bytes = JSON.stringify({ protocol: 2, seq, record: entry, snapshot: null });
-  const raw = JSON.parse(bytes) as { readonly record: unknown; snapshot: unknown };
+  let bytes = JSON.stringify({
+    protocol: 2,
+    seq,
+    record: entry,
+    snapshot: null,
+  });
+  const raw = JSON.parse(bytes) as {
+    readonly record: unknown;
+    snapshot: unknown;
+  };
   const stored = object(raw.record);
   if (stored._tag !== "ok") return stored;
   if (checkpointThrough !== null) {
@@ -192,16 +234,25 @@ export function encodeFrame<S, M, C>(
   }
   const decoded = record(stored.value, options);
   if (decoded._tag !== "ok") return decoded;
-  return ok({ bytes, row: { seq, record: decoded.value }, storedState: stored.value.state, snapshot: raw.snapshot });
+  return ok({
+    bytes,
+    row: { seq, record: decoded.value },
+    storedState: stored.value.state,
+    snapshot: raw.snapshot,
+  });
 }
 
 export function decodeCheckpoint(bytes: string): Result<unknown> {
   const raw = object(JSON.parse(bytes));
   if (raw._tag !== "ok") return raw;
-  return raw.value.protocol === 2 ? ok(raw.value.snapshot) : { _tag: "unsupported_checkpoint_protocol" };
+  return raw.value.protocol === 2
+    ? ok(raw.value.snapshot)
+    : { _tag: "unsupported_checkpoint_protocol" };
 }
 
-export function checkpointMetadata(raw: unknown): Result<{ readonly through: number; readonly state: unknown } | null> {
+export function checkpointMetadata(
+  raw: unknown,
+): Result<{ readonly through: number; readonly state: unknown } | null> {
   if (raw === null) return ok(null);
   const r = object(raw);
   if (r._tag !== "ok") return r;
@@ -214,6 +265,12 @@ export function checkpointState<S>(raw: unknown, schema: Schema<S>): Result<S> {
   return value(schema, raw);
 }
 
-export function encodeCheckpoint(through: number, storedState: unknown): string {
-  return JSON.stringify({ protocol: 2, snapshot: { through, state: storedState } });
+export function encodeCheckpoint(
+  through: number,
+  storedState: unknown,
+): string {
+  return JSON.stringify({
+    protocol: 2,
+    snapshot: { through, state: storedState },
+  });
 }
