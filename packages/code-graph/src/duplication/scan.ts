@@ -18,7 +18,7 @@ export function siteOf(unit: SourceUnit, node: SyntaxNode, functionId: string | 
     file: unit.file,
     functionId,
     startLine: unit.syntax.lineOf(node.start),
-    startColumn: node.start - (unit.syntax.lineStarts[unit.syntax.lineOf(node.start) - 1] ?? 0) + 1,
+    startColumn: unit.syntax.startColumn(node),
     endLine: unit.syntax.lineOf(node.end),
     startOffset: node.start,
     endOffset: node.end,

@@ -86,7 +86,7 @@ export function argumentValues(unit: SourceUnit, call: SyntaxNode): ArgumentValu
       kind,
       index,
       line,
-      column: node.start - (unit.syntax.lineStarts[line - 1] ?? 0) + 1,
+      column: unit.syntax.startColumn(node),
     });
   };
   const read = (node: SyntaxNode, index: number): void => {

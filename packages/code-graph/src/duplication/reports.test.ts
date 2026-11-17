@@ -3,8 +3,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { loadCheapProject } from "../extract/project.js";
+import { nodeField } from "../syntax/file.js";
 import { CLONE_FILES, CLUMP_FILES } from "./acceptance.fixture.js";
+import { siteOf } from "./scan.js";
+import { argumentValues } from "./values.js";
 
 const CLI = fileURLToPath(new URL("../index.ts", import.meta.url));
 const roots: string[] = [];
@@ -53,6 +57,60 @@ describe("expression clone reports", () => {
     });
   });
 
+  it("ignores JSX identifiers only when configured", () => {
+    const root = fixture({
+      "a.tsx": "export const first = <Alpha one={x} two={y} three={z} />;",
+      "b.tsx": "export const second = <Beta one={x} two={y} three={z} />;",
+      "c.tsx": "export const third = <Gamma one={x} two={y} three={z} />;",
+      "settings.json": JSON.stringify({ cloneIgnoreIdentifiers: true }),
+    });
+    expect(report(root, "--clones").clones).toEqual([]);
+    const result = report(
+      root,
+      "--clones",
+      "--duplication-config",
+      path.join(root, "settings.json"),
+    );
+    expect(result.clones).toMatchObject([{ nodeCount: 15, fileCount: 3 }]);
+  });
+
+  it("normalizes template text by option and decoded template escapes by default", () => {
+    for (const [texts, settings] of [
+      [["Alpha", "Beta", "Gamma"], { cloneIgnoreLiterals: true }],
+      [["Alpha", String.raw`\u0041lpha`, String.raw`\x41lpha`], {}],
+    ] as const) {
+      const files: Record<string, string> = { "settings.json": JSON.stringify(settings) };
+      for (const [index, text] of texts.entries()) {
+        files[`${index}.ts`] =
+          `export const sample${index} = { kind: \`${text}\`, text: f.text, list: f.list };`;
+      }
+      const root = fixture(files);
+      const result = report(
+        root,
+        "--clones",
+        "--duplication-config",
+        path.join(root, "settings.json"),
+      );
+      expect
+        .soft(result.clones, JSON.stringify(settings))
+        .toMatchObject([{ nodeCount: 15, fileCount: 3 }]);
+    }
+  });
+
+  it("keeps overflow numeric literals distinct from null across three files", () => {
+    const root = fixture({
+      "a.ts": "export const first = { kind: 1e400, text: f.text, list: f.list };",
+      "b.ts": "export const second = { kind: null, text: f.text, list: f.list };",
+      "c.ts": "export const third = { kind: 1e400, text: f.text, list: f.list };",
+    });
+    expect(report(root, "--clones").clones).toEqual([]);
+    fs.writeFileSync(
+      path.join(root, "b.ts"),
+      "export const second = { kind: 10e399, text: f.text, list: f.list };",
+    );
+    expect(report(root, "--clones").clones).toMatchObject([{ nodeCount: 14, fileCount: 3 }]);
+  });
+
   it("ignores tiny expressions and expressions occurring in only two files", () => {
     const root = fixture({
       "a.ts": CLONE_FILES["a.ts"] ?? "",
@@ -62,6 +120,34 @@ describe("expression clone reports", () => {
       "e.ts": "export function fifth() { return { ok: true }; }",
     });
     expect(report(root, "--clones").clones).toEqual([]);
+  });
+});
+
+describe("duplication column ownership", () => {
+  it("uses SyntaxFile columns for sites and argument values with CRLF and UTF-16 text", () => {
+    const root = fixture({ "calls.ts": "/* 😀 */ run(\r\n  value,\r\n  value\r\n);" });
+    const unit = loadCheapProject(root).sourceFiles[0];
+    if (unit === undefined) throw new Error("missing source unit");
+    const statement = unit.syntax.children(unit.syntax.program)[0];
+    if (statement === undefined) throw new Error("missing statement");
+    const call = nodeField(statement, "expression");
+    if (call === null) throw new Error("missing call");
+    const column = vi.spyOn(unit.syntax, "startColumn");
+    try {
+      expect(siteOf(unit, call, null)).toMatchObject({ startLine: 1, startColumn: 10 });
+      expect.soft(column).toHaveBeenCalledWith(call);
+      column.mockClear();
+      expect(argumentValues(unit, call)).toEqual([
+        { value: "value", kind: "name", index: 0, line: 2, column: 3 },
+        { value: "value", kind: "name", index: 1, line: 3, column: 3 },
+      ]);
+      expect(column.mock.calls.map(([node]) => unit.syntax.textOf(node))).toEqual([
+        "value",
+        "value",
+      ]);
+    } finally {
+      column.mockRestore();
+    }
   });
 });
 

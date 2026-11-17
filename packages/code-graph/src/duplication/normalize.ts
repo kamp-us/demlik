@@ -9,25 +9,50 @@ function isNode(value: unknown): value is SyntaxNode {
   return value !== null && typeof value === "object" && "type" in value;
 }
 
+type SemanticReader = (node: SyntaxNode, key: string, settings: DuplicationSettings) => unknown;
+const readIdentifier: SemanticReader = (node, key, settings) =>
+  key === "name" && settings.cloneIgnoreIdentifiers ? "$identifier" : field(node, key);
+const SEMANTIC_READERS: ReadonlyMap<string, SemanticReader> = new Map([
+  ["Identifier", readIdentifier],
+  ["JSXIdentifier", readIdentifier],
+  [
+    "Literal",
+    (node, key, settings) =>
+      settings.cloneIgnoreLiterals && key !== "type"
+        ? key === "value"
+          ? typeof field(node, key)
+          : null
+        : field(node, key),
+  ],
+  [
+    "TemplateElement",
+    (node, key, settings) =>
+      key === "value" && node.type === "TemplateElement"
+        ? settings.cloneIgnoreLiterals
+          ? "string"
+          : node.value.cooked
+        : field(node, key),
+  ],
+]);
+
 function semanticValue(node: SyntaxNode, key: string, settings: DuplicationSettings): unknown {
-  const value = field(node, key);
-  if (node.type === "Identifier" && key === "name" && settings.cloneIgnoreIdentifiers) {
-    return "$identifier";
-  }
-  if (node.type === "Literal" && settings.cloneIgnoreLiterals && key !== "type") {
-    return key === "value" ? typeof value : null;
-  }
-  return value;
+  const read = SEMANTIC_READERS.get(node.type);
+  return read === undefined ? field(node, key) : read(node, key, settings);
 }
+
+const PRIMITIVE_READERS: ReadonlyMap<string, (value: unknown) => unknown> = new Map([
+  ["bigint", String],
+  ["number", (value) => (Number.isFinite(value) ? value : { number: String(value) })],
+]);
 
 export function normalizer(syntax: SyntaxFile, settings: DuplicationSettings) {
   const cache = new Map<SyntaxNode, Fingerprint>();
   const normalizedValue = (value: unknown): unknown => {
     if (isNode(value)) return of(value).key;
     if (Array.isArray(value)) return value.map(normalizedValue);
-    if (typeof value === "bigint") return String(value);
     if (value instanceof RegExp) return String(value);
-    return value;
+    const read = PRIMITIVE_READERS.get(typeof value);
+    return read === undefined ? value : read(value);
   };
   const of = (node: SyntaxNode): Fingerprint => {
     const held = cache.get(node);
