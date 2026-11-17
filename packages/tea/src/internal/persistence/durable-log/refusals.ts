@@ -1,5 +1,6 @@
 /** Stable diagnostics shared by the codec and pure durable-log rules. */
 const messages = {
+  unknown_answer: "Answer id is not owed",
   invalid_object: "Invalid durable log object",
   invalid_integer: "Invalid durable log integer",
   invalid_time: "Invalid durable log time",

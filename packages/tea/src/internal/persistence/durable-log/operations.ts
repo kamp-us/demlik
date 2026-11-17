@@ -9,9 +9,45 @@ import type {
   LogStep,
   PersistedLogRecord,
 } from "../../../runtime-types";
-import { pendingEffectsLedger } from "./durable-effects";
+import { type OwedEffect, pendingEffectsLedger } from "./durable-effects";
 import type { Admission, Birth, Projection, SourceCommit } from "./projection";
 import type { LogRefusal } from "./refusals";
+
+export type AnswerDecision<C> =
+  | { readonly _tag: "owed"; readonly delivery: OwedEffect<C> }
+  | { readonly _tag: "repeat" }
+  | { readonly _tag: "confirm"; readonly id: DeliveryId }
+  | { readonly _tag: "refused"; readonly refusal: LogRefusal };
+
+/** One owner for external answer correlation, before Cmd parsing or writing. */
+export function decideAnswer<C>(
+  owed: readonly OwedEffect<C>[],
+  id: DeliveryId,
+  admitted: LogMessage<unknown> | null,
+): AnswerDecision<C> {
+  const delivery = owed.find((entry) => entry.id === id);
+  const cases = {
+    missing: () =>
+      delivery === undefined
+        ? { _tag: "refused", refusal: { _tag: "unknown_answer" } }
+        : { _tag: "owed", delivery },
+    atomic: () => ({ _tag: "repeat" }),
+    ordinary: () =>
+      delivery === undefined
+        ? { _tag: "repeat" }
+        : { _tag: "confirm", id: delivery.id },
+  } satisfies Record<
+    "missing" | "atomic" | "ordinary",
+    () => AnswerDecision<C>
+  >;
+  return cases[
+    admitted === null
+      ? "missing"
+      : admitted.answerTo === undefined
+        ? "ordinary"
+        : "atomic"
+  ]();
+}
 
 export type Operation<S, M, C> =
   | {
@@ -133,6 +169,11 @@ function appended<S, M, C>(
 }
 
 function cases<S, M, C>(): Table<S, M, C> {
+  const confirmation = (id: DeliveryId): Write<S, M, C> => ({
+    _tag: "append_record",
+    record: { _tag: "confirmed", event: { _tag: "effect_confirmed", id } },
+    checkpointThrough: null,
+  });
   const owe = (p: Projection<S, M, C>, cmds: readonly C[]) => {
     const recorder = pendingEffectsLedger<C>({ lastId: p.high });
     return cmds.map((cmd) => recorder.owe(cmd).event);
@@ -153,7 +194,7 @@ function cases<S, M, C>(): Table<S, M, C> {
     append_message: {
       decide: (p, op) => {
         if (!p.birth) return { _tag: "admission_before_birth" };
-        return [
+        const append = (): Verb<S, M, C> => [
           p,
           op.stored === null
             ? [
@@ -165,10 +206,31 @@ function cases<S, M, C>(): Table<S, M, C> {
               ]
             : [],
         ];
+        if (op.message.answerTo === undefined) return append();
+        const answer = decideAnswer(
+          p.owed,
+          op.message.answerTo,
+          op.stored?.record ?? null,
+        );
+        const outcomes = {
+          owed: append,
+          repeat: () => [p, []],
+          confirm: (result) => [p, [confirmation(result.id)]],
+          refused: (result) => result.refusal,
+        } satisfies {
+          [K in AnswerDecision<C>["_tag"]]: (
+            result: Extract<AnswerDecision<C>, { _tag: K }>,
+          ) => Verb<S, M, C>;
+        };
+        return outcomes[answer._tag](answer as never);
       },
       response: (p, op, stored) => {
         if (op.stored !== null)
-          return { version: p.version, appended: false, entry: op.stored };
+          return {
+            version: stored?.seq ?? p.version,
+            appended: false,
+            entry: op.stored,
+          };
         return appended(stored);
       },
     },
@@ -248,18 +310,7 @@ function cases<S, M, C>(): Table<S, M, C> {
     confirm_effect: {
       decide: (p, op) => [
         p,
-        p.owed.some(({ id }) => id === op.id)
-          ? [
-              {
-                _tag: "append_record",
-                record: {
-                  _tag: "confirmed",
-                  event: { _tag: "effect_confirmed", id: op.id },
-                },
-                checkpointThrough: null,
-              },
-            ]
-          : [],
+        p.owed.some(({ id }) => id === op.id) ? [confirmation(op.id)] : [],
       ],
       response: (p, _op, stored) => ({
         version: stored?.seq ?? p.version,

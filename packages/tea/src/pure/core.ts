@@ -446,8 +446,8 @@ export type SettledErr<Name extends string, C, E extends Tagged> = {
  * the minted Msg builders and the declaration hung on it. `E` here is the
  * DECLARED tag union; the settled `_err` arm widens it by `MalformedResult`.
  *
- * `ok` / `err` mint a settled Msg OUTSIDE the runtime (a `replay` log, a unit
- * test) and take an optional `at`. A handler never calls them: it returns an
+ * `ok` / `err` build a settled Msg for a later `dispatch` with `answerTo`, a
+ * `replay` log, or a unit test, and take an optional `at`. A handler returns an
  * {@link Outcome}, and inside `run` the interpret edge mints and stamps.
  */
 export interface CmdDef<
@@ -552,6 +552,8 @@ export type DispatchCheck = (
 
 /** Both halves of ADR 0021 over one def list: the return edge and the dispatch check. */
 export interface CmdContract {
+  /** Parse a later builder answer against the exact persisted Cmd. */
+  readonly answer: (cmd: { readonly _tag: string }, raw: unknown) => unknown;
   /** The edge a handler's return crosses — see {@link cmdEdgeOver}. */
   readonly settle: CmdEdge;
   /**
@@ -580,6 +582,34 @@ export function cmdContractOver(
   const byType = new Map(list.map((def) => [def.cmdType, def]));
   const minted = new WeakSet<object>();
   return {
+    answer: (cmd, raw) => {
+      if (typeof raw !== "object" || raw === null)
+        throw new Error("Invalid answer");
+      const msg = raw as Record<string, unknown>;
+      const def = byType.get(cmd._tag);
+      if (def === undefined) throw new Error("Answer Cmd must be defined");
+      if (structuralHash(msg.cmd) !== structuralHash(cmd))
+        throw new Error("Answer Cmd mismatch");
+      if (typeof msg.at !== "number" || !Number.isFinite(msg.at))
+        throw new Error("Answer timestamp rejected");
+      const kinds = new Map([
+        [def.okType, "Ok" as const],
+        [def.errType, "Err" as const],
+      ]);
+      const tag =
+        typeof msg._tag === "string" ? kinds.get(msg._tag) : undefined;
+      if (tag === undefined) throw new Error("Answer tag mismatch");
+      const outcomes = {
+        Ok: () => Outcome.ok(msg.value),
+        Err: () => Outcome.err(msg.error),
+      } satisfies Record<
+        Outcome<unknown, unknown>["_tag"],
+        () => Outcome<unknown, unknown>
+      >;
+      const answer = mint(def, cmd, outcomes[tag](), msg.at);
+      if (answer._tag !== msg._tag) throw new Error("Answer value rejected");
+      return answer;
+    },
     settle: (cmd, returned) => {
       const def = byType.get(cmd._tag);
       if (def === undefined) return returned;

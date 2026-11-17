@@ -170,9 +170,14 @@ export function cmdDefinitions<S, M extends { _tag: string }, C>(
   clock: () => number,
 ): AnyExtension<S, M, C> {
   return (loop) => {
-    const { settle, checkDispatch: check } = cmdContractOver(defs, clock);
+    const {
+      settle,
+      checkDispatch: check,
+      answer,
+    } = cmdContractOver(defs, clock);
     const defined = new Set(defs.map((d) => d.cmdType));
     return {
+      answer: (cmd, msg) => answer(cmd as { _tag: string }, msg) as M,
       interpret: (next) => async (cmd, dispatch, failed) => {
         const type = (cmd as { _tag: string })._tag;
         const checked = defined.has(type)

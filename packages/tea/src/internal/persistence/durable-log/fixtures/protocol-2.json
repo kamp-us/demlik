@@ -1,0 +1,8 @@
+{
+  "writer": "d87f2d8f",
+  "frames": [
+    "{\"protocol\":2,\"seq\":1,\"record\":{\"_tag\":\"birth\",\"at\":0,\"state\":{\"n\":0},\"owed\":[],\"timers\":[]},\"snapshot\":null}",
+    "{\"protocol\":2,\"seq\":2,\"record\":{\"_tag\":\"message\",\"id\":\"old-source\",\"at\":1,\"msg\":{\"_tag\":\"go\",\"n\":3}},\"snapshot\":null}",
+    "{\"protocol\":2,\"seq\":3,\"record\":{\"_tag\":\"applied\",\"sourceId\":\"old-source\",\"state\":{\"n\":3},\"owed\":[{\"_tag\":\"effect_owed\",\"id\":1,\"effect\":{\"_tag\":\"work\",\"n\":3}}],\"timers\":[]},\"snapshot\":null}"
+  ]
+}

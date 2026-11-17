@@ -251,8 +251,29 @@ Use the [executable handler recipe](https://github.com/kamp-us/demlik/blob/main/
    Close the journal; this invocation has ended without producing a result Msg.
 3. On a later activation, the handler receives each surviving Cmd with the same
    id. The external receiver uses that id to ignore an already accepted handoff.
+4. In the call that receives the worker's reply, use that Cmd's `ok(cmd, value, at)`
+   or `err(cmd, declaredError, at)` builder. Dispatch the built Msg with
+   `{ answerTo: id }`. Do not combine `answerTo` with a caller `id`.
+5. Await dispatch and `stop()`, read the surviving ledger, and close the journal.
+   The answer's admission also confirms the delivery in one write. A wake after
+   admission replays an unfinished answer and never re-hands that Cmd.
+
+The same [executable recipe](https://github.com/kamp-us/demlik/blob/main/packages/tea/src/docs/how-to/make-durable.test.ts)
+has an `external-answer` region. It answers on the third closed call and verifies
+that the fourth call has the result without another handoff.
 
 `owed()` requires a logged invocation; otherwise the existing interpret error
 sink reports the refusal. On Effect, succeed with `owed()` after enqueueing.
-Until later-answer support lands, only the store's existing `confirmEffect(id)`
-clears an entry left owed this way.
+For a new answer, `dispatch(msg, { answerTo: id })` clears the owed entry with
+its admission atomically. Repeats of an atomic answer, including different payloads,
+write nothing.
+If an ordinary canonical handler reply was admitted before a crash left its delivery
+owed, that first reply stands: the later call writes one confirmation record and
+does not fold another reply. Unknown ids and malformed new answers are refused
+before writing; corrected new answers may retry on the same activation. An ordinary
+caller `id` deduplicates input and does not confirm a delivery.
+
+Answer-bearing log frames use protocol 3 and require this reader. Ordinary frames
+and checkpoints stay on protocol 2. Protocol-2 messages keep their previous meaning:
+an extra field named `answerTo` is ignored. Protocol-3 message frames require a
+positive safe-integer `answerTo`; older readers refuse these frames.

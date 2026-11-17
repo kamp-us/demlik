@@ -9,6 +9,7 @@ import type {
 } from "../../../runtime-types";
 import {
   applyEffectEvent,
+  type EffectConfirmed,
   type EffectLedgerEvent,
   emptyLedger,
   foldLedger,
@@ -217,6 +218,10 @@ export function fold<S, M, C>(
     if (after.has(event.id)) draft.owed.set(event.id, after.get(event.id) as C);
     else draft.owed.delete(event.id);
   };
+  const confirm = (event: EffectConfirmed): undefined | LogRefusal => {
+    if (!draft.owed.has(event.id)) return { _tag: "invalid_delivery_receipt" };
+    ledger(event);
+  };
   const install = (
     record: Extract<LogRecord<S, M, C>, { _tag: "birth" | "applied" }>,
     storedState: unknown,
@@ -256,6 +261,11 @@ export function fold<S, M, C>(
       first: false,
       fold: (input) => {
         if (input.stored !== null) return { _tag: "duplicate_source" };
+        const answerTo = input.row.record.answerTo;
+        if (answerTo !== undefined) {
+          const refusal = confirm({ _tag: "effect_confirmed", id: answerTo });
+          if (refusal) return refusal;
+        }
         draft.pending.push(input.row);
       },
     },
@@ -274,11 +284,7 @@ export function fold<S, M, C>(
     },
     confirmed: {
       first: false,
-      fold: (input) => {
-        if (!draft.owed.has(input.row.record.event.id))
-          return { _tag: "invalid_delivery_receipt" };
-        ledger(input.row.record.event);
-      },
+      fold: (input) => confirm(input.row.record.event),
     },
   } satisfies Table satisfies Record<Tag, Table[Tag]>;
   for (const input of inputs) {

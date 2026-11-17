@@ -777,6 +777,8 @@ export interface LogMessage<M> {
   readonly id: string;
   readonly at: number;
   readonly msg: M;
+  /** This admitted answer also confirms the named delivery, in the same write. */
+  readonly answerTo?: DeliveryId;
 }
 /** The durable result of consuming a message. */
 export type LogDisposition = "applied" | "ignored" | "rejected";
@@ -1034,6 +1036,8 @@ export type DispatchSettle = "quiescent" | "once";
 export interface DispatchOptions {
   readonly settle?: DispatchSettle;
   readonly id?: string;
+  /** Answer a logged Cmd with its own builder; cannot be combined with `id`. */
+  readonly answerTo?: DeliveryId;
 }
 
 // === RuntimeRef<M>: typed sibling-runtime handle ===

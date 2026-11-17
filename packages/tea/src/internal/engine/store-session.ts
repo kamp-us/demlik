@@ -1,6 +1,8 @@
 /** Serialized logged-store mutations owned by one engine activation. */
+import type { DeliveryId } from "../../pure/core";
 import type { LoggedStore, Store } from "../../runtime-types";
 import { isLoggedStore, StoreRefusedError } from "../../runtime-types";
+import { deliveryIsOwed } from "../persistence/durable-log/format";
 
 /** A failed durable mutation, carried to the engine edge with its original cause. */
 export class LogWriteFailure {
@@ -17,6 +19,15 @@ export function storeSession<S, M, C>(
   let tail: Promise<unknown> = Promise.resolve();
   let failed: LogWriteFailure | undefined;
   return {
+    async owes(id: DeliveryId) {
+      try {
+        return await deliveryIsOwed(logged, id);
+      } catch (cause) {
+        throw new StoreRefusedError("durable ledger could not be read", {
+          cause,
+        });
+      }
+    },
     async read() {
       try {
         return await logged.readLog();
