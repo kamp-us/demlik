@@ -63,7 +63,7 @@ const decoders = {
 } satisfies Record<string, (v: unknown) => unknown>;
 type DecoderName = keyof typeof decoders;
 
-function optionsFor(decoder: DecoderName, snapshotEvery: number) {
+export function optionsFor(decoder: DecoderName, snapshotEvery: number) {
   const value = z.unknown().transform(decoders[decoder]);
   return {
     state: z.object({ value, count: z.number() }),
@@ -109,7 +109,7 @@ const value = fc.oneof(
   fc.jsonValue().map((v) => () => v as unknown),
   special,
 );
-const op: fc.Arbitrary<Op | { op: "set" | "ignored"; make: () => unknown }> =
+export const op: fc.Arbitrary<Op | { op: "set" | "ignored"; make: () => unknown }> =
   fc.oneof(
     {
       weight: 5,
