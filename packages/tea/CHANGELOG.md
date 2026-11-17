@@ -1,5 +1,27 @@
 # @demlik/tea
 
+## 0.30.0
+
+### Minor Changes
+
+- 5e74f38: **Additive (declaration only):** `DispatchOptions.answerTo?: DeliveryId` opts a later Cmd-builder answer into atomically confirming that delivery with its admission. Repeats of an atomic answer write nothing. If an ordinary canonical reply was admitted before a crash left its delivery owed, the first reply stands and the later call writes one existing confirmation record without folding another reply. Unknown ids and malformed new answers are refused before writing; corrected new answers may retry in the same activation. `answerTo` requires a log store and cannot be combined with caller `id`.
+
+  The optional `LogMessage.answerTo` receipt uses protocol 3 when present. Ordinary frames and checkpoints remain protocol 2. Protocol-2 messages retain their previous meaning: any extra field named `answerTo` is ignored. Protocol-3 message frames require a positive safe-integer `answerTo` and the new reader; older readers refuse them. The journal and its drivers are unchanged.
+
+- fd7b297: **Additive (declaration only):** Defined-Cmd handlers may return the standalone `owed()` marker: Promise handlers accept `Outcome<Ok, E> | Owed | void`, and Effect handlers succeed with `Ok | Owed`. A handler you already wrote compiles unchanged, and `Outcome` is unchanged. **Breaking (types only):** code that calls a typed handler itself and annotates the result with the old return type (`Outcome<Ok, E> | void`, or `Effect<Ok, E, R>`) must add `| Owed`; nothing changes at run time. Export `Owed` and `owed` alongside `Outcome`, and expose `logLedger` at the root for reading surviving deliveries.
+
+  Returning `owed()` opts a logged invocation into ending without a Msg or automatic confirmation; later activations re-hand the same Cmd with the same delivery id. Without a log store it reports an interpret error. The marker stays in-process.
+
+- f0a5a8d: Publish the experimental `journalConformance` runner with `JournalKitFixture`,
+  `JournalKitFactory`, `KitResult`, `KitCase` and `KitOptions` from `@demlik/tea/pbt`.
+  Host authors can check their own journal drivers against K1–K8 with fast-check
+  alone, read each case's result, and replay generated failures. The Vitest wrapper
+  remains internal and `@demlik/tea/testing` still loads without fast-check.
+
+### Patch Changes
+
+- 898e329: Settle completed shutdown waits without leaving their losing timer Promises pending. Document per-call hosts that retain absolute deadlines in State and return the next wake time to the host. Unfinished Promise handlers still follow the existing bounded-stop contract.
+
 ## 0.29.0
 
 ### Minor Changes
