@@ -919,6 +919,8 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
   async function runDeliveries(owed: readonly OwedEffect<C>[]): Promise<void> {
     for (const { id, effect } of owed) {
       if (gate === "abandoned" || session?.poisoned() || storeClosed) return;
+      if (!session || !(await session.owes(id))) continue;
+      if (!canCompleteDelivery()) return;
       const own: Invocation = {
         id,
         failed: false,

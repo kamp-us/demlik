@@ -11,6 +11,10 @@ import {
   type JournalAppend,
   memoryJournal,
 } from "../journal";
+import {
+  type DeliveryLedgerReader,
+  readDeliveryLedger,
+} from "./durable-log/format";
 import { createLogStore } from "./log-store";
 
 declare const storageBrand: unique symbol;
@@ -362,7 +366,10 @@ export function durableLog<S, M extends { _tag: string }, C extends Cmd>(
     }
     return live;
   };
-  const store: LoggedStore<S, M, C> = {
+  const store: LoggedStore<S, M, C> & DeliveryLedgerReader<C> = {
+    [readDeliveryLedger]() {
+      return current().store[readDeliveryLedger]();
+    },
     logged: true,
     async load() {
       return current().store.load();

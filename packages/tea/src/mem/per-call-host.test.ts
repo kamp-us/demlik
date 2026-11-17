@@ -64,13 +64,15 @@ const bootJob: JobBoot = async (store, handle, errors) => {
 
 owedHostTests("promise", bootJob);
 
-const bootAnswer: AnswerBoot = async (store, handle, reject) => {
-  const host = await run(answerMachine(reject), {
+const bootAnswer: AnswerBoot = async (store, handle, reject, beforeReady) => {
+  const booting = run(answerMachine(reject), {
     store,
     interpret: { job: handle },
     subscribe: { deadline: subscribeWith(() => () => {}) },
     onError: () => {},
-  }).ready;
+  });
+  await beforeReady?.(booting);
+  const host = await booting.ready;
   return {
     dispatch: (msg, options) => host.dispatch(msg, options),
     getState: () => host.getState(),

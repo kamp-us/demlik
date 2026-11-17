@@ -32,6 +32,10 @@ import {
 } from "./durable-log/codec";
 
 import {
+  type DeliveryLedgerReader,
+  readDeliveryLedger,
+} from "./durable-log/format";
+import {
   decide,
   type Operation,
   response,
@@ -400,7 +404,13 @@ export function createLogStore<S, M extends { _tag: string }, C extends Cmd>(
     }
   };
 
-  const store: LoggedStore<S, M, C> = {
+  const store: LoggedStore<S, M, C> & DeliveryLedgerReader<C> = {
+    [readDeliveryLedger]() {
+      return serial(async () => {
+        await read();
+        return new Map(projection.owed.map(({ id, effect }) => [id, effect]));
+      });
+    },
     logged: true,
     load() {
       return serial(async () => {

@@ -132,7 +132,7 @@ const bootJob: JobBoot = async (store, handle, errors) => {
 
 owedHostTests("effect", bootJob);
 
-const bootAnswer: AnswerBoot = async (store, handle, reject) => {
+const bootAnswer: AnswerBoot = async (store, handle, reject, beforeReady) => {
   const scope = Scope.makeUnsafe();
   const booting = await settle(
     run(answerMachine(reject), {
@@ -154,7 +154,12 @@ const bootAnswer: AnswerBoot = async (store, handle, reject) => {
       subscribe: { deadline: () => Stream.empty },
     }).pipe(Scope.provide(scope)),
   );
-  const host = await settle(booting.ready).catch(async (error) => {
+  const host = await (async () => {
+    await beforeReady?.({
+      dispatch: (msg, options) => settle(booting.dispatch(msg, options)),
+    });
+    return settle(booting.ready);
+  })().catch(async (error) => {
     await settle(Scope.close(scope, Exit.void));
     throw error;
   });

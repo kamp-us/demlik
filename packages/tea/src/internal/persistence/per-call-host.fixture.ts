@@ -33,6 +33,7 @@ import {
   deadlinesSub,
 } from "../../resilience";
 import type { Journal } from "../journal";
+import { readDeliveryLedger } from "./durable-log/format";
 
 const state = z.object({
   steps: z.array(z.number()),
@@ -369,16 +370,18 @@ export const answerStore = (journal: Journal) =>
     ]),
     command: jobCommand,
   });
-export type AnswerBoot = (
-  store: ReturnType<typeof answerStore> | undefined,
-  handle: JobHandler,
-  reject?: boolean,
-) => Promise<{
+type AnswerHost = {
   dispatch(msg: AnswerMsg, options?: DispatchOptions): Promise<void>;
   stop(): Promise<void>;
   getState(): AnswerState;
   live(): { subs: number; cmds: number };
-}>;
+};
+export type AnswerBoot = (
+  store: ReturnType<typeof answerStore> | undefined,
+  handle: JobHandler,
+  reject?: boolean,
+  beforeReady?: (host: Pick<AnswerHost, "dispatch">) => Promise<void>,
+) => Promise<AnswerHost>;
 
 export function answerHostTests(
   engine: "promise" | "effect",
@@ -388,6 +391,99 @@ export function answerHostTests(
     `${engine}: later answers are delivery receipts`,
     { timeout: 30_000 },
     () => {
+      it.each(
+        [true, false].flatMap((answerAdmitted) =>
+          [true, false].map((liveLedger) => ({ answerAdmitted, liveLedger })),
+        ),
+      )("F1: checks the ledger before each wake hand-out (%j)", async ({
+        answerAdmitted,
+        liveLedger,
+      }) => {
+        const journal = memoryJournal();
+        const store = answerStore(journal);
+        const initial = await boot(store, async () => owed());
+        await initial.dispatch({ _tag: "start", value: 1 });
+        await initial.dispatch({ _tag: "start", value: 2 });
+        await initial.stop();
+        const deliveries = logLedger(await store.readLog()).surviving();
+        expect(deliveries.map(({ id }) => id)).toEqual([1, 2]);
+        const second = deliveries[1];
+        if (!second) throw new Error("missing second delivery");
+        let release!: () => void;
+        let entered!: () => void;
+        let acknowledge!: () => void;
+        const paused = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        const started = new Promise<void>((resolve) => {
+          entered = resolve;
+        });
+        const admitted = new Promise<void>((resolve) => {
+          acknowledge = resolve;
+        });
+        const wakeStore = answerStore(journal);
+        const observing: typeof wakeStore = {
+          ...wakeStore,
+          appendMessage: async (message) => {
+            const result = await wakeStore.appendMessage(message);
+            if (message.answerTo === second.id) acknowledge();
+            return result;
+          },
+        };
+        if (!liveLedger) Reflect.deleteProperty(observing, readDeliveryLedger);
+        const seen: number[] = [];
+        let wake: AnswerHost | undefined;
+        try {
+          wake = await boot(
+            observing,
+            async (_cmd, ctx) => {
+              const id = deliveryIdOf(ctx);
+              if (id === undefined) throw new Error("missing delivery id");
+              seen.push(id);
+              if (id === 1) {
+                entered();
+                await paused;
+              }
+              return owed();
+            },
+            false,
+            async (booting) => {
+              await started;
+              let sending: Promise<void> | undefined;
+              try {
+                if (answerAdmitted) {
+                  sending = booting.dispatch(job.ok(second.effect, 20, 1), {
+                    answerTo: second.id,
+                  });
+                  await admitted;
+                  expect(
+                    logLedger(await wakeStore.readLog())
+                      .surviving()
+                      .map(({ id }) => id),
+                  ).toEqual([1]);
+                }
+              } finally {
+                release();
+              }
+              await sending;
+            },
+          );
+          expect(seen.filter((id) => id === 2)).toEqual(
+            answerAdmitted ? [] : [2],
+          );
+          expect(logLedger(await wakeStore.readLog()).surviving()).toEqual(
+            answerAdmitted ? deliveries.slice(0, 1) : deliveries,
+          );
+          expect(wake.getState().answers).toEqual(
+            answerAdmitted ? ["ok:2:20"] : [],
+          );
+        } finally {
+          release();
+          await wake?.stop();
+          await journal.close();
+        }
+      });
+
       it.each([
         "memory",
         "file",

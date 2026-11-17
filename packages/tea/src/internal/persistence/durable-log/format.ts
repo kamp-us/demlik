@@ -1,7 +1,38 @@
 /** The neutral log identities and engine queries. */
-import type { LogMessage, LogRead, LogRecord } from "../../../runtime-types";
-import type { EffectLedgerEvent, EffectOwed } from "./durable-effects";
-import { pendingEffectsLedger } from "./durable-effects";
+import type { DeliveryId } from "../../../pure/core";
+import type {
+  LoggedStore,
+  LogMessage,
+  LogRead,
+  LogRecord,
+} from "../../../runtime-types";
+import type {
+  EffectLedgerEvent,
+  EffectOwed,
+  PendingEffectsLedger,
+} from "./durable-effects";
+import { isOwed, pendingEffectsLedger } from "./durable-effects";
+
+/** Internal query of the store's existing live ledger, without copying history. */
+export const readDeliveryLedger: unique symbol = Symbol(
+  "tea.readDeliveryLedger",
+);
+export type DeliveryLedgerReader<C> = {
+  readonly [readDeliveryLedger]: () => Promise<PendingEffectsLedger<C>>;
+};
+
+/** Custom stores can supply only the public log capability. */
+export async function deliveryIsOwed<S, M, C>(
+  store: LoggedStore<S, M, C> & Partial<DeliveryLedgerReader<C>>,
+  id: DeliveryId,
+): Promise<boolean> {
+  const read = store[readDeliveryLedger];
+  const ledger =
+    read === undefined
+      ? logLedger(await store.readLog()).ledger()
+      : await read.call(store);
+  return isOwed(ledger, id);
+}
 
 type Cases<R extends { _tag: string }, T> = {
   [K in R["_tag"]]: (record: Extract<R, { _tag: K }>) => T;
