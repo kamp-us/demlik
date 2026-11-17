@@ -212,3 +212,29 @@ precondition you keep yourself; see
 
 For the full agent version (snapshot mid-pipeline, drop the runtime, resume and
 finish across stages), see the `agent-resilient-and-durable` example.
+
+## 5. End each call and return the next alarm
+
+Use the [executable per-call recipe](https://github.com/kamp-us/demlik/blob/main/packages/tea/src/docs/how-to/make-durable.test.ts)
+(the `per-call` region) when the host destroys its activation between calls:
+
+1. Keep absolute deadlines in State. Give the feature one `deadlinesFor` selector,
+   and use it in both `deadlinesSub(deadlinesFor)` and the host.
+2. Open a fresh journal handle over the same retained storage for every call.
+   Boot on `eventSourcedStore`. The recipe's `subscribeWith(() => () => {})`
+   backing starts no in-isolate timer because the host owns the external alarm.
+3. Select deadlines due at the host's current epoch time, and send their existing
+   `deadlineExceeded(id, atMs)` messages with stable caller ids. Send the call's
+   inputs and await each dispatch at its default quiescent settlement.
+4. Await `stop()`, read the earliest absolute `atMs` from
+   `deadlinesFor(rt.getState())`, and close the journal handle. Set the platform's
+   external alarm to that returned instant, or clear it for `null`. The activation
+   can now end. On a wake, repeat with a fresh handle and the current time.
+
+The recipe runs against a real file journal: one call schedules a reminder,
+a second preserves the same absolute deadline, and later calls fire it once.
+The host sets its platform alarm outside tea; the next deadline comes from
+State, not the log's `timers` field.
+
+A Promise handler that has not finished can keep running after `stop()` returns;
+tea drops its late result ([ADR 0025](https://github.com/kamp-us/demlik/blob/main/.decisions/0025-stop-gives-up-on-handlers.md)).

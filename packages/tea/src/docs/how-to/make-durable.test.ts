@@ -13,11 +13,13 @@
 // pin import blocks the page reproduces verbatim; sorting the harness's imports
 // into them would move a marker and break the row this file backs.
 
+import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { downloader, type State } from "../../../examples/downloader";
+import { fileJournal } from "../../node";
 
 /** The file step 4 fences: this run's own, never the page's default. */
 const dir = await mkdtemp(join(tmpdir(), "tea-make-durable-"));
@@ -100,6 +102,91 @@ try {
 }
 // #endregion guard
 
+// #region per-call
+// A host that ends its activation after each call retains the journal's storage.
+import { z } from "zod";
+import { defineMachine } from "../../index";
+import { eventSourcedStore, type Journal } from "../../persistence";
+import {
+  type DeadlinesSub,
+  deadlineExceeded,
+  deadlinesSub,
+  deadlineSub,
+  subscribeWith,
+} from "../../resilience";
+
+const alarmState = z.object({
+  due: z.number().nullable(),
+  fired: z.array(z.number()),
+});
+const alarmMessage = z.discriminatedUnion("_tag", [
+  z.object({ _tag: z.literal("schedule"), atMs: z.number() }),
+  z.object({
+    _tag: z.literal("deadline_exceeded"),
+    id: z.string(),
+    atMs: z.number(),
+  }),
+]);
+type AlarmState = z.infer<typeof alarmState>;
+type AlarmMessage = z.infer<typeof alarmMessage>;
+
+// The feature owns this selector; its Sub and the host both read it.
+const deadlinesFor = (s: AlarmState) =>
+  s.due === null ? [] : [deadlineSub("reminder", s.due)];
+const reminder = defineMachine({
+  types: {
+    model: {} as AlarmState,
+    msg: {} as AlarmMessage,
+    sub: {} as DeadlinesSub,
+  },
+  init: (loaded) => [loaded ?? { due: null, fired: [] }, []],
+  update: {
+    schedule: (s, m) => [{ ...s, due: m.atMs }, []],
+    deadline_exceeded: (s, m) => [
+      { due: null, fired: [...s.fired, m.atMs] },
+      [],
+    ],
+  },
+  subs: [deadlinesSub(deadlinesFor)],
+});
+
+async function call(
+  journal: Journal,
+  inputs: readonly { msg: AlarmMessage; id: string }[],
+  now: number,
+): Promise<number | null> {
+  try {
+    const rt = await run(reminder, {
+      store: eventSourcedStore(journal, {
+        state: alarmState,
+        message: alarmMessage,
+        command: z.never(),
+      }),
+      // No in-isolate timer: after stop, the host sets its external alarm.
+      subscribe: { deadline: subscribeWith(() => () => {}) },
+    }).ready;
+    try {
+      for (const d of deadlinesFor(rt.getState()).filter(
+        (d) => d.atMs <= now,
+      )) {
+        await rt.dispatch(deadlineExceeded(d.id, d.atMs), {
+          id: `alarm:${d.id}:${d.atMs}`,
+        });
+      }
+      for (const { msg, id } of inputs) await rt.dispatch(msg, { id });
+    } finally {
+      await rt.stop();
+    }
+    return deadlinesFor(rt.getState()).reduce<number | null>(
+      (next, d) => (next === null ? d.atMs : Math.min(next, d.atMs)),
+      null,
+    );
+  } finally {
+    await journal.close();
+  }
+}
+// #endregion per-call
+
 afterAll(async () => {
   // `first` is not stopped here: the refused save already stopped it.
   await b.stop();
@@ -108,6 +195,30 @@ afterAll(async () => {
 });
 
 describe("docs/how-to/make-durable.md — it runs", () => {
+  it("reads an absolute next deadline across closed calls, then delivers the host's wake once", async () => {
+    const path = join(dir, "reminders");
+    const next = await call(
+      fileJournal(path),
+      [{ msg: { _tag: "schedule", atMs: 12_345 }, id: "request-1" }],
+      10_000,
+    );
+    assert.equal(next, 12_345);
+    assert.equal(await call(fileJournal(path), [], 11_000), next);
+    assert.equal(await call(fileJournal(path), [], 12_345), null);
+    assert.equal(await call(fileJournal(path), [], 12_345), null);
+    const journal = fileJournal(path);
+    try {
+      const saved = await eventSourcedStore(journal, {
+        state: alarmState,
+        message: alarmMessage,
+        command: z.never(),
+      }).load();
+      assert.deepEqual(saved, { due: null, fired: [12_345] });
+    } finally {
+      await journal.close();
+    }
+  });
+
   it("step 2 saves through the Store on every dispatch", () => {
     expect(box.snapshot).not.toBeNull();
     expect(a.getState()).toEqual({
