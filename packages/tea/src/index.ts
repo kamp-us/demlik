@@ -14,7 +14,10 @@
 // either one.
 export * from "./compose";
 export * from "./internal/persistence/durable-log/durable-effects";
-export { logUpdates } from "./internal/persistence/durable-log/format";
+export {
+  logLedger,
+  logUpdates,
+} from "./internal/persistence/durable-log/format";
 export * from "./internal/persistence/durable-log/idempotent-effect";
 export * from "./observability";
 // `./pure` and `./subs` are no longer subpaths of their own (#51): the closing
@@ -50,6 +53,7 @@ export type {
   OkOf,
   OkOfCmd,
   OutcomeHelpers,
+  Owed,
   Port,
   PortEmitter,
   Reducer,
@@ -101,6 +105,7 @@ export {
   NoCellError,
   Outcome,
   OutcomeContractError,
+  owed,
   structuralHash,
   subId,
   subIdOf,

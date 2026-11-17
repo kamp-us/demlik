@@ -8,7 +8,20 @@ import {
 } from "node:timers/promises";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { defineMachine, type LoggedStore, type TimerSub } from "../../index";
+import {
+  Cmd,
+  defineMachine,
+  deliveryIdOf,
+  type InterpretCell,
+  type LoggedStore,
+  logLedger,
+  type NoCtx,
+  Outcome,
+  type OwedEffect,
+  owed,
+  type Settled,
+  type TimerSub,
+} from "../../index";
 import { memoryJournal } from "../../mem";
 import { fileJournal } from "../../node";
 import { eventSourcedStore } from "../../persistence";
@@ -203,8 +216,251 @@ async function storage(driver: "memory" | "file") {
   };
 }
 
+const jobInput = z.object({ value: z.number() });
+const jobOk = z.union([
+  z.number(),
+  z.object({ _tag: z.literal("Owed") }),
+  z.void(),
+]);
+export const job = Cmd.define("job", {
+  input: jobInput,
+  ok: jobOk,
+  err: ["unavailable"],
+});
+export type Job = ReturnType<typeof job>;
+type JobMsg =
+  | { readonly _tag: "start"; readonly value: number }
+  | Settled<typeof job>;
+const jobState = z.object({
+  started: z.array(z.number()),
+  settled: z.array(z.string()),
+});
+type JobState = z.infer<typeof jobState>;
+const jobCommand = z.object({
+  _tag: z.literal(job.cmdType),
+  ...jobInput.shape,
+});
+const jobMessage = z.discriminatedUnion("_tag", [
+  z.object({ _tag: z.literal("start"), ...jobInput.shape }),
+  z.object({
+    _tag: z.literal(job.okType),
+    cmd: jobCommand,
+    value: jobOk,
+    at: z.number(),
+  }),
+  z.object({
+    _tag: z.literal(job.errType),
+    cmd: jobCommand,
+    at: z.number(),
+    error: z.object({ _tag: z.enum(["unavailable", "malformed_result"]) }),
+  }),
+]);
+export const jobStore = (journal: Journal) =>
+  eventSourcedStore(journal, {
+    state: jobState,
+    message: jobMessage,
+    command: jobCommand,
+  });
+export const jobMachine = () =>
+  defineMachine({
+    types: {
+      model: {} as JobState,
+      msg: {} as { readonly _tag: "start"; readonly value: number },
+    },
+    cmds: [job],
+    init: (loaded) => [loaded ?? { started: [], settled: [] }, []],
+    update: {
+      start: (s, m) => [
+        { ...s, started: [...s.started, m.value] },
+        [job({ value: m.value })],
+      ],
+      job_ok: (s, m) => [
+        { ...s, settled: [...s.settled, `ok:${m.cmd.value}`] },
+        [],
+      ],
+      job_err: (s, m) => [{ ...s, settled: [...s.settled, m.error._tag] }, []],
+    },
+  });
+export type JobHandler = InterpretCell<JobMsg, Job, NoCtx>;
+export type JobBoot = (
+  store: ReturnType<typeof jobStore> | undefined,
+  handle: JobHandler,
+  errors?: { error: unknown; phase: string }[],
+) => Promise<{
+  dispatch(msg: JobMsg): Promise<void>;
+  stop(): Promise<void>;
+  getState(): JobState;
+  live(): { subs: number; cmds: number };
+}>;
+
+export function owedHostTests(engine: "promise" | "effect", boot: JobBoot) {
+  describe(`${engine}: hand work back as data`, () => {
+    it.each([
+      "memory",
+      "file",
+    ] as const)("20 calls retain owed jobs on %s", async (driver) => {
+      const disk = await storage(driver);
+      let surviving: readonly OwedEffect<Job>[] = [];
+      let repeats = 0;
+      let handedBack = 0;
+      try {
+        for (let call = 0; call < 20; call += 1) {
+          const before = surviving;
+          const seen: OwedEffect<Job>[] = [];
+          const errors: { error: unknown; phase: string }[] = [];
+          const sample = await measured(async () => {
+            const journal = disk.open();
+            const store = jobStore(journal);
+            const host = await boot(
+              store,
+              async (cmd, ctx) => {
+                const id = deliveryIdOf(ctx);
+                expect(id).toBeTypeOf("number");
+                if (id === undefined) throw new Error("missing delivery id");
+                const delivery = { id, effect: cmd };
+                seen.push(delivery);
+                if (cmd.value % 4 === 0) return owed();
+                return Outcome.ok(cmd.value);
+              },
+              errors,
+            );
+            try {
+              expect(seen).toEqual(before);
+              repeats += seen.length;
+              await host.dispatch({ _tag: "start", value: call });
+              expect(seen.slice(0, -1)).toEqual(before);
+              expect(seen.at(-1)?.effect).toEqual(job({ value: call }));
+              const latest = seen.at(-1);
+              expect(latest).toBeDefined();
+              if (call % 4 === 0 && latest) {
+                surviving = [...before, latest];
+                handedBack += 1;
+              }
+              await host.stop();
+              expect(host.live()).toEqual({ subs: 0, cmds: 0 });
+              expect(logLedger(await store.readLog()).surviving()).toEqual(
+                surviving,
+              );
+              expect(host.getState()).toEqual({
+                started: Array.from({ length: call + 1 }, (_, i) => i),
+                settled: Array.from({ length: call + 1 }, (_, i) => i)
+                  .filter((i) => i % 4 !== 0)
+                  .map((i) => `ok:${i}`),
+              });
+              expect(errors).toEqual([]);
+            } finally {
+              await host.stop();
+              await journal.close();
+            }
+          });
+          expect(sample.resources, `call ${call}`).toEqual(emptyResources);
+          if (engine === "effect")
+            expect(sample.startedFibers).toBeGreaterThan(0);
+        }
+        expect(disk.closed()).toBe(20);
+        expect(handedBack).toBe(5);
+        expect(repeats).toBe(55);
+        expect(new Set(surviving.map(({ id }) => id)).size).toBe(5);
+      } finally {
+        await disk.remove();
+      }
+    });
+
+    it.each([
+      ["Ok", Outcome.ok(7), ["ok:7"]],
+      ["Err", Outcome.err({ _tag: "unavailable" as const }), ["unavailable"]],
+      ["an Owed-shaped Ok", Outcome.ok({ _tag: "Owed" as const }), ["ok:7"]],
+    ] as const)("confirms %s and never re-hands it", async (_name, answer, settled) => {
+      const journal = memoryJournal();
+      const errors: { error: unknown; phase: string }[] = [];
+      let calls = 0;
+      const handle: JobHandler = async () => {
+        calls += 1;
+        return answer;
+      };
+      const store = jobStore(journal);
+      const host = await boot(store, handle, errors);
+      try {
+        await host.dispatch({ _tag: "start", value: 7 });
+        await host.stop();
+        expect(host.getState().settled).toEqual(settled);
+        expect(logLedger(await store.readLog()).surviving()).toEqual([]);
+        const wake = await boot(jobStore(journal), handle, errors);
+        await wake.stop();
+        expect(calls).toBe(1);
+        expect(errors).toEqual([]);
+      } finally {
+        await host.stop();
+        await journal.close();
+      }
+    });
+
+    it("refuses owed without a log through the interpret error sink", async () => {
+      const errors: { error: unknown; phase: string }[] = [];
+      const host = await boot(undefined, async () => owed(), errors);
+      try {
+        await host.dispatch({ _tag: "start", value: 1 });
+        expect(host.getState().settled).toEqual([]);
+        expect(errors).toHaveLength(1);
+        expect(errors[0]?.phase).toBe("interpret");
+        expect(errors[0]?.error).toEqual(
+          new Error("Owed requires a logged invocation"),
+        );
+      } finally {
+        await host.stop();
+      }
+    });
+
+    it("clears a handed-back entry only through the store's existing confirmation", async () => {
+      const journal = memoryJournal();
+      const store = jobStore(journal);
+      const host = await boot(store, async () => owed());
+      try {
+        await host.dispatch({ _tag: "start", value: 1 });
+        await host.stop();
+        const pending = logLedger(await store.readLog()).surviving();
+        expect(pending).toHaveLength(1);
+        const entry = pending[0];
+        if (!entry) throw new Error("missing owed delivery");
+        await store.confirmEffect(entry.id);
+        const wake = await boot(jobStore(journal), async () => {
+          throw new Error("confirmed work repeated");
+        });
+        await wake.stop();
+        expect(logLedger(await store.readLog()).surviving()).toEqual([]);
+      } finally {
+        await host.stop();
+        await journal.close();
+      }
+    });
+  });
+}
+
 export function perCallHostTests(engine: "promise" | "effect", boot: Boot) {
   describe(`${engine}: a completed activation ends`, () => {
+    it("confirms a void return without a Msg and never re-hands it", async () => {
+      const journal = memoryJournal();
+      const store = storeFor(journal);
+      let calls = 0;
+      const handle = async () => {
+        calls += 1;
+        return undefined;
+      };
+      const host = await boot(store, { handle });
+      try {
+        await host.dispatch({ _tag: "step", call: 1, part: 0 });
+        await host.stop();
+        expect(host.getState().completed).toEqual([]);
+        expect(logLedger(await store.readLog()).surviving()).toEqual([]);
+        const wake = await boot(storeFor(journal), { handle });
+        await wake.stop();
+        expect(calls).toBe(1);
+      } finally {
+        await host.stop();
+        await journal.close();
+      }
+    });
+
     it.each([
       "memory",
       "file",

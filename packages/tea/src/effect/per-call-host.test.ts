@@ -4,8 +4,12 @@ import { type LiveWorkProbe, liveWork } from "../internal/engine/loop";
 import {
   type Boot,
   complete,
+  type JobBoot,
+  type JobHandler,
+  jobMachine,
   machine,
   observeFiber,
+  owedHostTests,
   perCallHostTests,
 } from "../internal/persistence/per-call-host.fixture";
 import { run } from "./index";
@@ -89,3 +93,38 @@ const boot: Boot = async (store, options = {}) => {
 };
 
 perCallHostTests("effect", boot);
+
+const bootJob: JobBoot = async (store, handle, errors) => {
+  const scope = Scope.makeUnsafe();
+  const booting = await settle(
+    run(jobMachine(), {
+      store,
+      onError: (error, { phase }) => errors?.push({ error, phase }),
+      interpret: {
+        job: (cmd, ctx) =>
+          Effect.promise(() =>
+            handle(cmd, ctx as Parameters<JobHandler>[1]),
+          ).pipe(
+            Effect.flatMap((answer) => {
+              if (answer === undefined) return Effect.void;
+              if (answer._tag === "Ok") return Effect.succeed(answer.value);
+              if (answer._tag === "Err") return Effect.fail(answer.error);
+              return Effect.succeed(answer);
+            }),
+          ),
+      },
+    }).pipe(Scope.provide(scope)),
+  );
+  const host = await settle(booting.ready);
+  return {
+    dispatch: (msg) => settle(host.dispatch(msg)),
+    getState: () => host.getState(),
+    stop: async () => {
+      await settle(host.stop());
+      await settle(Scope.close(scope, Exit.void));
+    },
+    live: () => (host as typeof host & LiveWorkProbe)[liveWork](),
+  };
+};
+
+owedHostTests("effect", bootJob);

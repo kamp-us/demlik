@@ -168,6 +168,21 @@ export type Outcome<Ok, E> =
   | { readonly _tag: "Ok"; readonly value: Ok }
   | { readonly _tag: "Err"; readonly error: E };
 
+const owedBrand: unique symbol = Symbol("tea.owed");
+
+/** A logged Cmd handed to an external owner without completing its delivery. */
+export type Owed = { readonly _tag: "Owed"; readonly [owedBrand]: true };
+
+const owedReturn: Owed = Object.freeze({
+  _tag: "Owed",
+  [owedBrand]: true as const,
+});
+
+/** End this logged invocation without a Msg or automatic delivery confirmation. */
+export function owed(): Owed {
+  return owedReturn;
+}
+
 /**
  * The two builders the Promise engine hands a `Cmd.define`d handler on its
  * ctx: `ok(value)` and `err({ _tag })`, with `err` typed to the def's declared
@@ -2034,7 +2049,7 @@ export type InterpretCell<M extends { _tag: string }, C extends Cmd, Ctx> =
         ctx: HandlerCtx<Ctx> & OutcomeHelpers<OkOfCmd<C>, DeclaredErrorsOf<C>>,
         dispatch?: (msg: M) => void,
         // biome-ignore lint/suspicious/noConfusingVoidType: as above — a no-return body is legal
-      ) => Promise<Outcome<OkOfCmd<C>, DeclaredErrorsOf<C>> | void>;
+      ) => Promise<Outcome<OkOfCmd<C>, DeclaredErrorsOf<C>> | Owed | void>;
 
 /** The value a Cmd settles with; `unknown` for a hand-written Cmd. */
 export type OkOfCmd<C> = C extends { readonly __ok?: infer Ok } ? Ok : unknown;
