@@ -1,5 +1,86 @@
 # @demlik/tea
 
+## 0.28.0
+
+### Minor Changes
+
+- ac7869f: The package now ships its `docs/` beside `dist`, so an installed copy holds the
+  tutorials, how-tos, reference, explanations and the glossary. A page's links to
+  the repo's decision records, patterns, examples and source are GitHub URLs,
+  since the tarball holds none of those files.
+
+  New how-to, "Find a wrong machine with a law": it finds an order machine that
+  charges the wrong amount with `arbSchemaGuidedSequence`, `foldEvents` and
+  `lawTrace` from `@demlik/tea/testing/effect`. `arbSchemaGuidedSequence` and
+  `lawTrace` stay `@experimental`; `foldEvents` keeps the stable promise of the
+  subpath. The glossary gains `law`, and an `Avoid:` line on `subpath` (door) and
+  `battery` (battery layer). No export, subpath or tier changes.
+
+- 409a63e: **Breaking:** `Machine.make` on `@demlik/tea/effect` refuses two `msg` declarations it used to accept, so a machine that compiled before can be refused. Each refusal is a compile error on the `msg` line. A plain Msg whose tag is a settled Msg name of a listed Cmd, such as `fetch_file_ok` beside the Cmd `fetch_file`, put two different Msgs in one update cell; the error names each such tag, and the fix is to rename the Msg. A Msg whose tag is not a literal (`Schema.String`, or a `Schema.TemplateLiteral`) made the update table accept any cell name, so a misspelled cell compiled and failed only when a Msg reached it; the error says every tag must be a literal, and the fix is to give the Msg a `Schema.Literal` tag. A Msg named like its Cmd without the suffix (`fetch_file` beside `fetch_file`) is still accepted. `make` keeps its one signature.
+- 1b30788: The property-test entries now refuse a machine that lists two Cmds under one name, as `defineMachine`, `run` and `drive` already do. A machine written as a plain object, or a built one spread with a new `cmds`, can still carry such a list. `arbSchemaGuidedSequence` accepted it and answered every waiting Cmd of that name from the schema of the one listed last, so a law was judged on answers the machine could never receive and nothing said so. Now `arbSchemaGuidedSequence`, `arbGuidedSequence`, `propertyTerminates`, `propertyInvariant` and `propertyTrace` throw `CmdNameCollisionError`, naming the Cmd, before they draw or fold a list. It is a thrown breach, not a failed `Result` like `NoCmdsError`. Give each Cmd its own name, and list a def once.
+- f0392ad: **Breaking (experimental):** replace `fileJournal<R>(dir, parse)` with the calls below.
+
+  The new `fileJournal(dir)` call takes opaque Unicode text from its callers instead of a record-parser argument.
+  The unfenced file journal takes no lock (it used to lock every append), so one writer per stream is the caller's precondition.
+  `fileJournal(dir, { fenced: true })` gives the checked append, `appendFenced(stream, [encoded], expectedHead)`, under the existing `wx` stream lock.
+
+  Append a nonempty batch with `append(stream, [encoded])` and use its acknowledged
+  stored entries. Use `read(stream, after)` in place of `list(stream)`. Refusals are
+  tagged data; a lost expected head is `journal_conflict`, and an unavailable lock
+  is `journal_io` for `append` with `uncertain: false` and the lock's clear step.
+  The listener and caller lock methods are removed.
+
+  Stream file names changed to lowercase UTF-8 byte escapes, keeping letter case and Unicode normalization forms distinct on every volume.
+
+  File appends add one complete batch frame instead of rewriting history. The file
+  format changes from `{ seq, record }` lines to arrays of encoded strings, one
+  batch per line; existing files need migration. Reads preserve an incomplete
+  tail, and the next append repairs it. The contract, memory driver, optional
+  memory fencing and shared conformance kit stay internal.
+
+- 7a0ace3: Add `LoggedStore`, the neutral log declarations and `logUpdates`, plus
+  `memoryEventSourcedStore` over a caller-owned serialized Map. Logged runs save
+  messages before reduction, commit State and owed work atomically, initialize
+  once at birth, and recover committed State and stable delivery IDs on wake.
+  The durable ledger and receiver helpers are also available from the root;
+  existing `/do` imports continue to work.
+
+  **Additive (declaration only):** dispatch and dispatchOnce accept an optional
+  caller `id`, and Effect handlers accept an optional invocation context for
+  `deliveryIdOf`. Stores without a log retain their existing lifecycle and
+  save-failure behavior. This slice adds no fenced, file or Durable Object log
+  adapter and persists no timer decisions.
+
+  Append individual records through an incremental projection instead of rewriting
+  and revalidating history, and retain detached contract failures as owed work.
+  With a log store, the program sees Msg, State and Cmd values as the store
+  decoded them, both live and after wake.
+  An ignored or rejected message saves a receipt, without rewriting State.
+
+- f3e786e: A machine that lists two Cmds under one name is now refused, and the error names the Cmd. Until now the one listed last silently replaced the other, so a handler that returned the right answer saw it settle as `malformed_result`, far from the cause. `defineMachine` (and `Machine.make` on `@demlik/tea/effect`, which calls it) throws the new `CmdNameCollisionError` when the machine is built. A machine written as a plain object meets the same refusal when `run` or `drive` starts it, on both engines. The same def listed twice is refused too. `CmdNameCollisionError` is exported from `@demlik/tea`, carries `_tag` and the repeated `cmdType`, and is a thrown breach like `PortNameCollisionError`; give each Cmd its own name, or list a def once.
+
+  `toolRouter` on `@demlik/tea/agent` now throws the same `CmdNameCollisionError` for two tools with one name, in place of its own plain `Error`.
+
+- e328d1e: **Breaking:** the key that names a variant is `_tag`, where it was `type`. Every Msg, Cmd, Sub, State and semantic event carries `_tag`, and the core constraint is `{ _tag: string }`.
+
+  It is the key Effect uses, so a `Machine.make` whose `msg` is a `Schema.TaggedUnion` now compiles, and `Schema.TaggedStruct`, `Match.tag` and `Data.TaggedEnum` fit a tea Msg as they are.
+
+  ```ts
+  // before
+  type Msg = { type: "inc" } | { type: "add"; by: number };
+  if (msg.type === "add") count += msg.by;
+
+  // after
+  type Msg = { _tag: "inc" } | { _tag: "add"; by: number };
+  if (msg._tag === "add") count += msg.by;
+  ```
+
+  Rename the key where you write a Msg, a Cmd, a Sub or a State and where you read one. A cell of `update` keeps its name. A content part of an agent message (`{ type: "text", text }`) and a Jev question keep `type`.
+
+  There is no alias, and nothing reads both keys. tea also converts nothing an older release saved. Section 17 of the migrate guide says what each kind of save does and where to rename the key if you need to keep one.
+
+- d7c89d5: `matchesIdentity` answers whether the engine would let a message through a machine's identity filter or drop it. Hosts that step a machine themselves call it before `applyCell` to enforce the same rule as `run`.
+
 ## 0.27.0
 
 ### Minor Changes
