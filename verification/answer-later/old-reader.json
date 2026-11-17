@@ -1,0 +1,7 @@
+{
+  "writer": "d87f2d8f",
+  "answer": "{\"protocol\":3,\"seq\":4,\"record\":{\"_tag\":\"message\",\"id\":\"[\\\"answer\\\",1,0]\",\"at\":2,\"msg\":{\"_tag\":\"go\",\"n\":7},\"answerTo\":1},\"snapshot\":null}",
+  "oldReader": {
+    "_tag": "unsupported_log_protocol"
+  }
+}

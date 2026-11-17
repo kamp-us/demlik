@@ -1,0 +1,17 @@
+
+ RUN  v5.0.1 /Users/cansirin/Documents/development/demlik/.worktrees/answer-later/packages/tea
+
+(node:53751) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:54134) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:57633) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:57727) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ Test Files  63 passed (63)
+      Tests  1387 passed (1387)
+   Start at  03:15:21
+   Duration  85.94s (tests 89%, import 7%, setup 3%, transform 1%, environment 1%)
+

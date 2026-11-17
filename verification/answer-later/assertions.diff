@@ -1,0 +1,96 @@
++      expect(stillOwed).toEqual([]);
++      expect(rt.getState().settled).toEqual(["report-ready"]);
++    expect(wake.getState().settled).toEqual(["report-ready"]);
++    expect(handed).toHaveLength(3);
++    expect(decideAnswer(owed, id, admitted)).toEqual(expected);
++    expect(decideAnswer(owed, id, admitted)).toEqual(expected);
++    expect(decide(before, op, { snapshotEvery: 1 })).toEqual([
++    expect(
++    await expect(
++    expect(storedLog(disk).frames).toHaveLength(size);
++    expect(first.appended).toBe(true);
++    expect(storedLog(disk).frames).toHaveLength(size + 1);
++    expect(live.inspect().projection.owed).toEqual([]);
++    expect(pendingMessages(await live.store.readLog())).toEqual([answer]);
++    expect(logLedger(await live.store.readLog()).surviving()).toEqual([]);
++    expect(duplicate.appended).toBe(false);
++    expect(duplicate.entry).toEqual(first.entry);
++    expect(storedLog(disk).frames).toHaveLength(size + 1);
++    expect(live.inspect().projection).toEqual(
++    expect(
++    expect(p.pending).toEqual([]);
++    expect(p.owed).toEqual([]);
++    expect(await live.store.load()).toEqual({ n: 3 });
++    expect(logLedger(await live.store.readLog()).surviving()).toEqual([
++    expect(storedLog(disk).frames).toEqual(legacy.frames);
++      expect(frame._tag).toBe("ok");
++      expect(frame.value.row.record).toEqual(JSON.parse(bytes).record);
++      expect(
++      expect(JSON.parse(encoded.value.bytes).protocol).toBe(protocol);
++      expect(decodeFrame(encoded.value.bytes, options)).toMatchObject({
++    expect(
++    expect(
++    expect(decodeFrame(bytes, options)).toEqual({ _tag: "invalid_integer" });
++    expect(logLedger(await live.store.readLog()).surviving()).toEqual([
++    expect((await live.store.confirmEffect(1)).confirmed).toBe(true);
++    expect((await live.store.confirmEffect(1)).confirmed).toBe(false);
++    expect(logLedger(await live.store.readLog()).surviving()).toEqual([]);
++                expect(
++                expect(seen).toEqual(before);
++                if (last) expect(host.getState()).toEqual(last);
++                expect(host.live()).toEqual({ subs: 0, cmds: 0 });
++                expect(logLedger(await store.readLog()).surviving()).toEqual(
++            expect(sample.resources, `call ${call}`).toEqual(emptyResources);
++              expect(sample.startedFibers).toBeGreaterThan(0);
++          expect(disk.closed()).toBe(50);
++          expect(handoffs).toBe(9);
++          expect(repeats).toBe(25);
++          expect(answered.size).toBe(9);
++          expect(pending.size).toBe(0);
++          expect(last).toEqual({
++            expect(control.getState()).toEqual(last);
++            expect(logLedger(await controlStore.readLog()).surviving()).toEqual(
++          await expect(
++          expect(await store.readLog()).toEqual(before);
++          expect(host.getState().answers).toEqual(["ok:7:1"]);
++          expect(logLedger(await store.readLog()).surviving()).toEqual([]);
++          expect(messages).toHaveLength(1);
++          expect(
++          expect(await store.readLog()).toEqual(admitted);
++          expect(host.getState().answers).toEqual(["ok:7:1"]);
++            expect(await store.readLog()).toEqual(admitted);
++            expect(wake.getState().answers).toEqual(["ok:7:1"]);
++            expect(handed).toBe(1);
++          await expect(
++          expect(await store.readLog()).toEqual(before);
++          expect(host.getState().answers).toEqual([]);
++          expect(host.getState().answers).toEqual(["ok:1:2"]);
++          expect(logLedger(await store.readLog()).surviving()).toEqual([]);
++          expect(host.getState().answers).toEqual(["ok:1:10"]);
++          expect(host.getState().calls).toEqual([1]);
++          expect(messages).toEqual(["start", "job_ok", "tick"]);
++          expect(first.effect).toEqual(second.effect);
++          expect(first.id).not.toBe(second.id);
++          expect(logLedger(await store.readLog()).surviving()).toEqual(entries);
++          expect(logLedger(await store.readLog()).surviving()).toEqual([first]);
++          expect(logLedger(await store.readLog()).surviving()).toEqual([]);
++          expect(host.getState().answers).toEqual([
++          await expect(
++          expect(await store.readLog()).toEqual(before);
++          await expect(
++          expect(plain.getState().calls).toEqual([]);
++          expect(plain.getState().calls).toEqual([0]);
++          expect(host.getState().calls).toEqual([0]);
++          await expect(
++          expect(await store.readLog()).toEqual(before);
++          expect(logLedger(await store.readLog()).surviving()).toEqual([]);
++          await expect(
++          expect(interrupted.getState().answers).toEqual([]);
++          expect(
++            await expect(waking).rejects.toThrow("answer reducer rejected");
++            expect(wake.getState().answers).toEqual(["ok:8:80"]);
++          expect(calls).toBe(0);
++          expect(log.records.at(-1)?.record).toMatchObject(
++          expect(again.getState().answers).toEqual(reject ? [] : ["ok:8:80"]);
++    expect(violations(`packages/tea/src/${file}`, source)).toEqual(expected);
++    expect(found).toEqual([]);
