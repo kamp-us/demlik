@@ -12,21 +12,21 @@ import { … } from "@demlik/tea/mem";
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
-| [`memoryEventSourcedStore`](#memoryEventSourcedStore) | Function | stable | Build a single-writer durable log over caller-owned serialized memory. |
+| [`memoryJournal`](#memoryJournal) | Variable | experimental | Store opaque journal text in process memory, with explicit opt-in fencing. |
 | [`memoryStore`](#memoryStore) | Function | stable | Build an in-memory `Store<S>`. |
 | [`MemoryStoreOptions`](#MemoryStoreOptions) | Interface | stable | Options for memoryStore. |
 
 ## Declarations
 
-<a id="memoryEventSourcedStore"></a>
+<a id="memoryJournal"></a>
 
-### `memoryEventSourcedStore`
+### `memoryJournal`
 
 ```ts
-function memoryEventSourcedStore<S, M extends { _tag: string }, C extends Cmd>(
-  backing: Map<string, string>,
-  options: EventSourcedOptions<S, M, C>,
-): LoggedStore<S, M, C>
+const memoryJournal: {
+  (options: { readonly fenced: true }): FencedJournal;
+  (options?: { readonly fenced?: false }): Journal;
+}
 ```
 
 <a id="memoryStore"></a>

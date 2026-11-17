@@ -1,13 +1,25 @@
-/** Memory's storage cache and synchronous write interpreter. */
-import type { Cmd } from "../../../pure/core";
+/** Journal I/O boundary for the pure durable-log rules. */
+
+import type { Cmd } from "../../pure/core";
 import {
   type EventSourcedOptions,
+  type FencedStore,
   type LoggedStore,
   type LogRecord,
   type LogStep,
   type PersistedLogRecord,
+  StoreConflictError,
   schemaMigrate,
-} from "../../../runtime-types";
+} from "../../runtime-types";
+import type {
+  FencedJournal,
+  Journal,
+  JournalAppend,
+  JournalConflict,
+  JournalEntry,
+  JournalRead,
+  JournalRefusal,
+} from "../journal";
 import {
   type CheckpointMetadata,
   checkpointState,
@@ -17,9 +29,14 @@ import {
   encodeCheckpoint,
   encodeFrame,
   integer,
-} from "./codec";
-import { logKey } from "./format";
-import { decide, type Operation, response, type Write } from "./operations";
+} from "./durable-log/codec";
+
+import {
+  decide,
+  type Operation,
+  response,
+  type Write,
+} from "./durable-log/operations";
 import {
   type Admission,
   type Birth,
@@ -32,17 +49,17 @@ import {
   installCheckpoint,
   type Projection,
   type SourceCommit,
-} from "./projection";
+} from "./durable-log/projection";
 import {
   isRefusal,
   type LogRefusal,
   type Result,
   refusalMessage,
-} from "./refusals";
+} from "./durable-log/refusals";
 
-export function memoryLog<S, M extends { _tag: string }, C extends Cmd>(
-  backing: Map<string, string>,
-  options: EventSourcedOptions<S, M, C>,
+export function createLogStore<S, M extends { _tag: string }, C extends Cmd>(
+  journal: Journal,
+  options: EventSourcedOptions<S, M, C> & { readonly fenced?: boolean },
 ) {
   type Row = PersistedLogRecord<LogRecord<S, M, C>>;
   type SourcePlace = {
@@ -60,14 +77,26 @@ export function memoryLog<S, M extends { _tag: string }, C extends Cmd>(
     places: new Map(),
     appliedCount: 0,
   });
-  const key = logKey(options.key);
+  const key = JSON.stringify([options.key ?? "default", "log"]);
+  const checkpointKey = JSON.stringify([
+    options.key ?? "default",
+    "checkpoint",
+  ]);
   const every = options.snapshotEvery ?? 100;
   if (!Number.isSafeInteger(every) || every < 1)
     throw new Error("snapshotEvery must be a positive safe integer");
   let projection: Projection<S, M, C> = emptyProjection();
   let readModel = emptyModel();
-  let root: string | undefined;
-  let checkpointBytes: string | undefined;
+  let checkpointHead = 0;
+  let checkpointText: string | undefined;
+  let expected: number | undefined;
+  let expectedCheckpoint: number | undefined;
+  let tail: Promise<unknown> = Promise.resolve();
+  const serial = <T>(use: () => Promise<T>): Promise<T> => {
+    const next = tail.then(use);
+    tail = next.catch(() => {});
+    return next;
+  };
   let loaded = false;
 
   const requireValue = <T>(result: Result<T>): T => {
@@ -171,49 +200,56 @@ export function memoryLog<S, M extends { _tag: string }, C extends Cmd>(
       installCheckpoint(projection, checkpoint, boundary),
     );
   };
-  const read = (): void => {
+  const edge = (refusal: JournalRefusal | JournalConflict): never => {
+    if (refusal._tag === "journal_conflict") {
+      const error = new StoreConflictError(refusal.expected, refusal.head);
+      Object.assign(error, { cause: refusal, uncertain: false });
+      throw error;
+    }
+    throw new Error(refusal.message, { cause: refusal });
+  };
+  const accept = (entries: readonly JournalEntry[]): void => {
+    function* inputs(): Generator<FoldInput<S, M, C> | LogRefusal> {
+      for (const entry of entries) {
+        const frame = decodeFrame(entry.record, options);
+        if (frame._tag !== "ok") {
+          yield frame;
+          return;
+        }
+        if (frame.value.row.seq !== entry.seq) {
+          yield { _tag: "invalid_ordering" };
+          return;
+        }
+        yield add(frame.value);
+      }
+    }
+    apply(inputs());
+  };
+  const reset = (): void => {
+    projection = emptyProjection();
+    readModel = emptyModel();
+    checkpointHead = 0;
+    checkpointText = undefined;
+    loaded = true;
+  };
+  const read = async (): Promise<void> => {
+    if (loaded) return;
     try {
-      const current = backing.get(key);
-      let initial: string | undefined;
-      if (!loaded || current !== root) {
-        projection = emptyProjection();
-        readModel = emptyModel();
-        root = current;
-        checkpointBytes = undefined;
-        loaded = true;
-        initial = current;
-        if (initial === undefined && backing.has(`${key}/2`))
-          throw new Error("Durable log is missing its birth");
+      reset();
+      const current = await journal.read(key, projection.version);
+      if (current._tag !== "read") edge(current);
+      const read = current as JournalRead;
+      expected = read.head;
+      accept(read.entries);
+      const checkpoint = await journal.read(checkpointKey, checkpointHead);
+      if (checkpoint._tag !== "read") edge(checkpoint);
+      const saved = checkpoint as JournalRead;
+      expectedCheckpoint = saved.head;
+      for (const entry of saved.entries) {
+        acceptCheckpoint(entry.record);
+        checkpointText = entry.record;
       }
-      function* inputs(): Generator<FoldInput<S, M, C> | LogRefusal> {
-        let next = projection.version + 1;
-        if (initial !== undefined) {
-          const frame = decodeFrame(initial, options);
-          if (frame._tag !== "ok") {
-            yield frame;
-            return;
-          }
-          yield add(frame.value);
-          next = 2;
-        }
-        for (;;) {
-          const bytes = backing.get(`${key}/${next}`);
-          if (bytes === undefined) break;
-          const frame = decodeFrame(bytes, options);
-          if (frame._tag !== "ok") {
-            yield frame;
-            return;
-          }
-          yield add(frame.value);
-          next += 1;
-        }
-      }
-      apply(inputs());
-      const saved = backing.get(`${key}/checkpoint`);
-      if (saved !== checkpointBytes) {
-        if (saved !== undefined) acceptCheckpoint(saved);
-        checkpointBytes = saved;
-      }
+      checkpointHead = saved.head;
     } catch (error) {
       loaded = false;
       throw error;
@@ -267,10 +303,10 @@ export function memoryLog<S, M extends { _tag: string }, C extends Cmd>(
     } satisfies Cases;
     return facts[input._tag](input as never);
   };
-  const mutate = <K extends Input["_tag"]>(
+  const mutate = async <K extends Input["_tag"]>(
     input: Input & { readonly _tag: K },
   ) => {
-    read();
+    await read();
     const before = projection;
     const op = operation(input) as Operation<S, M, C> & { readonly _tag: K };
     const [, writes] = requireVerb(
@@ -283,14 +319,16 @@ export function memoryLog<S, M extends { _tag: string }, C extends Cmd>(
       );
     let prepared: ReturnType<typeof prepareResponse> | undefined;
     let writeStarted = false;
-    const persist = (suffix: string, bytes: string): void => {
-      writeStarted = true;
-      backing.set(key + suffix, bytes);
+    type Plan = {
+      readonly stream: string;
+      readonly bytes: string;
+      readonly expected: number;
+      readonly acknowledge: (ack: JournalAppend) => void;
     };
     const interpreters = {
       append_record: (
         write: Extract<Write<S, M, C>, { _tag: "append_record" }>,
-      ) => {
+      ): Plan => {
         const frame = requireValue(
           encodeFrame(
             write.record,
@@ -299,70 +337,153 @@ export function memoryLog<S, M extends { _tag: string }, C extends Cmd>(
             options,
           ),
         );
-        stored = frame.row;
-        // A native response-clone failure must leave storage untouched.
-        prepared = prepareResponse(stored);
-        persist(stored.seq === 1 ? "" : `/${stored.seq}`, frame.bytes);
-        apply([add(frame)]);
-        if (stored.seq === 1) root = frame.bytes;
+        prepared = prepareResponse(frame.row);
+        return {
+          stream: key,
+          bytes: frame.bytes,
+          expected: expected ?? 0,
+          acknowledge(ack) {
+            expected = ack.head;
+            accept(ack.entries);
+            stored = readModel.records.at(-1) ?? null;
+            prepared = undefined;
+          },
+        };
       },
       write_checkpoint: (
         write: Extract<Write<S, M, C>, { _tag: "write_checkpoint" }>,
-      ) => {
-        const bytes = encodeCheckpoint(write.through, write.storedState);
-        persist("/checkpoint", bytes);
-        acceptCheckpoint(bytes);
-        checkpointBytes = bytes;
-      },
-    } satisfies {
-      [K in Write<S, M, C>["_tag"]]: (
-        write: Extract<Write<S, M, C>, { _tag: K }>,
-      ) => void;
-    };
+      ): Plan => ({
+        stream: checkpointKey,
+        bytes: encodeCheckpoint(write.through, write.storedState),
+        expected: expectedCheckpoint ?? 0,
+        acknowledge(ack) {
+          expectedCheckpoint = ack.head;
+          for (const entry of ack.entries) {
+            acceptCheckpoint(entry.record);
+            checkpointText = entry.record;
+          }
+          checkpointHead = ack.head;
+        },
+      }),
+    } satisfies Record<Write<S, M, C>["_tag"], (write: never) => Plan>;
+
     try {
-      for (const write of writes) interpreters[write._tag](write as never);
+      const plans = writes.map((write) =>
+        interpreters[write._tag](write as never),
+      );
+      const first = plans[0];
+      if (first) {
+        // Current pure verbs produce at most one write; the batch remains the unit of I/O.
+        if (plans.some((plan) => plan.stream !== first.stream))
+          throw new Error("Write crosses streams");
+        const batch: [string, ...string[]] = [
+          first.bytes,
+          ...plans.slice(1).map((plan) => plan.bytes),
+        ];
+        writeStarted = true;
+        const ack =
+          options.fenced === true
+            ? await (journal as FencedJournal).appendFenced(
+                first.stream,
+                batch,
+                first.expected,
+              )
+            : await journal.append(first.stream, batch);
+        if (ack._tag !== "appended") edge(ack);
+        if (ack._tag !== "appended") throw new Error("unreachable");
+        first.acknowledge(ack);
+      }
       return prepared ?? prepareResponse(stored);
     } catch (error) {
       if (writeStarted) loaded = false;
       throw error;
     }
   };
+
   const store: LoggedStore<S, M, C> = {
     logged: true,
-    async load() {
-      read();
-      return structuredClone(projection.state);
+    load() {
+      return serial(async () => {
+        await read();
+        return structuredClone(projection.state);
+      });
     },
     async save() {
       throw new Error("Logged State can only change through commitStep");
     },
     migrate: schemaMigrate(options.state),
-    async readLog() {
-      read();
-      return structuredClone({
-        version: projection.version,
-        records: readModel.records,
-        snapshot: projection.snapshot,
-        timers: projection.timers,
+    readLog() {
+      return serial(async () => {
+        await read();
+        return structuredClone({
+          version: projection.version,
+          records: readModel.records,
+          snapshot: projection.snapshot,
+          timers: projection.timers,
+        });
       });
     },
     async appendMessage(message) {
-      return mutate({ _tag: "append_message", message });
+      return serial(() => mutate({ _tag: "append_message", message }));
     },
     async commitStep(step) {
-      return mutate(step);
+      return serial(() => mutate(step));
     },
     async confirmEffect(id) {
-      return mutate({ _tag: "confirm_effect", id });
+      return serial(() => mutate({ _tag: "confirm_effect", id }));
     },
     async checkpoint() {
-      return mutate({ _tag: "checkpoint" });
+      return serial(() => mutate({ _tag: "checkpoint" }));
     },
   };
   return {
-    store,
-    inspect: () => {
-      read();
+    store:
+      options.fenced === true
+        ? Object.assign(store, {
+            fenced: true as const,
+            loadFenced() {
+              return serial(async () => {
+                await read();
+                return {
+                  raw: structuredClone(projection.state),
+                  version: projection.version,
+                };
+              });
+            },
+            async saveFenced() {
+              throw new Error(
+                "Logged State can only change through commitStep",
+              );
+            },
+          })
+        : store,
+    // Trusted synchronous fixture inspection shares this decoder and index, never a second reader.
+    inspect: (seed?: {
+      entries: readonly JournalEntry[];
+      checkpoint?: string;
+      checkpointHead?: number;
+    }) => {
+      if (seed) {
+        const rebuilding = !loaded;
+        try {
+          if (rebuilding) reset();
+          accept(
+            seed.entries.filter((entry) => entry.seq > projection.version),
+          );
+          if (seed.checkpoint && seed.checkpoint !== checkpointText) {
+            acceptCheckpoint(seed.checkpoint);
+            checkpointText = seed.checkpoint;
+          }
+          checkpointHead = seed.checkpointHead ?? 0;
+          if (rebuilding) {
+            expected = projection.version;
+            expectedCheckpoint = checkpointHead;
+          }
+        } catch (error) {
+          loaded = false;
+          throw error;
+        }
+      }
       return structuredClone({ projection, readModel }) as {
         readonly projection: Projection<S, M, C>;
         readonly readModel: {
@@ -373,4 +494,28 @@ export function memoryLog<S, M extends { _tag: string }, C extends Cmd>(
       };
     },
   };
+}
+
+/**
+ * Plain journal-backed stores require one active writer per stream throughout the loaded activation; concurrent plain writers can corrupt history.
+ *
+ * Build an engine-facing durable log from opaque journal storage and schemas.
+ * Opt into fencing explicitly with a FencedJournal and `{ fenced: true }`.
+ * The caller owns the journal and closes it after the activation ends.
+ *
+ * @experimental
+ */
+export function eventSourcedStore<S, M extends { _tag: string }, C extends Cmd>(
+  journal: FencedJournal,
+  options: EventSourcedOptions<S, M, C> & { readonly fenced: true },
+): LoggedStore<S, M, C> & FencedStore<S>;
+export function eventSourcedStore<S, M extends { _tag: string }, C extends Cmd>(
+  journal: Journal,
+  options: EventSourcedOptions<S, M, C> & { readonly fenced?: false },
+): LoggedStore<S, M, C>;
+export function eventSourcedStore<S, M extends { _tag: string }, C extends Cmd>(
+  journal: Journal,
+  options: EventSourcedOptions<S, M, C> & { readonly fenced?: boolean },
+): LoggedStore<S, M, C> | (LoggedStore<S, M, C> & FencedStore<S>) {
+  return createLogStore(journal, options).store;
 }

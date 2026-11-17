@@ -16,8 +16,9 @@ import { z } from "zod";
 import { defineMachine, type LoggedStore } from "../../index";
 import {
   copyStorage,
-  createStorage,
+  createStorage as defaultStorage,
   durableStore,
+  type StorageFactory,
 } from "./durable-store.fixture";
 
 type State = { value: unknown; count: number };
@@ -130,7 +131,12 @@ export const op: fc.Arbitrary<
   { weight: 2, arbitrary: fc.constant({ op: "wake" as const }) },
 );
 
-export function liveEqualsWake(engine: string, driver: WakeDriver): void {
+export function liveEqualsWake(
+  engine: string,
+  driver: WakeDriver,
+  createStorage: StorageFactory = defaultStorage,
+  histories = 200,
+): void {
   test(`${engine}: at every point, live equals a wake from the same storage, and both equal the model`, async () => {
     await fc.assert(
       fc.asyncProperty(
@@ -240,7 +246,7 @@ export function liveEqualsWake(engine: string, driver: WakeDriver): void {
           await live.stop();
         },
       ),
-      { numRuns: 200 },
+      { numRuns: histories },
     );
   });
 }

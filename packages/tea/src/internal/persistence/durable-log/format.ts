@@ -14,11 +14,6 @@ function visit<R extends { _tag: string }, T>(
   return cases[record._tag as R["_tag"]](record as never);
 }
 
-/** Select one isolated log in a caller-owned backing store. */
-export function logKey(key = "default"): string {
-  return `@@es/${encodeURIComponent(key)}/log`;
-}
-
 /** Encode an admission identity once, before it reaches a storage adapter. */
 export function messageId(
   kind: "caller" | "generated" | "answer",

@@ -66,6 +66,10 @@ own — the table is per subpath, and a per-export list here would drift the mom
 split. So the agent layer's `transcript` collector is `experimental`, on `./agent`'s promise,
 and graduates with the rest of the layer rather than separately.
 
+`eventSourcedStore` and the journal contract types on `./persistence`, and
+`memoryJournal` on `./mem`, carry `@experimental` independently of the containing
+subpath's stamp, following `fileJournal`'s existing exception.
+
 **Property testing on Effect's `Arbitrary` is experimental on two stable subpaths**, the way
 `fileJournal` is on `./node` (below): `arbSchemaGuidedSequence` on `./testing/effect`, with its
 option type `SchemaGuidedOptions`, its error union `SchemaAnswersError` and the three errors in
@@ -127,9 +131,15 @@ mechanism-named form for consistency with the majority — but do **not** rename
 the existing four to converge; that break is not worth the churn (this table is
 the cheaper fix).
 
-**Journal factories are a separate family from Store factories.** A `Store<S>`
-is whole-load / whole-save of one state value; a `Journal`
-(`src/internal/journal/`) stores opaque, well-formed Unicode text in order.
+Snapshot Store factories load and save one State value. Journal drivers store
+opaque ordered text; `eventSourcedStore` on `./persistence` composes any such
+driver and schemas into tea's engine-facing durable log store. It reads retained
+records to recover committed State and owed work without replaying committed
+reducers. A `Journal` (`src/internal/journal/`) stores opaque, well-formed Unicode
+text in order.
+
+Plain journal-backed stores require one active writer per stream throughout the loaded activation; concurrent plain writers can corrupt history.
+Opt into fencing explicitly with a `FencedJournal` and factory `{ fenced: true }`.
 A driver returns each record exactly, code unit for code unit; it never parses,
 trims, normalizes or re-encodes it. Tea writes JSON text into it; a driver must
 not rely on that. `append` takes one nonempty atomic batch and acknowledges its
@@ -138,8 +148,10 @@ exact text and assigned positions;
 Drivers know no log schema or rule. Refusals are tagged data; an uncertain append requires
 reopening and reading before deciding how to recover.
 
-`fileJournal(dir)` (`./node`, beside `fileStore`) is the one journal factory
-still published. It takes no cross-process lock; one writer per stream is the
+`memoryJournal` on `./mem` and `fileJournal` on `./node` are the published journal
+drivers. `memoryJournal({ fenced: true })` opts into atomic in-process expected-head
+comparison. `fileJournal(dir)` (beside `fileStore`) takes no cross-process lock;
+one writer per stream is the
 caller's precondition; the old implementation locked every append.
 `fileJournal(dir, { fenced: true })` adds `appendFenced` beside the unconditional
 `append`. The checked method reads the real head, compares the expected head and
@@ -156,9 +168,12 @@ cuts prove whole-batch recovery, not fsync or power-loss durability.
 
 `fileJournal` carries the journal's **experimental** promise, not the `stable`
 stamp of `./node`. Its `@experimental` TSDoc makes its generated reference row
-read `experimental` while the page reads `stable`. The contract types,
-`memoryJournal` (including its opt-in `{ fenced: true }` widening), and the
-K1–K8 conformance kit remain internal. The kit checks order, exclusive reads,
+read `experimental` while the page reads `stable`. The contract types `Journal`,
+`FencedJournal`, `JournalEntry`, `JournalRead`, `JournalAppend`, `JournalRefusal`,
+`JournalConflict` and `EncodedRecord` are experimental aliases on `./persistence`;
+`memoryJournal`, including its opt-in `{ fenced: true }` widening, is experimental
+on `./mem`. The K1–K8 conformance kit remains internal and is not exported from
+`./testing`. The kit checks order, exclusive reads,
 atomicity, reopen, append cost, stream isolation, optional fencing and torn tails.
 
 ## Semver policy

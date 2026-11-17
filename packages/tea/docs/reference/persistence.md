@@ -8,7 +8,7 @@ Tier: `battery`
 import { … } from "@demlik/tea/persistence";
 ```
 
-## Exports (26)
+## Exports (35)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -16,6 +16,15 @@ import { … } from "@demlik/tea/persistence";
 | [`BreadcrumbsOptions`](#BreadcrumbsOptions) | Interface | battery | Options for breadcrumbsFromTrace. |
 | [`createSnapshot`](#createSnapshot) | Function | battery | Create a snapshot knob from a `SnapshotConfig`. |
 | [`deepEqual`](#deepEqual) | Function | battery | Order-insensitive structural deep-equality — the comparator the record/replay lane owns, exposed so consumers (e.g. |
+| [`EncodedRecord`](#EncodedRecord) | Type | experimental | Opaque well-formed Unicode text preserved exactly by a driver. |
+| [`eventSourcedStore`](#eventSourcedStore) | Function | experimental | Plain journal-backed stores require one active writer per stream throughout the loaded activation; concurrent plain writers can corrupt history. |
+| [`FencedJournal`](#FencedJournal) | Type | experimental | A journal with an explicit expected-head append capability. |
+| [`Journal`](#Journal) | Type | experimental | Ordered storage of opaque text in atomic batches. |
+| [`JournalAppend`](#JournalAppend) | Type | experimental | Acknowledged text and positions from one atomic append. |
+| [`JournalConflict`](#JournalConflict) | Type | experimental | An expected-head mismatch that changed no storage. |
+| [`JournalEntry`](#JournalEntry) | Type | experimental | Opaque text and the position assigned by its journal. |
+| [`JournalRead`](#JournalRead) | Type | experimental | A stream's head and the entries after a requested position. |
+| [`JournalRefusal`](#JournalRefusal) | Type | experimental | Storage failure data, preserving append uncertainty. |
 | [`parseJSONL`](#parseJSONL) | Function | battery | Re-hydrate a Trace from the JSONL produced by Recorder.toJSONL. |
 | [`recorder`](#recorder) | Function | battery | Attach a recorder to a Runtime. |
 | [`Recorder`](#Recorder) | Interface | battery | A live recorder attached to a Runtime. |
@@ -89,6 +98,85 @@ function createSnapshot<V>(config: SnapshotConfig): SnapshotKnob<V>
 
 ```ts
 function deepEqual(a: unknown, b: unknown): boolean
+```
+
+<a id="EncodedRecord"></a>
+
+### `EncodedRecord`
+
+```ts
+type EncodedRecord = JournalContract.EncodedRecord
+```
+
+<a id="eventSourcedStore"></a>
+
+### `eventSourcedStore`
+
+```ts
+function eventSourcedStore<S, M extends { _tag: string }, C extends Cmd>(
+  journal: FencedJournal,
+  options: EventSourcedOptions<S, M, C> & { readonly fenced: true },
+): LoggedStore<S, M, C> & FencedStore<S>
+function eventSourcedStore<S, M extends { _tag: string }, C extends Cmd>(
+  journal: Journal,
+  options: EventSourcedOptions<S, M, C> & { readonly fenced?: false },
+): LoggedStore<S, M, C>
+```
+
+<a id="FencedJournal"></a>
+
+### `FencedJournal`
+
+```ts
+type FencedJournal = JournalContract.FencedJournal
+```
+
+<a id="Journal"></a>
+
+### `Journal`
+
+```ts
+type Journal = JournalContract.Journal
+```
+
+<a id="JournalAppend"></a>
+
+### `JournalAppend`
+
+```ts
+type JournalAppend = JournalContract.JournalAppend
+```
+
+<a id="JournalConflict"></a>
+
+### `JournalConflict`
+
+```ts
+type JournalConflict = JournalContract.JournalConflict
+```
+
+<a id="JournalEntry"></a>
+
+### `JournalEntry`
+
+```ts
+type JournalEntry = JournalContract.JournalEntry
+```
+
+<a id="JournalRead"></a>
+
+### `JournalRead`
+
+```ts
+type JournalRead = JournalContract.JournalRead
+```
+
+<a id="JournalRefusal"></a>
+
+### `JournalRefusal`
+
+```ts
+type JournalRefusal = JournalContract.JournalRefusal
 ```
 
 <a id="parseJSONL"></a>

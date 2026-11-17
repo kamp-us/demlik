@@ -6,10 +6,11 @@ import type { DispatchOptions, LoggedStore } from "../../index";
 import { appliedEffects, defineMachine, idempotentEffect } from "../../index";
 import {
   copyStorage,
-  createStorage,
   Dropped,
   type DurableStorage,
+  createStorage as defaultStorage,
   durableStore,
+  type StorageFactory,
   storageClosed,
 } from "./durable-store.fixture";
 
@@ -34,7 +35,7 @@ export type State = z.infer<typeof stateSchema>;
 export type Msg = z.infer<typeof messageSchema>;
 /** Upload work handed to a receiver. */
 export type Upload = z.infer<typeof commandSchema>;
-/** Shared memory-log schemas for both engines. */
+/** Shared durable-log schemas for both engines. */
 export const options = {
   state: stateSchema,
   message: messageSchema,
@@ -70,6 +71,7 @@ export async function execute(
   driver: Driver,
   cut?: number | readonly number[],
   messageCount = 200,
+  createStorage: StorageFactory = defaultStorage,
 ) {
   let disk: DurableStorage;
   let writes = 0;
@@ -164,13 +166,18 @@ export async function execute(
 }
 
 /** The same independent oracle on both engines: 100 long scripts plus a short exhaustive sweep. */
-export function crashContract(engine: string, driver: Driver): void {
+export function crashContract(
+  engine: string,
+  driver: Driver,
+  createStorage: StorageFactory = defaultStorage,
+  coverage = { batches: 10, scripts: 10, messages: 200, sweepMessages: 12 },
+): void {
   let reference: ReturnType<typeof execute> | undefined;
   // Ten independently seeded batches keep each default-timeout test small; all 100 runs still drive 200 messages.
   test.each(
-    Array.from({ length: 10 }, (_, index) => index),
-  )(`T2 ${engine}: 200 messages, 10 crash scripts, batch %i of 10`, async (batch) => {
-    reference ??= execute(driver);
+    Array.from({ length: coverage.batches }, (_, index) => index),
+  )(`T2 ${engine}: ${coverage.messages} messages, ${coverage.scripts} crash scripts, batch %i of ${coverage.batches}`, async (batch) => {
+    reference ??= execute(driver, undefined, coverage.messages, createStorage);
     const baseline = await reference;
     await fc.assert(
       fc.asyncProperty(
@@ -179,17 +186,30 @@ export function crashContract(engine: string, driver: Driver): void {
           maxLength: 3,
         }),
         async (cuts) => {
-          const recovered = await execute(driver, cuts);
+          const recovered = await execute(
+            driver,
+            cuts,
+            coverage.messages,
+            createStorage,
+          );
           expect(recovered.crashed).toBe(true);
           expect(recovered.state).toEqual(baseline.state);
         },
       ),
-      { numRuns: 10, seed: (fc.readConfigureGlobal().seed ?? 42) + batch },
+      {
+        numRuns: coverage.scripts,
+        seed: (fc.readConfigureGlobal().seed ?? 42) + batch,
+      },
     );
   });
-  test(`T2 ${engine}: 12 messages, crash after every single store write`, async () => {
-    const baseline = await execute(driver, undefined, 12);
+  test(`T2 ${engine}: ${coverage.sweepMessages} messages, crash after every single store write`, async () => {
+    const baseline = await execute(
+      driver,
+      undefined,
+      coverage.sweepMessages,
+      createStorage,
+    );
     for (let cut = 1; cut <= baseline.writes; cut += 1)
-      await execute(driver, cut, 12);
+      await execute(driver, cut, coverage.sweepMessages, createStorage);
   });
 }

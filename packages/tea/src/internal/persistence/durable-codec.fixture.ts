@@ -4,10 +4,11 @@ import { z } from "zod";
 import { defineMachine, type LoggedStore } from "../../index";
 import {
   copyStorage,
-  createStorage,
   type DurableStorage,
+  createStorage as defaultStorage,
   durableStore,
   onStorageWrite,
+  type StorageFactory,
 } from "./durable-store.fixture";
 
 type State = { value: unknown };
@@ -155,6 +156,7 @@ async function exercise(
   phase: Phase,
   row: PayloadCase,
   initial?: () => State,
+  createStorage: StorageFactory = defaultStorage,
 ) {
   const original = row.make();
   const seen: unknown[] = [];
@@ -235,14 +237,18 @@ async function exercise(
 }
 
 /** Run the same stored-byte value policy through both engine adapters. */
-export function codecContract(engine: string, driver: CodecDriver): void {
+export function codecContract(
+  engine: string,
+  driver: CodecDriver,
+  createStorage: StorageFactory = defaultStorage,
+): void {
   const cases = rows.flatMap((row) =>
     positions.map(([role, phase]) => ({ ...row, role, phase })),
   );
   test.each(
     cases,
   )(`${engine}: $role $phase decodes $name live and on wake`, async (row) => {
-    await exercise(driver, row.role, row.phase, row);
+    await exercise(driver, row.role, row.phase, row, undefined, createStorage);
   });
   test(`${engine}: Msg pending undefined uses the admitted value live and after wake`, async () => {
     const seen: unknown[] = [];
@@ -288,13 +294,20 @@ export function codecContract(engine: string, driver: CodecDriver): void {
     expect(isDeepStrictEqual(seen[1], expected)).toBe(true);
   });
   test(`${engine}: State accessor is 1 live and after wake instead of 2 live and 1 on wake`, async () => {
-    await exercise(driver, "State", "birth", pendingRow, () => {
-      let reads = 0;
-      return {
-        get value() {
-          return ++reads <= 2 ? 1 : 2;
-        },
-      };
-    });
+    await exercise(
+      driver,
+      "State",
+      "birth",
+      pendingRow,
+      () => {
+        let reads = 0;
+        return {
+          get value() {
+            return ++reads <= 2 ? 1 : 2;
+          },
+        };
+      },
+      createStorage,
+    );
   });
 }
