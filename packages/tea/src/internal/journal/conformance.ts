@@ -1,5 +1,4 @@
 import fc from "fast-check";
-import { describe, expect, it } from "vitest";
 import type {
   FencedJournal,
   Journal,
@@ -25,7 +24,7 @@ export type KitResult = {
   readonly status: "passed" | "failed" | "skipped";
   readonly detail?: string;
 };
-type KitOptions = {
+export type KitOptions = {
   readonly records: number;
   readonly now: () => number;
   readonly seed?: number;
@@ -165,9 +164,15 @@ const texts = [
   nonJson,
   "long".repeat(1024),
 ] as const;
+// Any well-formed Unicode text. Built from code points, because `fc.string({ unit })`
+// does not exist on the oldest fast-check the `./pbt` entry supports (3.0.0).
+const codePoint = fc
+  .integer({ min: 0, max: 0x10ffff })
+  .filter((point) => point < 0xd800 || point > 0xdfff)
+  .map((point) => String.fromCodePoint(point));
 const encoded = fc.oneof(
   fc.constantFrom(...texts),
-  fc.string({ unit: "binary", maxLength: 40 }),
+  fc.array(codePoint, { maxLength: 40 }).map((points) => points.join("")),
 );
 const batchArbitrary = fc
   .tuple(encoded, fc.array(encoded, { maxLength: 3 }))
@@ -701,27 +706,4 @@ export async function journalConformance(
     }
   }
   return results;
-}
-
-export function describeJournalConformance(
-  label: string,
-  make: JournalKitFactory,
-  options: KitOptions,
-): void {
-  describe(`Journal conformance: ${label}`, () => {
-    it("matches the model in every applicable K1–K8 case", async () => {
-      const start = options.now();
-      const results = await journalConformance(make, options);
-      console.info(
-        JSON.stringify({
-          driver: label,
-          elapsedMs: options.now() - start,
-          results,
-        }),
-      );
-      expect(results.filter((result) => result.status === "failed")).toEqual(
-        [],
-      );
-    }, 180_000);
-  });
 }

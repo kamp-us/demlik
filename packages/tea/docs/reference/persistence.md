@@ -8,6 +8,30 @@ Tier: `battery`
 import { … } from "@demlik/tea/persistence";
 ```
 
+## Check a host-written journal
+
+The experimental K1–K8 kit checks a driver for `eventSourcedStore`: exact record order, exclusive reads, atomic batches, reopen, append cost, stream isolation, optional fencing and torn tails.
+
+```ts
+import { journalConformance, type JournalKitFactory } from "@demlik/tea/pbt";
+```
+
+Install `@demlik/tea` and `fast-check`. A `JournalKitFactory` creates fresh, isolated storage for each history and returns a fixture with these members:
+
+| Member | Responsibility |
+| --- | --- |
+| `open()` | Return a fresh driver handle over the fixture's shared storage, including after close/reopen; closing a handle must retain the records. |
+| `interruptAt(point)` | Arm a real storage interruption at a point from `writePoints`; `undefined` disarms it. |
+| `writePoints(records)` | Return the physical write boundaries to interrupt for this batch, including boundaries around its atomic commit. |
+| `dispose()` | Close remaining handles and remove the fixture's storage. |
+| `byteFile` | Say whether this driver stores a byte file, enabling K8. |
+| `tearTail(stream)` | Required when `byteFile` is true: append an incomplete tail to the stream. |
+| `readStoredBytes(stream)` | Required when `byteFile` is true: return its stored bytes so K8 can check that reads leave them unchanged. |
+
+Call `await journalConformance(make, { records: 10000, now: () => performance.now() })`, where `make` is your factory. `records` sets the fixed scale and `now` supplies a monotonic millisecond clock for K5. Each `KitResult` names K1–K8 with a `passed`, `failed` or `skipped` status; `detail` carries diagnostics, including the seed and shrinking path on generated failures. `KitOptions` also accepts `seed`, `runs`, `repeats` and `replay: { id, path }`.
+
+A fenced driver returned by `open()` exposes `fenced: true` and `appendFenced`; the same call then checks K7's atomic expected-head comparison and competing writers. K7 is skipped for plain drivers, and K8 for non-file fixtures. K3, the atomic-batch case, needs the fixture's interruption controls: a fixture whose `writePoints` returns no point gets K3 `failed` with "Fixture exposes no interruption points", and its other results still stand. See [the host fixture and deliberately broken driver](https://github.com/kamp-us/demlik/blob/main/packages/tea/examples/journal-store.ts) for a runnable example.
+
 ## Exports (35)
 
 | Symbol | Kind | Tier | Summary |

@@ -74,6 +74,20 @@ assert.match(
   kit.stderr,
   /does not provide an export named 'journalConformance'/,
 );
+const describeKit = spawnSync(
+  process.execPath,
+  [
+    "--input-type=module",
+    "-e",
+    'import { describeJournalConformance } from "@demlik/tea/pbt";',
+  ],
+  { cwd: pkgDir, encoding: "utf8" },
+);
+assert.notEqual(describeKit.status, 0);
+assert.match(
+  describeKit.stderr,
+  /does not provide an export named 'describeJournalConformance'/,
+);
 console.log(
-  "verify-exports: journalConformance remains unavailable on ./testing",
+  "verify-exports: journalConformance remains unavailable on ./testing; describeJournalConformance remains unavailable on ./pbt",
 );

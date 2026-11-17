@@ -66,8 +66,10 @@ own — the table is per subpath, and a per-export list here would drift the mom
 split. So the agent layer's `transcript` collector is `experimental`, on `./agent`'s promise,
 and graduates with the rest of the layer rather than separately.
 
-`eventSourcedStore` and the journal contract types on `./persistence`, and
-`memoryJournal` on `./mem`, carry `@experimental` independently of the containing
+`eventSourcedStore` and the journal contract types on `./persistence`,
+`memoryJournal` on `./mem`, and `journalConformance`, `JournalKitFixture`,
+`JournalKitFactory`, `KitResult`, `KitCase` and `KitOptions` on `./pbt`
+carry `@experimental` independently of the containing
 subpath's stamp, following `fileJournal`'s existing exception.
 
 **Property testing on Effect's `Arbitrary` is experimental on two stable subpaths**, the way
@@ -172,8 +174,11 @@ read `experimental` while the page reads `stable`. The contract types `Journal`,
 `FencedJournal`, `JournalEntry`, `JournalRead`, `JournalAppend`, `JournalRefusal`,
 `JournalConflict` and `EncodedRecord` are experimental aliases on `./persistence`;
 `memoryJournal`, including its opt-in `{ fenced: true }` widening, is experimental
-on `./mem`. The K1–K8 conformance kit remains internal and is not exported from
-`./testing`. The kit checks order, exclusive reads,
+on `./mem`. The K1–K8 runner `journalConformance` and its caller types
+`JournalKitFixture`, `JournalKitFactory`, `KitResult`, `KitCase` and `KitOptions`
+are experimental on `./pbt`, requiring only the optional peer `fast-check`.
+`describeJournalConformance` remains internal; nothing is added to `./testing`,
+which requires `vitest` and loads without `fast-check`. The kit checks order, exclusive reads,
 atomicity, reopen, append cost, stream isolation, optional fencing and torn tails.
 
 ## Semver policy

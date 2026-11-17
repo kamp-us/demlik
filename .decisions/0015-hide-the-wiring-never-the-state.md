@@ -100,6 +100,8 @@ governs (Model, Cmd, lid altitude) are already canonized.
   re-export file over `src/internal/`, so the lid rule this ADR states is untouched: a subpath
   hides nothing, it only makes reachable what the source already shows. The journal contract
   types and memory driver are selectively published as experimental through the existing
-  `./persistence` and `./mem` subpaths; the conformance kit stays internal, as do `prediction`
-  and `llm-call`. Ruling: the Ruling section of
+  `./persistence` and `./mem` subpaths; `journalConformance`, `JournalKitFixture`,
+  `JournalKitFactory`, `KitResult`, `KitCase` and `KitOptions` are experimental
+  on the existing `./pbt` subpath, while `describeJournalConformance`, `prediction`
+  and `llm-call` stay internal. Ruling: the Ruling section of
   https://github.com/kamp-us/demlik/issues/205 (Can, 2026-09-14).**

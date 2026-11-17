@@ -8,7 +8,7 @@ Tier: `stable`
 import { … } from "@demlik/tea/pbt";
 ```
 
-## Exports (24)
+## Exports (30)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -21,6 +21,12 @@ import { … } from "@demlik/tea/pbt";
 | [`Fold`](#Fold) | Interface | stable | What foldEvents hands back: every state in order, one Step per Msg, the final state, and the Cmds `init` sent. |
 | [`foldEvents`](#foldEvents) | Function | stable | Fold a Msg sequence through a machine's pure reducer, returning the per-step trace, every state in order, the final state, and the Cmds `init` sent. |
 | [`GuidedCells`](#GuidedCells) | Interface | stable | What arbGuidedSequence draws from. |
+| [`journalConformance`](#journalConformance) | Variable | experimental | Check a journal driver against K1–K8 and return passed, failed or skipped cases. |
+| [`JournalKitFactory`](#JournalKitFactory) | Type | experimental | Create isolated storage and controls for one conformance history. |
+| [`JournalKitFixture`](#JournalKitFixture) | Type | experimental | A fixture's fresh driver handles and physical interruption controls. |
+| [`KitCase`](#KitCase) | Type | experimental | The K1–K8 journal contract case identifiers. |
+| [`KitOptions`](#KitOptions) | Type | experimental | Scale, clock, generation and replay options for journal conformance. |
+| [`KitResult`](#KitResult) | Type | experimental | The outcome of one named journal conformance case, with diagnostic detail. |
 | [`LawBreak`](#LawBreak) | Interface | experimental | What a broken law says. |
 | [`lawInvariant`](#lawInvariant) | Function | experimental | The law `propertyInvariant` runs: `invariant` holds on every step of the fold. |
 | [`lawTerminates`](#lawTerminates) | Function | experimental | The law `propertyTerminates` runs: the fold's final state is one `terminal` accepts. |
@@ -172,6 +178,54 @@ interface GuidedCells<
   readonly answers?: { readonly [K in string | number | symbol]: K extends C["_tag"] ? AnswerCell<Extract<C, { _tag: K }>, A[K], M> : never };
   readonly outside?: { readonly [K in string]?: Arbitrary<Extract<M, { _tag: K }>> };
 }
+```
+
+<a id="journalConformance"></a>
+
+### `journalConformance`
+
+```ts
+const journalConformance: (make: JournalKitFactory, options: KitOptions) => Promise<readonly KitResult[]>
+```
+
+<a id="JournalKitFactory"></a>
+
+### `JournalKitFactory`
+
+```ts
+type JournalKitFactory = JournalKit.JournalKitFactory
+```
+
+<a id="JournalKitFixture"></a>
+
+### `JournalKitFixture`
+
+```ts
+type JournalKitFixture = JournalKit.JournalKitFixture
+```
+
+<a id="KitCase"></a>
+
+### `KitCase`
+
+```ts
+type KitCase = JournalKit.KitCase
+```
+
+<a id="KitOptions"></a>
+
+### `KitOptions`
+
+```ts
+type KitOptions = JournalKit.KitOptions
+```
+
+<a id="KitResult"></a>
+
+### `KitResult`
+
+```ts
+type KitResult = JournalKit.KitResult
 ```
 
 <a id="LawBreak"></a>
