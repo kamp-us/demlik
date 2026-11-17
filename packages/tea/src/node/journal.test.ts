@@ -10,10 +10,8 @@ import type {
   JournalConflict,
   JournalRefusal,
 } from "../internal/journal";
-import {
-  describeJournalConformance,
-  type JournalKitFactory,
-} from "../internal/journal/conformance";
+import type { JournalKitFactory } from "../internal/journal/conformance";
+import { describeJournalConformance } from "../internal/journal/describe-conformance";
 import { fileJournal } from "./index";
 
 const writes = vi.hoisted(() => ({

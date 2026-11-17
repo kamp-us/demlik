@@ -1,5 +1,4 @@
 import fc from "fast-check";
-import { describe, expect, it } from "vitest";
 import type {
   FencedJournal,
   Journal,
@@ -25,7 +24,7 @@ export type KitResult = {
   readonly status: "passed" | "failed" | "skipped";
   readonly detail?: string;
 };
-type KitOptions = {
+export type KitOptions = {
   readonly records: number;
   readonly now: () => number;
   readonly seed?: number;
@@ -701,27 +700,4 @@ export async function journalConformance(
     }
   }
   return results;
-}
-
-export function describeJournalConformance(
-  label: string,
-  make: JournalKitFactory,
-  options: KitOptions,
-): void {
-  describe(`Journal conformance: ${label}`, () => {
-    it("matches the model in every applicable K1–K8 case", async () => {
-      const start = options.now();
-      const results = await journalConformance(make, options);
-      console.info(
-        JSON.stringify({
-          driver: label,
-          elapsedMs: options.now() - start,
-          results,
-        }),
-      );
-      expect(results.filter((result) => result.status === "failed")).toEqual(
-        [],
-      );
-    }, 180_000);
-  });
 }

@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  describeJournalConformance,
   type JournalKitFactory,
   journalConformance,
   type KitCase,
 } from "./conformance";
+import { describeJournalConformance } from "./describe-conformance";
 import { type FencedJournal, type Journal, memoryJournal } from "./index";
 
 const memoryFixture: JournalKitFactory = async () => {

@@ -19,14 +19,42 @@
  *     too, for Effect's `Arbitrary.checkEffect`. Experimental.
  *   - `stubCtxThrowingProxy<Ctx>()` — type-shaped Ctx value whose every access
  *     throws (PBT runs the reducer; Ctx must never be touched).
+ *   - `journalConformance` — check a host-written journal driver against K1–K8
+ *     through a fixture that owns interruption and storage controls. Experimental.
  *
  * Resolves the decoupling target: PBT
  * lives as a sibling package, never inside the substrate.
  *
- * Substrate dependency: types only (`Machine`, `Cmd`, `Sub`, `replay`). The
- * pure reducer surface is the only thing PBT exercises; `interpret` and
- * subscription handlers are never invoked.
+ * Machine checks exercise the pure reducer surface; `interpret` and subscription
+ * handlers are never invoked. Journal checks exercise the fixture's driver I/O.
  */
+
+import * as JournalKit from "../internal/journal/conformance";
+
+/** Check a journal driver against K1–K8 and return passed, failed or skipped cases.
+ * @experimental
+ */
+export const journalConformance = JournalKit.journalConformance;
+/** A fixture's fresh driver handles and physical interruption controls.
+ * @experimental
+ */
+export type JournalKitFixture = JournalKit.JournalKitFixture;
+/** Create isolated storage and controls for one conformance history.
+ * @experimental
+ */
+export type JournalKitFactory = JournalKit.JournalKitFactory;
+/** The outcome of one named journal conformance case, with diagnostic detail.
+ * @experimental
+ */
+export type KitResult = JournalKit.KitResult;
+/** The K1–K8 journal contract case identifiers.
+ * @experimental
+ */
+export type KitCase = JournalKit.KitCase;
+/** Scale, clock, generation and replay options for journal conformance.
+ * @experimental
+ */
+export type KitOptions = JournalKit.KitOptions;
 
 export {
   type AnswerCell,
