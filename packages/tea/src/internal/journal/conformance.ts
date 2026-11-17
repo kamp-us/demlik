@@ -1,21 +1,22 @@
+import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import type {
   FencedJournal,
   Journal,
   JournalAppend,
+  JournalConflict,
   JournalRead,
-  JournalRefusal,
 } from "./index";
 
 export type KitCase = "K1" | "K2" | "K3" | "K4" | "K5" | "K6" | "K7" | "K8";
-/** Test controls belong to the fixture, never to Journal. cut is a physical write ordinal or byte offset. */
+/** Physical controls belong to the fixture, never to a journal driver. */
 export interface JournalKitFixture {
   open(): Promise<Journal>;
   interruptAt(point: number | undefined): void;
   writePoints(records: readonly string[]): readonly number[];
   dispose(): Promise<void>;
   readonly byteFile: boolean;
-  tearTail?(): Promise<void>;
+  tearTail?(stream: string): Promise<void>;
   readStoredBytes?(stream: string): Promise<Uint8Array>;
 }
 export type JournalKitFactory = () => Promise<JournalKitFixture>;
@@ -24,345 +25,544 @@ export type KitResult = {
   readonly status: "passed" | "failed" | "skipped";
   readonly detail?: string;
 };
-type KitOptions = { readonly records: number; readonly now: () => number };
-type KitContext = KitOptions & {
+type KitOptions = {
+  readonly records: number;
+  readonly now: () => number;
+  readonly seed?: number;
+  /** Generated histories per case; defaults to 100. */
+  readonly runs?: number;
+  readonly repeats?: number;
+  readonly replay?: { readonly id: KitCase; readonly path: string };
+};
+type Batch = readonly [string, ...string[]];
+type JournalModel = Map<string, readonly string[]>;
+type History = readonly {
+  readonly stream: string;
+  readonly batches: readonly Batch[];
+}[];
+type KitScript = {
+  readonly history: History;
+  readonly stream: number;
+  readonly records: Batch;
+  readonly after: number;
+  readonly points: readonly number[];
+  readonly expected: number;
+  readonly contenders: number;
+};
+type CaseContext = {
+  readonly model: JournalModel;
+  readonly script: KitScript;
   readonly fixture: JournalKitFixture;
-  readonly open: JournalKitFixture["open"];
-  readonly make: JournalKitFactory;
+  readonly scale: number | undefined;
+  readonly sample: number;
+  readonly stream: string;
+  append(
+    stream: string,
+    records: Batch,
+    interrupted?: boolean,
+  ): Promise<number>;
+  appendFenced(
+    stream: string,
+    records: Batch,
+    expected: number,
+  ): Promise<number>;
+  read(stream: string, after: number, fresh?: boolean): Promise<void>;
+  reopen(): Promise<void>;
+  verify(): Promise<void>;
+  race(
+    stream: string,
+    batches: readonly Batch[],
+    separate: boolean,
+  ): Promise<void>;
+  interrupt(point: number): void;
+  tearTail(stream: string): Promise<void>;
 };
-type KitCheck = (context: KitContext) => Promise<KitResult>;
+type KitCheck = {
+  readonly run: (context: CaseContext) => Promise<unknown>;
+  readonly applies?: (journal: Journal, fixture: JournalKitFixture) => boolean;
+  readonly samples?: number;
+  readonly fixedRepeats?: number;
+  readonly summarize?: (samples: readonly unknown[]) => unknown;
+};
 
-const record = (i: number) =>
-  JSON.stringify({ value: i, pad: "x".repeat(80), unicode: "半🌱" });
-const batch = (n: number, start = 1): [string, ...string[]] => {
-  if (n < 1) throw new Error("The kit requires at least one record");
-  return [
-    record(start),
-    ...Array.from({ length: n - 1 }, (_, i) => record(start + i + 1)),
-  ];
+const modelRead = (
+  model: JournalModel,
+  stream: string,
+  after: number,
+): JournalRead => {
+  const records = model.get(stream) ?? [];
+  return {
+    _tag: "read",
+    head: records.length,
+    entries: records
+      .map((record, i) => ({ seq: i + 1, record }))
+      .filter((entry) => entry.seq > after),
+  };
 };
-const entries = (n: number, after = 0) =>
-  Array.from({ length: Math.max(0, n - after) }, (_, i) => ({
-    seq: after + i + 1,
-    record: record(after + i + 1),
-  }));
-const passed = (id: KitCase, detail?: string): KitResult => ({
-  id,
-  status: "passed",
-  ...(detail === undefined ? {} : { detail }),
+const modelAppend = (
+  model: JournalModel,
+  stream: string,
+  records: Batch,
+): JournalAppend => {
+  const head = model.get(stream)?.length ?? 0;
+  return {
+    _tag: "appended",
+    head: head + records.length,
+    entries: records.map((record, i) => ({ seq: head + i + 1, record })),
+  };
+};
+const modelFenced = (
+  model: JournalModel,
+  stream: string,
+  records: Batch,
+  expected: number,
+): JournalAppend | JournalConflict => {
+  const head = model.get(stream)?.length ?? 0;
+  return expected === head
+    ? modelAppend(model, stream, records)
+    : { _tag: "journal_conflict", expected, head };
+};
+const isFenced = (journal: Journal): journal is FencedJournal =>
+  "fenced" in journal && journal.fenced === true;
+const names = [
+  "s",
+  "S",
+  "é",
+  "e\u0301",
+  "",
+  "/",
+  "%",
+  ".",
+  " ",
+  "a",
+  "b",
+] as const;
+const texts = [
+  JSON.stringify("line\nbreak"),
+  JSON.stringify('a "quote"'),
+  JSON.stringify("半🌱"),
+  JSON.stringify("long".repeat(1024)),
+] as const;
+const encoded = fc.oneof(
+  fc.constantFrom(...texts),
+  fc.string({ maxLength: 40 }).map(JSON.stringify),
+);
+const batchArbitrary = fc
+  .tuple(encoded, fc.array(encoded, { maxLength: 3 }))
+  .map(([first, rest]): Batch => [first, ...rest]);
+const position = fc.oneof(
+  fc.integer({ min: -10, max: 80 }),
+  fc.integer({ min: -10, max: 80 }).map((n) => n + 0.5),
+  fc.constantFrom(-Infinity, Infinity, NaN),
+);
+const scriptArbitrary: fc.Arbitrary<KitScript> = fc.record({
+  history: fc
+    .tuple(
+      fc.tuple(
+        ...names.map((stream) =>
+          fc
+            .array(batchArbitrary, { maxLength: 3 })
+            .map((batches) => ({ stream, batches })),
+        ),
+      ),
+      fc.array(
+        fc.record({
+          stream: fc.string({ maxLength: 20 }),
+          batches: fc.array(batchArbitrary, { maxLength: 3 }),
+        }),
+        { maxLength: 3 },
+      ),
+    )
+    .map(([required, extra]) => [...required, ...extra]),
+  stream: fc.nat(),
+  records: batchArbitrary,
+  after: position,
+  points: fc.array(fc.nat(), { minLength: 2, maxLength: 3 }),
+  expected: position,
+  contenders: fc.integer({ min: 2, max: 8 }),
 });
-const appended = (result: JournalAppend | JournalRefusal): JournalAppend => {
-  if (result._tag !== "appended") throw new Error(JSON.stringify(result));
-  return result;
-};
-const read = (result: JournalRead | JournalRefusal): JournalRead => {
-  if (result._tag !== "read") throw new Error(JSON.stringify(result));
-  return result;
-};
-const close = async (journal: Journal) => {
-  const result = await journal.close();
-  if (result) throw new Error(JSON.stringify(result));
-};
-const median = (samples: readonly number[]) => {
-  const value = [...samples].sort((a, b) => a - b)[
-    Math.floor(samples.length / 2)
+const scaleBatch = (count: number): Batch => [
+  JSON.stringify({ value: 0, pad: "x".repeat(80), unicode: "半🌱" }),
+  ...Array.from({ length: count - 1 }, (_, i) =>
+    JSON.stringify({
+      value: i + 1,
+      pad: "x".repeat(80),
+      unicode: "半🌱",
+    }),
+  ),
+];
+
+function difference(
+  actual: unknown,
+  expected: unknown,
+  path = "answer",
+): string | undefined {
+  if (Object.is(actual, expected)) return;
+  if (
+    typeof actual !== "object" ||
+    actual === null ||
+    typeof expected !== "object" ||
+    expected === null
+  )
+    return `${path}: expected ${fc.stringify(expected)}, received ${fc.stringify(actual)}`;
+  const left = new Map(Object.entries(actual));
+  const right = Object.entries(expected);
+  if (
+    Array.isArray(actual) &&
+    Array.isArray(expected) &&
+    actual.length !== expected.length
+  )
+    return `${path}.length: expected ${expected.length}, received ${actual.length}`;
+  for (const [key, value] of right) {
+    if (!left.has(key)) return `${path}.${key}: missing`;
+    const diff = difference(left.get(key), value, `${path}.${key}`);
+    if (diff) return diff;
+  }
+  if (left.size !== right.length)
+    return `${path}: expected ${right.length} fields/items, received ${left.size}`;
+}
+class ScriptFailure extends Error {
+  constructor(
+    readonly calls: readonly string[],
+    readonly firstDifference: string,
+  ) {
+    super(firstDifference);
+  }
+}
+
+/** Every case, generated or fixed, enters through this history/action/recovery envelope. */
+async function withModel(
+  make: JournalKitFactory,
+  script: KitScript,
+  check: KitCheck,
+  options: KitOptions,
+  scale?: number,
+  sample = 0,
+): Promise<{ readonly skipped: boolean; readonly detail?: unknown }> {
+  const fixture = await make();
+  const opened = new Set<Journal>();
+  const calls: string[] = [];
+  const model: JournalModel = new Map(
+    script.history.map(({ stream }) => [stream, []]),
+  );
+  let bytesMustStay = false;
+  const equal = (actual: unknown, expected: unknown) => {
+    const diff = difference(actual, expected);
+    if (diff) throw new ScriptFailure([...calls], diff);
+  };
+  const open = async () => {
+    calls.push("open()");
+    const reader = await fixture.open();
+    opened.add(reader);
+    return reader;
+  };
+  const close = async (reader: Journal) => {
+    calls.push("close()");
+    equal(await reader.close(), undefined);
+    opened.delete(reader);
+  };
+  let journal: Journal;
+  try {
+    journal = await open();
+    const read = async (stream: string, after: number, fresh = false) => {
+      const reader = fresh ? await open() : journal;
+      calls.push(`read(${JSON.stringify(stream)}, ${String(after)})`);
+      const snapshot = fixture.readStoredBytes?.bind(fixture);
+      const before =
+        bytesMustStay && snapshot
+          ? new Uint8Array(await snapshot(stream))
+          : undefined;
+      equal(await reader.read(stream, after), modelRead(model, stream, after));
+      if (before && snapshot)
+        equal(new Uint8Array(await snapshot(stream)), before);
+      if (fresh) await close(reader);
+    };
+    const reopen = async () => {
+      await close(journal);
+      journal = await open();
+    };
+    const apply = async (
+      stream: string,
+      records: Batch,
+      expected?: number,
+      interrupted = false,
+    ) => {
+      const prior = model.get(stream) ?? [];
+      const wanted =
+        expected === undefined
+          ? modelAppend(model, stream, records)
+          : modelFenced(model, stream, records, expected);
+      calls.push(
+        `${expected === undefined ? "append" : "appendFenced"}(${JSON.stringify(stream)}, ${JSON.stringify(records)}${expected === undefined ? "" : `, ${String(expected)}`})`,
+      );
+      const start = options.now();
+      const ack =
+        expected === undefined
+          ? await journal.append(stream, records)
+          : isFenced(journal)
+            ? await journal.appendFenced(stream, records, expected)
+            : (() => {
+                throw new Error("Expected a fenced driver");
+              })();
+      const elapsed = options.now() - start;
+      fixture.interruptAt(undefined);
+      if (ack._tag === "appended" || ack._tag === "journal_conflict") {
+        equal(ack, wanted);
+        if (ack._tag === "appended") model.set(stream, [...prior, ...records]);
+      } else {
+        if (!interrupted || ack._tag !== "journal_io") equal(ack, wanted);
+        await reopen();
+        calls.push(
+          `read(${JSON.stringify(stream)}, 0) // settle interrupted append`,
+        );
+        const recovered = await journal.read(stream, 0);
+        const unchanged = modelRead(model, stream, 0);
+        const committed = new Map(model).set(stream, [...prior, ...records]);
+        const whole = modelRead(committed, stream, 0);
+        if (
+          ack._tag === "journal_io" &&
+          ack.uncertain &&
+          !difference(recovered, whole)
+        )
+          model.set(stream, [...prior, ...records]);
+        else equal(recovered, unchanged);
+      }
+      return elapsed;
+    };
+    const verify = async () => {
+      for (const stream of model.keys()) {
+        await read(stream, 0);
+        await read(stream, script.after);
+      }
+    };
+    const context: CaseContext = {
+      model,
+      script,
+      fixture,
+      scale,
+      sample,
+      stream:
+        script.history[script.stream % script.history.length]?.stream ?? "s",
+      append: (stream, records, interrupted) =>
+        apply(stream, records, undefined, interrupted),
+      appendFenced: (stream, records, expected) =>
+        apply(stream, records, expected),
+      read,
+      reopen,
+      verify,
+      interrupt(point) {
+        calls.push(`interruptAt(${point})`);
+        fixture.interruptAt(point);
+      },
+      async tearTail(stream) {
+        if (!fixture.readStoredBytes || !fixture.tearTail)
+          throw new Error(
+            "A byte-file fixture must provide tearTail and readStoredBytes",
+          );
+        calls.push(`tearTail(${JSON.stringify(stream)})`);
+        await fixture.tearTail(stream);
+        bytesMustStay = true;
+      },
+      async race(stream, batches, separate) {
+        const expected = model.get(stream)?.length ?? 0;
+        const readers = separate
+          ? await Promise.all(batches.map(() => open()))
+          : batches.map(() => journal);
+        calls.push(
+          `Promise.all(${JSON.stringify(batches)}.map(batch => ${separate ? "freshInstance" : "journal"}.appendFenced(${JSON.stringify(stream)}, batch, ${expected})))`,
+        );
+        const answers = await Promise.all(
+          batches.map((records, i) => {
+            const reader = readers[i];
+            if (!reader || !isFenced(reader))
+              throw new Error("Expected a fenced driver");
+            return reader.appendFenced(stream, records, expected);
+          }),
+        );
+        equal(answers.filter((ack) => ack._tag === "appended").length, 1);
+        const winner = answers.findIndex((ack) => ack._tag === "appended");
+        const records = batches[winner];
+        if (!records) throw new Error("Missing winning batch");
+        const wanted = modelAppend(model, stream, records);
+        answers.forEach((ack, i) => {
+          equal(
+            ack,
+            i === winner
+              ? wanted
+              : { _tag: "journal_conflict", expected, head: wanted.head },
+          );
+        });
+        model.set(stream, [...(model.get(stream) ?? []), ...records]);
+        await read(stream, 0);
+        if (separate) for (const reader of readers) await close(reader);
+      },
+    };
+    // Capability checks still enter the envelope; unavailable widenings do no I/O.
+    if (check.applies && !check.applies(journal, fixture))
+      return { skipped: true };
+    // Mandatory values supplement generated histories without constraining their shrinking.
+    await context.append("s", texts);
+    await context.append("S", [JSON.stringify("upper")]);
+    for (const { stream, batches } of script.history)
+      for (const records of batches) await context.append(stream, records);
+    await verify();
+    const detail = await check.run(context);
+    await reopen();
+    await verify();
+    for (const stream of model.keys()) {
+      await context.append(stream, [JSON.stringify("after reopen")]);
+      await read(stream, 0);
+    }
+    // An append on the last stream must not damage an earlier stream either.
+    await reopen();
+    await verify();
+    return { skipped: false, detail };
+  } catch (error) {
+    if (error instanceof ScriptFailure) throw error;
+    throw new ScriptFailure(
+      [...calls],
+      error instanceof Error ? error.message : String(error),
+    );
+  } finally {
+    fixture.interruptAt(undefined);
+    for (const reader of opened) await reader.close();
+    await fixture.dispose();
+  }
+}
+
+async function order(c: CaseContext) {
+  const records = c.scale ? scaleBatch(c.scale) : c.script.records;
+  for (const record of records) await c.append(c.stream, [record]);
+  await c.read(c.stream, 0);
+}
+async function readFrom(c: CaseContext) {
+  await c.append(c.stream, c.scale ? scaleBatch(c.scale) : c.script.records);
+  const head = c.model.get(c.stream)?.length ?? 0;
+  for (const after of [
+    -1,
+    1.5,
+    8,
+    -Infinity,
+    Infinity,
+    NaN,
+    0,
+    1,
+    7,
+    head / 2,
+    head - 1,
+    head,
+    head + 1,
+    c.script.after,
+  ])
+    await c.read(c.stream, after);
+}
+async function allOrNone(c: CaseContext) {
+  const records = c.scale ? scaleBatch(3) : c.script.records;
+  const points = c.fixture.writePoints(records);
+  const chosen = c.scale
+    ? points
+    : [
+        ...new Set(
+          c.script.points.map((point) => points[point % points.length]),
+        ),
+      ];
+  for (const point of chosen) {
+    if (point === undefined)
+      throw new Error("Fixture exposes no interruption points");
+    // Preserve acknowledged history on the target, including when generated history is empty.
+    await c.append(c.stream, [JSON.stringify("old")]);
+    c.interrupt(point);
+    await c.append(c.stream, records, true);
+    await c.reopen();
+    await c.verify();
+  }
+  return { physicalCuts: chosen.length };
+}
+async function reopen(c: CaseContext) {
+  await c.append(c.stream, c.scale ? scaleBatch(c.scale) : c.script.records);
+  await c.read(c.stream, 0);
+  await c.reopen();
+  await c.verify();
+}
+const median = (values: readonly number[]) => {
+  const value = [...values].sort((a, b) => a - b)[
+    Math.floor(values.length / 2)
   ];
   if (value === undefined) throw new Error("No cost samples");
   return value;
 };
-
-async function order({ open, records }: KitContext): Promise<KitResult> {
-  const journal = await open();
-  for (let i = 1; i <= records; i++) {
-    expect(appended(await journal.append("s", [record(i)]))).toEqual({
-      _tag: "appended",
-      head: i,
-      entries: [{ seq: i, record: record(i) }],
-    });
+async function flatCost(c: CaseContext) {
+  if (!c.scale) {
+    await c.append(c.stream, c.script.records);
+    return;
   }
-  expect(read(await journal.read("s", 0))).toEqual({
-    _tag: "read",
-    head: records,
-    entries: entries(records),
-  });
-  await close(journal);
-  return passed("K1");
-}
-async function readFrom({ open, records }: KitContext): Promise<KitResult> {
-  const journal = await open();
-  expect(read(await journal.read("s", 0))).toEqual({
-    _tag: "read",
-    head: 0,
-    entries: [],
-  });
-  appended(await journal.append("s", batch(records)));
-  for (const after of [
-    0,
-    1,
-    7,
-    Math.floor(records / 2),
-    records - 1,
-    records,
-    records + 1,
-  ]) {
-    expect(read(await journal.read("s", after))).toEqual({
-      _tag: "read",
-      head: records,
-      entries: entries(records, after),
-    });
+  const encoded = scaleBatch(1);
+  for (const n of [10, 10000] as const)
+    await c.append(`n${n}`, scaleBatch(n - 1));
+  for (let warm = 0; warm < 10; warm++) await c.append("warm", encoded);
+  const times: Record<10 | 10000, number> = { 10: 0, 10000: 0 };
+  const order: readonly (10 | 10000)[] =
+    c.sample % 2 ? [10000, 10] : [10, 10000];
+  for (const n of order) {
+    await c.read(`n${n}`, n - 1);
+    times[n] = await c.append(`n${n}`, encoded);
+    await c.read(`n${n}`, n - 1);
   }
-  const stream = "positions";
-  appended(await journal.append(stream, ['"a"', '"b"', '"c"']));
-  expect(
-    read(await journal.read(stream, -1)).entries.map((entry) => entry.seq),
-  ).toEqual([1, 2, 3]);
-  expect(
-    read(await journal.read(stream, 1.5)).entries.map((entry) => entry.seq),
-  ).toEqual([2, 3]);
-  const beyond = await journal.read(stream, 8);
-  expect(beyond).toMatchObject({ _tag: "read", head: 3, entries: [] });
-  for (const after of [
-    Number.NEGATIVE_INFINITY,
-    -0.5,
-    0,
-    2.5,
-    Number.POSITIVE_INFINITY,
-    Number.NaN,
-  ]) {
-    expect(read(await journal.read(stream, after))).toEqual({
-      _tag: "read",
-      head: 3,
-      entries: ['"a"', '"b"', '"c"']
-        .map((record, i) => ({ seq: i + 1, record }))
-        .filter((entry) => entry.seq > after),
-    });
-  }
-  await close(journal);
-  return passed("K2");
+  return { at10: times[10], at10000: times[10000] };
 }
-async function allOrNone({ make }: KitContext): Promise<KitResult> {
-  const records = batch(3);
-  const shape = await make();
-  const points = shape.writePoints(records);
-  for (const point of points) {
-    const fixture = await make();
-    let journal = await fixture.open();
-    appended(await journal.append("prefix", [record(0)]));
-    fixture.interruptAt(point);
-    const ack = await journal.append("s", records);
-    expect(["appended", "journal_io"]).toContain(ack._tag);
-    await close(journal);
-    fixture.interruptAt(undefined);
-    journal = await fixture.open();
-    const rows = read(await journal.read("s", 0));
-    expect([0, 3], `cut ${point}: saw ${rows.entries.length}/3`).toContain(
-      rows.entries.length,
-    );
-    expect(rows.entries).toEqual(entries(rows.entries.length));
-    expect(rows.head).toBe(rows.entries.length);
-    if (ack._tag === "appended") {
-      expect(ack).toEqual({ _tag: "appended", head: 3, entries: entries(3) });
-      expect(rows).toEqual({
-        _tag: "read",
-        head: ack.head,
-        entries: ack.entries,
-      });
-    }
-    expect(read(await journal.read("prefix", 0)).entries).toEqual([
-      { seq: 1, record: record(0) },
-    ]);
-    const next = appended(await journal.append("s", [record(4)]));
-    expect(next).toEqual({
-      _tag: "appended",
-      head: rows.head + 1,
-      entries: [{ seq: rows.head + 1, record: record(4) }],
-    });
-    const storedNext = read(await journal.read("s", rows.head));
-    expect(storedNext.head).toBe(next.head);
-    expect(storedNext.entries.filter((entry) => entry.seq > rows.head)).toEqual(
-      next.entries,
-    );
-    await close(journal);
-    await fixture.dispose();
-  }
-  return passed("K3", JSON.stringify({ physicalCuts: points.length }));
+function appendCosts(samples: readonly unknown[]) {
+  const measured = samples.slice(5).map((value) => {
+    if (
+      typeof value !== "object" ||
+      value === null ||
+      !("at10" in value) ||
+      !("at10000" in value) ||
+      typeof value.at10 !== "number" ||
+      typeof value.at10000 !== "number"
+    )
+      throw new Error("Missing paired append measurement");
+    return { at10: value.at10, at10000: value.at10000 };
+  });
+  const at10 = median(measured.map((pair) => pair.at10));
+  const at10000 = median(measured.map((pair) => pair.at10000));
+  if (at10000 > 3 * at10) throw new Error(`K5: ${at10000} > 3 * ${at10} ms`);
+  return { at10, at10000, ratio: at10000 / at10 };
 }
-async function reopen({ open, records }: KitContext): Promise<KitResult> {
-  let journal = await open();
-  const ack = appended(await journal.append("s", batch(records)));
-  expect(ack).toEqual({
-    _tag: "appended",
-    head: records,
-    entries: entries(records),
-  });
-  const before = read(await journal.read("s", 0));
-  expect(before).toEqual({
-    _tag: "read",
-    head: records,
-    entries: entries(records),
-  });
-  await close(journal);
-  journal = await open();
-  expect(await journal.read("s", 0)).toEqual(before);
-  await close(journal);
-  return passed("K4");
+async function streams(c: CaseContext) {
+  await c.append(c.stream, c.script.records);
+  await c.verify();
 }
-async function flatCost({ make, now }: KitContext): Promise<KitResult> {
-  const samples: Record<10 | 10000, number[]> = { 10: [], 10000: [] };
-  for (let sample = 0; sample < 21; sample++) {
-    const fixture = await make();
-    const journal = await fixture.open();
-    const encoded = [record(10000)] as const;
-    // Pair exact heads in one instance, then alternate measurement order.
-    for (const n of [10, 10000])
-      appended(await journal.append(`n${n}`, batch(n - 1, 0)));
-    for (let warm = 0; warm < 10; warm++)
-      appended(await journal.append("warm", encoded));
-    const order: readonly (10 | 10000)[] =
-      sample % 2 ? [10000, 10] : [10, 10000];
-    for (const n of order) {
-      const before = read(await journal.read(`n${n}`, n - 1));
-      expect(before.head).toBe(n - 1);
-      const start = now();
-      const ack = await journal.append(`n${n}`, encoded);
-      const elapsed = now() - start;
-      const stored = appended(ack);
-      expect(stored).toEqual({
-        _tag: "appended",
-        head: n,
-        entries: [{ seq: n, record: encoded[0] }],
-      });
-      const after = read(await journal.read(`n${n}`, n - 1));
-      expect(after.head).toBe(stored.head);
-      expect(after.entries.filter((entry) => entry.seq > n - 1)).toEqual(
-        stored.entries,
-      );
-      if (sample >= 5) samples[n].push(elapsed);
-    }
-    await close(journal);
-    await fixture.dispose();
-  }
-  const at10 = median(samples[10]);
-  const at10000 = median(samples[10000]);
-  expect(at10000, `${at10000} > 3 * ${at10}`).toBeLessThanOrEqual(3 * at10);
-  return passed("K5", JSON.stringify({ at10, at10000, ratio: at10000 / at10 }));
+async function fenced(c: CaseContext) {
+  const head = c.model.get(c.stream)?.length ?? 0;
+  for (const expected of [head - 1, head + 1, c.script.expected, head])
+    await c.appendFenced(c.stream, c.script.records, expected);
+  const contenders = Array.from(
+    { length: c.script.contenders },
+    (_, i): Batch => [
+      JSON.stringify({ contender: i, record: c.script.records[0] }),
+      ...c.script.records.slice(1),
+    ],
+  );
+  await c.race(c.stream, contenders, false);
+  await c.race(c.stream, contenders, true);
 }
-async function streams({ open }: KitContext): Promise<KitResult> {
-  const journal = await open();
-  expect(appended(await journal.append("b", [record(1)]))).toEqual({
-    _tag: "appended",
-    head: 1,
-    entries: [{ seq: 1, record: record(1) }],
-  });
-  const before = read(await journal.read("b", 0));
-  expect(before).toEqual({
-    _tag: "read",
-    head: 1,
-    entries: [{ seq: 1, record: record(1) }],
-  });
-  const records = batch(3, 2);
-  const expected = records.map((record, i) => ({ seq: i + 1, record }));
-  expect(appended(await journal.append("a", records))).toEqual({
-    _tag: "appended",
-    head: 3,
-    entries: expected,
-  });
-  expect(read(await journal.read("a", 0))).toEqual({
-    _tag: "read",
-    head: 3,
-    entries: expected,
-  });
-  expect(await journal.read("b", 0)).toEqual(before);
-  await close(journal);
-  return passed("K6");
+async function tornTail(c: CaseContext) {
+  await c.append(c.stream, c.script.records);
+  await c.tearTail(c.stream);
+  await c.read(c.stream, c.script.after);
+  await c.read(c.stream, 0);
+  await c.read(c.stream, 0, true);
+  await c.append(c.stream, [JSON.stringify("repair")]);
 }
-function isFenced(journal: Journal): journal is FencedJournal {
-  return "fenced" in journal && journal.fenced === true;
-}
-async function fenced({ open }: KitContext): Promise<KitResult> {
-  const journal = await open();
-  if (!isFenced(journal)) {
-    await close(journal);
-    return { id: "K7", status: "skipped" };
-  }
-  appended(await journal.append("s", [record(1)]));
-  for (const expected of [0, 2]) {
-    expect(
-      await journal.appendFenced("s", [record(2), record(3)], expected),
-    ).toEqual({
-      _tag: "journal_conflict",
-      expected,
-      head: 1,
-    });
-    expect(read(await journal.read("s", 0))).toEqual({
-      _tag: "read",
-      head: 1,
-      entries: entries(1),
-    });
-  }
-  const ack = await journal.appendFenced("s", [record(2)], 1);
-  expect(ack).toEqual({
-    _tag: "appended",
-    head: 2,
-    entries: [{ seq: 2, record: record(2) }],
-  });
-  expect(read(await journal.read("s", 0))).toEqual({
-    _tag: "read",
-    head: 2,
-    entries: entries(2),
-  });
-  await close(journal);
-  return passed("K7");
-}
-async function tornTail({ open, fixture }: KitContext): Promise<KitResult> {
-  if (!fixture.byteFile) return { id: "K8", status: "skipped" };
-  const readStoredBytes = fixture.readStoredBytes;
-  if (!fixture.tearTail || !readStoredBytes)
-    throw new Error(
-      "A byte-file fixture must provide tearTail and readStoredBytes",
-    );
-  const snapshot = readStoredBytes.bind(fixture);
-  async function unchangedRead(reader: Journal, count: number) {
-    const before = new Uint8Array(await snapshot("s"));
-    expect(read(await reader.read("s", 0))).toEqual({
-      _tag: "read",
-      head: count,
-      entries: entries(count),
-    });
-    const after = new Uint8Array(await snapshot("s"));
-    expect(after).toEqual(before);
-  }
-  let journal = await open();
-  appended(await journal.append("s", batch(2)));
-  await close(journal);
-  await fixture.tearTail();
-  journal = await open();
-  await unchangedRead(journal, 2);
-  await unchangedRead(journal, 2);
-  const secondReader = await open();
-  await unchangedRead(secondReader, 2);
-  await close(secondReader);
-  expect(appended(await journal.append("s", [record(3)]))).toEqual({
-    _tag: "appended",
-    head: 3,
-    entries: [{ seq: 3, record: record(3) }],
-  });
-  await close(journal);
-  journal = await open();
-  await unchangedRead(journal, 3);
-  await close(journal);
-  return passed("K8");
-}
-
 const cases = {
-  K1: order,
-  K2: readFrom,
-  K3: allOrNone,
-  K4: reopen,
-  K5: flatCost,
-  K6: streams,
-  K7: fenced,
-  K8: tornTail,
+  K1: { run: order },
+  K2: { run: readFrom },
+  K3: { run: allOrNone, fixedRepeats: 1 },
+  K4: { run: reopen },
+  K5: { run: flatCost, samples: 21, summarize: appendCosts },
+  K6: { run: streams },
+  K7: { run: fenced, applies: isFenced },
+  K8: { run: tornTail, applies: (_, fixture) => fixture.byteFile },
 } satisfies Record<KitCase, KitCheck>;
 
 export async function journalConformance(
@@ -370,38 +570,99 @@ export async function journalConformance(
   options: KitOptions,
 ): Promise<readonly KitResult[]> {
   const results: KitResult[] = [];
+  const seed = options.seed ?? 9542026;
   for (const id of Object.keys(cases) as KitCase[]) {
-    const fixtures = new Set<JournalKitFixture>();
-    const tracked: JournalKitFactory = async () => {
-      const fixture = await make();
-      const wrapper: JournalKitFixture = {
-        ...fixture,
-        async dispose() {
-          if (!fixtures.delete(wrapper)) return;
-          await fixture.dispose();
-        },
-      };
-      fixtures.add(wrapper);
-      return wrapper;
-    };
-    try {
-      const fixture = await tracked();
-      results.push(
-        await cases[id]({
-          ...options,
-          fixture,
-          open: () => fixture.open(),
-          make: tracked,
+    const check: KitCheck = cases[id];
+    const started = options.now();
+    let skipped = false;
+    const property = await fc.check(
+      fc.asyncProperty(scriptArbitrary, async (script) => {
+        skipped = (await withModel(make, script, check, options)).skipped;
+      }),
+      {
+        seed,
+        numRuns: options.runs ?? 100,
+        ...(options.replay?.id === id ? { path: options.replay.path } : {}),
+      },
+    );
+    const generatedMs = options.now() - started;
+    if (property.failed) {
+      const error = property.errorInstance;
+      results.push({
+        id,
+        status: "failed",
+        detail: JSON.stringify({
+          elapsedMs: options.now() - started,
+          generatedMs,
+          seed: property.seed,
+          path: property.counterexamplePath,
+          script:
+            error instanceof ScriptFailure
+              ? error.calls
+              : property.counterexample,
+          firstDifference:
+            error instanceof ScriptFailure
+              ? error.firstDifference
+              : String(error),
         }),
-      );
+      });
+      continue;
+    }
+    const fixed: unknown[] = [];
+    const fixedRepeats = check.fixedRepeats ?? options.repeats ?? 3;
+    try {
+      for (let repeat = 0; repeat < fixedRepeats; repeat++) {
+        const script = fc.sample(scriptArbitrary, {
+          seed: seed + repeat,
+          numRuns: 1,
+        })[0];
+        if (!script) throw new Error("Missing fixed scale script");
+        const samples: unknown[] = [];
+        for (let sample = 0; sample < (check.samples ?? 1); sample++) {
+          const result = await withModel(
+            make,
+            { ...script, stream: 0 },
+            check,
+            options,
+            options.records,
+            sample,
+          );
+          skipped = result.skipped;
+          if (result.detail !== undefined) samples.push(result.detail);
+        }
+        if (samples.length)
+          fixed.push(check.summarize ? check.summarize(samples) : samples[0]);
+      }
+      results.push({
+        id,
+        status: skipped ? "skipped" : "passed",
+        detail: JSON.stringify({
+          seed,
+          elapsedMs: options.now() - started,
+          generatedMs,
+          fixedMs: options.now() - started - generatedMs,
+          generatedRuns: property.numRuns,
+          fixedRuns: fixedRepeats,
+          records: options.records,
+          fixed,
+        }),
+      });
     } catch (error) {
       results.push({
         id,
         status: "failed",
-        detail: error instanceof Error ? error.message : String(error),
+        detail: JSON.stringify({
+          seed,
+          elapsedMs: options.now() - started,
+          generatedMs,
+          fixed: true,
+          script: error instanceof ScriptFailure ? error.calls : [],
+          firstDifference:
+            error instanceof ScriptFailure
+              ? error.firstDifference
+              : String(error),
+        }),
       });
-    } finally {
-      for (const fixture of fixtures) await fixture.dispose();
     }
   }
   return results;
@@ -413,12 +674,19 @@ export function describeJournalConformance(
   options: KitOptions,
 ): void {
   describe(`Journal conformance: ${label}`, () => {
-    it("passes every applicable K1–K8 case", async () => {
+    it("matches the model in every applicable K1–K8 case", async () => {
+      const start = options.now();
       const results = await journalConformance(make, options);
-      console.info(JSON.stringify({ driver: label, results }));
+      console.info(
+        JSON.stringify({
+          driver: label,
+          elapsedMs: options.now() - start,
+          results,
+        }),
+      );
       expect(results.filter((result) => result.status === "failed")).toEqual(
         [],
       );
-    }, 120_000);
+    }, 180_000);
   });
 }

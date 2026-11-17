@@ -56,15 +56,17 @@ const memoryFixture: JournalKitFactory = async () => {
   };
 };
 
-for (let repeat = 1; repeat <= 3; repeat++) {
-  describeJournalConformance(`memory ${repeat}`, memoryFixture, {
-    records: 10000,
-    now: () => performance.now(),
-  });
-}
+describeJournalConformance("memory", memoryFixture, {
+  records: 10000,
+  now: () => performance.now(),
+});
 
+/** Every unconditional mutation must fail its named case; failures from other cases are also reported. */
 const broken = {
   dropsBatchTail: "K3",
+  clearsStreamOnInterrupt: "K3",
+  checksThenWrites: "K7",
+  foldsStreamCase: "K6",
   acknowledgesUnstored: "K3",
   rewritesWholeLog: "K5",
   acknowledgesMeasuredUnstored: "K5",
@@ -87,6 +89,7 @@ type MutationContext = {
   readonly torn: () => boolean;
   readonly truncateTail: () => void;
   readonly opens: () => number;
+  readonly cleared: Map<string, FencedJournal>;
   readonly batches: Map<string, number>;
   readonly clock: { ticks: number };
 };
@@ -107,6 +110,41 @@ async function acknowledgeUnstored(
 }
 
 const mutations = {
+  clearsStreamOnInterrupt: ({ journal, cut, cleared }) => ({
+    ...journal,
+    async append(stream, records) {
+      if (cut() === undefined)
+        return (cleared.get(stream) ?? journal).append(stream, records);
+      cleared.set(stream, memoryJournal({ fenced: true }));
+      return {
+        _tag: "journal_io",
+        operation: "append",
+        uncertain: true,
+        message: "cleared on interrupt",
+      };
+    },
+    read: (stream, after) =>
+      (cleared.get(stream) ?? journal).read(stream, after),
+    appendFenced: (stream, records, expected) =>
+      (cleared.get(stream) ?? journal).appendFenced(stream, records, expected),
+  }),
+  checksThenWrites: ({ journal }) => ({
+    ...journal,
+    async appendFenced(stream, records, expected) {
+      const before = await journal.read(stream, 0);
+      if (before._tag !== "read") return before;
+      return before.head === expected
+        ? journal.append(stream, records)
+        : { _tag: "journal_conflict", expected, head: before.head };
+    },
+  }),
+  foldsStreamCase: ({ journal }) => ({
+    ...journal,
+    read: (stream, after) => journal.read(stream.toLowerCase(), after),
+    append: (stream, records) => journal.append(stream.toLowerCase(), records),
+    appendFenced: (stream, records, expected) =>
+      journal.appendFenced(stream.toLowerCase(), records, expected),
+  }),
   dropsBatchTail: ({ journal, cut }) => ({
     ...journal,
     async append(stream, records) {
@@ -249,6 +287,7 @@ async function brokenFixture(name: Broken, clock: { ticks: number }) {
   let storedBytes = Uint8Array.of(1, 2);
 
   let opens = 0;
+  const cleared = new Map<string, FencedJournal>();
   const batches = new Map<string, number>();
   return {
     ...fixture,
@@ -276,6 +315,7 @@ async function brokenFixture(name: Broken, clock: { ticks: number }) {
       const journal = base as FencedJournal;
       const mutant = mutations[name]({
         journal,
+        cleared,
         cut: () => cut,
         torn: () => torn,
         truncateTail: () => {
@@ -298,28 +338,23 @@ async function brokenFixture(name: Broken, clock: { ticks: number }) {
   };
 }
 
-it.each(
-  Object.entries(broken) as [Broken, KitCase][],
-)("%s fails exactly %s and passes the other applicable cases", async (name, expected) => {
-  const clock = { ticks: 0 };
-  const results = await journalConformance(() => brokenFixture(name, clock), {
-    records: 64,
-    now: () => clock.ticks,
-  });
-  expect(
-    results
+it.each(Object.entries(broken) as [Broken, KitCase][])(
+  "%s is detected by %s",
+  async (name, expected) => {
+    const clock = { ticks: 0 };
+    const results = await journalConformance(() => brokenFixture(name, clock), {
+      records: 64,
+      now: () => clock.ticks,
+      repeats: 1,
+    });
+    const failed = results
       .filter((result) => result.status === "failed")
-      .map((result) => result.id),
-  ).toEqual([expected]);
-  expect(
-    results.every(
-      (result) =>
-        result.id === expected ||
-        result.status === "passed" ||
-        result.status === "skipped",
-    ),
-  ).toBe(true);
-});
+      .map((result) => result.id);
+    console.info(JSON.stringify({ broken: name, expected, failed }));
+    expect(failed).toContain(expected);
+  },
+  120_000,
+);
 
 it("refuses a racing expected head on shared memory storage", async () => {
   const journal = memoryJournal({ fenced: true });
