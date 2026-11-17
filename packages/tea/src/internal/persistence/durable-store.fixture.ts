@@ -240,12 +240,6 @@ export function onStorageWrite(
 export function storageClosed(storage: DurableStorage): boolean {
   return control(storage).closed;
 }
-/** Legacy-layout byte view, removed with its final consumer in the next step. */
-export function storageBytes(
-  storage: DurableStorage,
-): ReadonlyMap<string, string> {
-  return new Map(control(storage).disk);
-}
 export function storageMutations(storage: DurableStorage) {
   const { disk } = control(storage);
   return {

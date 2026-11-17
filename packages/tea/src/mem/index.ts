@@ -30,9 +30,6 @@
 
 import type { DeletableStore, FencedStore, Migrated } from "../index";
 import { StoreConflictError } from "../index";
-import { memoryLog } from "../internal/persistence/durable-log/memory-log";
-import type { Cmd } from "../pure/core";
-import type { EventSourcedOptions, LoggedStore } from "../runtime-types";
 
 /** Options for {@link memoryStore}. */
 export interface MemoryStoreOptions {
@@ -122,20 +119,4 @@ export function memoryStore<S>(
       return version;
     },
   };
-}
-
-/**
- * Build a single-writer durable log over caller-owned serialized memory.
- * A fresh driver over the same Map and key resumes the same history.
- * Each mutation reads, decides and writes synchronously before yielding.
- */
-export function memoryEventSourcedStore<
-  S,
-  M extends { _tag: string },
-  C extends Cmd,
->(
-  backing: Map<string, string>,
-  options: EventSourcedOptions<S, M, C>,
-): LoggedStore<S, M, C> {
-  return memoryLog(backing, options).store;
 }
