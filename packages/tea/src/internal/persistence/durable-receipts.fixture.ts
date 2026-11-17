@@ -10,7 +10,7 @@ import {
   createStorage,
   type DurableStorage,
   durableStore,
-  storageBytes,
+  storedLog,
 } from "./durable-store.fixture";
 
 type State = { n: number };
@@ -57,8 +57,8 @@ export type ReceiptDriver = (
 }>;
 
 function records(disk: DurableStorage) {
-  return [...storageBytes(disk).values()]
-    .map((bytes) => JSON.parse(bytes))
+  return storedLog(disk)
+    .frames.map((bytes) => JSON.parse(bytes))
     .filter((r) => r.record);
 }
 async function sendReceipt(
@@ -143,10 +143,14 @@ export function receiptContract(engine: string, driver: ReceiptDriver): void {
     const applied = frames.find(
       ({ record }) => record.sourceId === lastAppliedMessage.record.id,
     );
-    const checkpoint = [...storageBytes(disk).entries()]
-      .map(([key, bytes]) => ({ key, raw: JSON.parse(bytes) }))
-      .filter(({ raw }) => raw.snapshot !== null)
-      .at(-1)?.raw.snapshot;
+    const stored = storedLog(disk);
+    const checkpoint = [
+      ...stored.frames,
+      ...(stored.checkpoint === undefined ? [] : [stored.checkpoint]),
+    ]
+      .map((bytes) => JSON.parse(bytes))
+      .filter((raw) => raw.snapshot !== null)
+      .at(-1)?.snapshot;
     expect(checkpoint.state).toEqual(applied.record.state);
     const wake = await driver(
       program,

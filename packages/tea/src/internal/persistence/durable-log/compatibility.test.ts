@@ -1,3 +1,4 @@
+// The frozen origin/main key and byte pairs are this test's subject.
 import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
 import { z } from "zod";

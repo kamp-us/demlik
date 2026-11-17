@@ -1,12 +1,17 @@
 import { vi } from "vitest";
 import type { Cmd } from "../../pure/core";
 import type { EventSourcedOptions, LoggedStore } from "../../runtime-types";
+import { logKey } from "./durable-log/format";
 import { memoryLog } from "./durable-log/memory-log";
 
 declare const storageBrand: unique symbol;
 /** Opaque storage, compared by its retained bytes in existing assertions. */
 export interface DurableStorage {
   readonly [storageBrand]: true;
+}
+export interface StoredLog {
+  readonly frames: readonly string[];
+  readonly checkpoint?: string;
 }
 /** Called after a physical write; returning true cuts that activation. */
 export type StorageWrite = (bytes: string) => boolean;
@@ -31,7 +36,13 @@ class Disk extends Map<string, string> implements DurableStorage {
     super();
     controls.set(this, { disk: this, closed: false, write });
     // Seeding and copying are not physical writes by the activation.
-    for (const [key, bytes] of entries) super.set(key, bytes);
+    for (const [key, bytes] of entries) this.seed(key, bytes);
+  }
+  seed(key: string, bytes: string): void {
+    super.set(key, bytes);
+  }
+  peek(key: string): string | undefined {
+    return super.get(key);
   }
   override get(key: string) {
     if (control(this).closed) throw new Dropped();
@@ -54,6 +65,78 @@ export function createStorage(
   write?: StorageWrite,
 ): DurableStorage {
   return new Disk(entries, write);
+}
+
+/** Place ordered frames and an optional sibling checkpoint without physical writes or cuts. */
+export function storageOf(
+  log: StoredLog & { readonly name?: string },
+  write?: StorageWrite,
+): DurableStorage {
+  const storage = createStorage([], write);
+  for (const [index, bytes] of log.frames.entries())
+    seedFrame(storage, index + 1, bytes, log.name);
+  if (log.checkpoint !== undefined)
+    control(storage).disk.seed(
+      `${logKey(log.name)}/checkpoint`,
+      log.checkpoint,
+    );
+  return storage;
+}
+
+/** Retained bytes are inspectable even after the activation was cut. */
+export function readFrame(
+  storage: DurableStorage,
+  n: number,
+  name = "default",
+): string | undefined {
+  const key = logKey(name);
+  return control(storage).disk.peek(n === 1 ? key : `${key}/${n}`);
+}
+
+export function storedLog(
+  storage: DurableStorage,
+  name = "default",
+): StoredLog {
+  const frames: string[] = [];
+  for (let n = 1; ; n += 1) {
+    const bytes = readFrame(storage, n, name);
+    if (bytes === undefined) break;
+    frames.push(bytes);
+  }
+  return {
+    frames,
+    checkpoint: control(storage).disk.peek(`${logKey(name)}/checkpoint`),
+  };
+}
+
+/** Seed frame n without invoking write observers, mutation spies, or crash cuts. */
+export function seedFrame(
+  storage: DurableStorage,
+  n: number,
+  bytes: string,
+  name = "default",
+): void {
+  const key = logKey(name);
+  control(storage).disk.seed(n === 1 ? key : `${key}/${n}`, bytes);
+}
+
+/** Seed the next frame without invoking write observers, mutation spies, or crash cuts. */
+export function appendFrame(
+  storage: DurableStorage,
+  bytes: string,
+  name = "default",
+): void {
+  seedFrame(storage, storedLog(storage, name).frames.length + 1, bytes, name);
+}
+
+export function storedLogs(storage: DurableStorage): ReadonlySet<string> {
+  const names = new Set<string>();
+  for (const key of control(storage).disk.keys()) {
+    const [prefix, encoded, cell] = key.split("/");
+    if (prefix === "@@es" && encoded !== undefined && cell === "log")
+      names.add(decodeURIComponent(encoded));
+  }
+  return names;
 }
 
 export function copyStorage(
@@ -82,14 +165,6 @@ export function storageBytes(
   storage: DurableStorage,
 ): ReadonlyMap<string, string> {
   return new Map(control(storage).disk);
-}
-
-export function seedStorage(
-  storage: DurableStorage,
-  key: string,
-  bytes: string,
-): void {
-  control(storage).disk.set(key, bytes);
 }
 
 export function storageMutations(storage: DurableStorage) {

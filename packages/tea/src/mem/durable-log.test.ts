@@ -18,8 +18,10 @@ import {
   createStorage,
   durableStore,
   onStorageWrite,
-  seedStorage,
-  storageBytes,
+  readFrame,
+  seedFrame,
+  storedLog,
+  storedLogs,
 } from "../internal/persistence/durable-store.fixture";
 import { run } from "../promise";
 
@@ -180,10 +182,8 @@ test("two keyed drivers share a Map while isolating history, dedup, revisions, c
       key: "a/b",
     }).load(),
   ).toEqual({ files: ["left"], uploaded: [] });
-  const disk = storageBytes(storage);
-  expect(new Set([...disk.keys()].map((key) => key.split("/")[1])).size).toBe(
-    2,
-  );
+  const logs = storedLogs(storage);
+  expect(logs.size).toBe(2);
 });
 
 test("schema transformations supply canonical admitted messages to the reducer", async () => {
@@ -213,16 +213,16 @@ test("invalid derived checkpoint State falls back to committed records; malforme
   }).ready;
   await live.dispatch({ _tag: "picked", file: "one" });
   await live.stop();
-  const key = [...storageBytes(disk).keys()].find(
-    (key) =>
-      JSON.parse(storageBytes(disk).get(key) ?? "null")?.snapshot !== null,
-  );
-  if (!key) throw new Error("Missing serialized log");
-  const valid = storageBytes(disk).get(key);
+  const n =
+    storedLog(disk).frames.findIndex(
+      (bytes) => JSON.parse(bytes)?.snapshot !== null,
+    ) + 1;
+  if (n === 0) throw new Error("Missing serialized log");
+  const valid = readFrame(disk, n);
   if (!valid) throw new Error("Missing log bytes");
   const raw = JSON.parse(valid);
   raw.snapshot.state = { retired: true };
-  seedStorage(disk, key, JSON.stringify(raw));
+  seedFrame(disk, n, JSON.stringify(raw));
   expect(await durableStore(disk, options).load()).toEqual({
     files: ["one"],
     uploaded: [],
@@ -236,7 +236,7 @@ test("invalid derived checkpoint State falls back to committed records; malforme
       record: { _tag: "unknown" },
     }),
   ]) {
-    seedStorage(disk, key, bytes);
+    seedFrame(disk, n, bytes);
     const before = copyStorage(disk);
     const invalid = durableStore(disk, options);
     await expect(invalid.readLog()).rejects.toThrow();

@@ -1,3 +1,4 @@
+// The legacy key layout itself is this test's subject.
 import { expect, test } from "vitest";
 import { StoreRefusedError } from "../index";
 import { machine, options } from "../internal/persistence/durable-host.fixture";

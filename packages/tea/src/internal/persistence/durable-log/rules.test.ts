@@ -8,8 +8,9 @@ import {
   createStorage,
   durableLog,
   durableStore,
-  seedStorage,
-  storageBytes,
+  seedFrame,
+  storageOf,
+  storedLog,
 } from "../durable-store.fixture";
 import { op, optionsFor } from "../durable-wake.fixture";
 import { checkpointState } from "./codec";
@@ -184,7 +185,7 @@ test("purity, whole projection replay, and cold cache equals incremental cache a
         };
         const attempt = async (operation: () => Promise<unknown>) => {
           const before = verify();
-          const stored = [...storageBytes(disk)];
+          const stored = storedLog(disk);
           armed = true;
           try {
             await operation();
@@ -198,9 +199,7 @@ test("purity, whole projection replay, and cold cache equals incremental cache a
           }
           const decoded = { ...counts };
           const after = verify();
-          if (
-            JSON.stringify([...storageBytes(disk)]) === JSON.stringify(stored)
-          ) {
+          if (JSON.stringify(storedLog(disk)) === JSON.stringify(stored)) {
             expect(after).toEqual(before);
             expect(counts).toEqual(decoded);
           }
@@ -345,7 +344,6 @@ test("the projection is bounded by unfinished work", async () => {
   expect(large).toBeLessThan(small + 64);
 });
 
-const key = "@@es/default/log";
 const frame = (seq: number, record: unknown, snapshot: unknown = null) =>
   JSON.stringify({ protocol: 2, seq, record, snapshot });
 const birth = {
@@ -359,40 +357,35 @@ const message = (id: string) =>
   ({ _tag: "message", id, at: 1, msg: { _tag: "go", n: 0 } }) as const;
 
 test("consumed duplicate storage IDs are refused without overwriting, and a failed partial rebuild is discarded", async () => {
-  const disk = createStorage([
-    [key, frame(1, birth)],
-    [`${key}/2`, frame(2, message("a"))],
-    [
-      `${key}/3`,
+  const disk = storageOf({
+    frames: [
+      frame(1, birth),
+      frame(2, message("a")),
       frame(3, { _tag: "receipt", sourceId: "a", disposition: "ignored" }),
+      frame(4, message("a")),
     ],
-    [`${key}/4`, frame(4, message("a"))],
-  ]);
+  });
   const before = copyStorage(disk);
   const live = durableLog(disk, options);
   await expect(live.store.readLog()).rejects.toThrow("Duplicate log source");
   expect(disk).toEqual(before);
-  seedStorage(disk, `${key}/4`, frame(4, message("b")));
+  seedFrame(disk, 4, frame(4, message("b")));
   const copied = copyStorage(disk);
   expect(live.inspect()).toEqual(durableLog(copied, options).inspect());
 });
 
 test("receipt commitment at applied count zero is a valid checkpoint boundary", async () => {
-  const disk = createStorage([
-    [key, frame(1, birth)],
-    [`${key}/2`, frame(2, message("a"))],
-    [
-      `${key}/3`,
+  const disk = storageOf({
+    frames: [
+      frame(1, birth),
+      frame(2, message("a")),
       frame(3, { _tag: "receipt", sourceId: "a", disposition: "ignored" }),
     ],
-    [
-      `${key}/checkpoint`,
-      JSON.stringify({
-        protocol: 2,
-        snapshot: { through: 2, state: { n: 0 } },
-      }),
-    ],
-  ]);
+    checkpoint: JSON.stringify({
+      protocol: 2,
+      snapshot: { through: 2, state: { n: 0 } },
+    }),
+  });
   expect((await durableLog(disk, options).store.readLog()).snapshot).toEqual({
     through: 2,
     state: { n: 0 },
@@ -447,7 +440,7 @@ test("delivery gaps preserve high-water allocation and invalid stored confirmati
     effect: { _tag: "work", n: 0 },
   }));
   const { store } = durableLog(
-    createStorage([[key, frame(1, { ...birth, owed })]]),
+    storageOf({ frames: [frame(1, { ...birth, owed })] }),
     options,
   );
   expect(await store.confirmEffect(5)).toEqual({
@@ -463,16 +456,15 @@ test("delivery gaps preserve high-water allocation and invalid stored confirmati
     timers: [],
   });
   expect(next.owed[0]?.id).toBe(9);
-  const invalid = createStorage([
-    [key, frame(1, { ...birth, owed })],
-    [
-      `${key}/2`,
+  const invalid = storageOf({
+    frames: [
+      frame(1, { ...birth, owed }),
       frame(2, {
         _tag: "confirmed",
         event: { _tag: "effect_confirmed", id: 5 },
       }),
     ],
-  ]);
+  });
   await expect(durableLog(invalid, options).store.readLog()).rejects.toThrow(
     "Invalid delivery receipt",
   );
@@ -785,9 +777,8 @@ test("a repeated applied commitment never reads the replacement", async () => {
 });
 
 test("record rules precede a structurally rejected checkpoint", async () => {
-  const disk = createStorage([
-    [
-      "@@es/default/log",
+  const disk = storageOf({
+    frames: [
       JSON.stringify({
         protocol: 2,
         seq: 1,
@@ -795,7 +786,7 @@ test("record rules precede a structurally rejected checkpoint", async () => {
         snapshot: true,
       }),
     ],
-  ]);
+  });
   await expect(durableStore(disk, options).readLog()).rejects.toThrow(
     "Invalid durable log ordering",
   );
