@@ -503,11 +503,11 @@ describe("instructions live in the durable Model (ADR 0004)", () => {
     const { machine, interpret, subscribe } = agent.machine(INPUT);
 
     // Record every applied Msg to a journal, the way a durable host would.
-    const journal = memoryJournal<string>();
+    const journal = memoryJournal();
     const handle = run(machine, { ctx: { kb }, interpret, subscribe });
     const runtime = await handle.ready;
     const off = runtime.observe((msg) => {
-      void journal.append("run-1", JSON.stringify(msg));
+      void journal.append("run-1", [JSON.stringify(msg)]);
     });
     await driveToDone(
       handle,
@@ -518,9 +518,9 @@ describe("instructions live in the durable Model (ADR 0004)", () => {
 
     // Replay the journal through the machine, pure: the first `resilient_run`
     // Cmd is the first model call, and its payload is the prompt that ran.
-    const msgs = (await journal.list("run-1")).map(
-      (e): LidMsg => JSON.parse(e.record),
-    );
+    const source = await journal.read("run-1", 0);
+    if (source._tag !== "read") throw new Error(source.message);
+    const msgs = source.entries.map((e): LidMsg => JSON.parse(e.record));
     const { state, cmds } = replay(machine, { msgs, ctx: { kb } });
     const first = cmds.find(
       (c) => c._tag === "resilient_run",
@@ -1043,11 +1043,11 @@ describe("onChunk — the streaming model port (#123)", () => {
       instructions: INSTRUCTIONS,
     });
     const { machine, interpret, subscribe } = agent.machine(INPUT);
-    const journal = memoryJournal<string>();
+    const journal = memoryJournal();
     const handle = run(machine, { ctx: { kb }, interpret, subscribe });
     const runtime = await handle.ready;
     const off = runtime.observe((msg) => {
-      void journal.append("run-1", JSON.stringify(msg));
+      void journal.append("run-1", [JSON.stringify(msg)]);
     });
     const live = await driveToDone(
       handle,
@@ -1059,9 +1059,9 @@ describe("onChunk — the streaming model port (#123)", () => {
     // Re-fold the recorded Msgs, purely. The replay makes no model call, so it
     // produces no chunk — and it does not need one, because the journal records
     // the settled turns and a chunk was never a Msg to record.
-    const msgs = (await journal.list("run-1")).map(
-      (e): LidMsg => JSON.parse(e.record),
-    );
+    const source = await journal.read("run-1", 0);
+    if (source._tag !== "read") throw new Error(source.message);
+    const msgs = source.entries.map((e): LidMsg => JSON.parse(e.record));
     const { state } = replay(machine, { msgs, ctx: { kb } });
     expect(state.conversation).toEqual(live.conversation);
     expect(state.output).toEqual(live.output);
@@ -1473,11 +1473,11 @@ describe("defineAgent(...).with — the one wrap point over the built machine", 
     }).with({ interpret: { search: tracing(trace, "search") } });
 
     const { machine, interpret, subscribe } = agent.machine(INPUT);
-    const journal = memoryJournal<string>();
+    const journal = memoryJournal();
     const handle = run(machine, { ctx: { kb }, interpret, subscribe });
     const runtime = await handle.ready;
     const off = runtime.observe((msg) => {
-      void journal.append("run-1", JSON.stringify(msg));
+      void journal.append("run-1", [JSON.stringify(msg)]);
     });
     const live = await driveToDone(
       handle,
@@ -1490,9 +1490,9 @@ describe("defineAgent(...).with — the one wrap point over the built machine", 
     expect(live.run.phase).toBe("done");
     // The wrapper returned `next`'s Msg, so the journal holds the tool's own
     // `search_ok` and re-folding it purely lands on the same Model.
-    const msgs = (await journal.list("run-1")).map(
-      (e): LidMsg => JSON.parse(e.record),
-    );
+    const source = await journal.read("run-1", 0);
+    if (source._tag !== "read") throw new Error(source.message);
+    const msgs = source.entries.map((e): LidMsg => JSON.parse(e.record));
     expect(msgs.map((m) => m._tag)).toContain("search_ok");
     const { state } = replay(machine, { msgs, ctx: { kb } });
     expect(state.conversation).toEqual(live.conversation);

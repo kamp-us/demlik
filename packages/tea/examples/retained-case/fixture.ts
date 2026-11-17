@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { fileJournal } from "@demlik/tea/node";
-import { z } from "zod";
 import { MAX_MODEL_TURNS, type Ports } from "./agent";
 import { type CaseHost, type CaseView, openCase } from "./host";
 
@@ -85,17 +84,13 @@ export function verifyCase(host: CaseHost): CaseView {
 
 export async function runFixture(directory: string) {
   const runId = "investigation-593";
-  const first = await openCase(
-    fileJournal(directory, z.string().parse),
-    runId,
-    fixturePorts(),
-  );
+  const first = await openCase(fileJournal(directory), runId, fixturePorts());
   if (committedView(first).revision === 0) await first.start();
   else await first.resume();
   const expected = verifyCase(first);
   await first.stop();
   const reopened = await openCase(
-    fileJournal(directory, z.string().parse),
+    fileJournal(directory),
     runId,
     fixturePorts(),
   );

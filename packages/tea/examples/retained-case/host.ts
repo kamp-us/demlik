@@ -12,11 +12,10 @@ import {
   decodeRecord,
   type Evidence,
   encodeRecord,
-  parseRecord,
   runIdSchema,
 } from "./source";
 
-export type CaseJournal = ReturnType<typeof fileJournal<string>>;
+export type CaseJournal = ReturnType<typeof fileJournal>;
 type Wiring = ReturnType<typeof investigation>;
 type Model = ReturnType<Wiring["agent"]["init"]>;
 type State = ReturnType<Wiring["machine"]["init"]>[0];
@@ -114,7 +113,13 @@ export type CaseConnection = ReturnType<typeof connection>;
 
 export interface CaseHost {
   read(): HostState;
-  source(): ReturnType<CaseJournal["list"]>;
+  source(): Promise<
+    readonly {
+      readonly stream: string;
+      readonly seq: number;
+      readonly record: CaseRecord;
+    }[]
+  >;
   start(): Promise<void>;
   resume(): Promise<void>;
   connect(): Promise<CaseConnection>;
@@ -236,35 +241,34 @@ export async function openCase(
   };
   const store: Store<State> = {
     async load() {
-      return journal.withLock(runId, async () => {
-        let committed = initial;
-        for (const entry of await journal.list(runId)) {
-          if (entry.stream !== runId)
-            throw new Error("case source has a foreign stream");
-          const record = decodeRecord(entry.record);
-          validate(record, committed);
-          const [next] = applyCell(
-            wired.machine,
-            {
+      const source = await journal.read(runId, 0);
+      if (source._tag !== "read")
+        throw new Error(source.message, { cause: source });
+      let committed = initial;
+      for (const entry of source.entries) {
+        const record = decodeRecord(entry.record);
+        validate(record, committed);
+        const [next] = applyCell(
+          wired.machine,
+          {
+            agent: committed.model,
+            msg: null,
+            revision: committed.view.revision,
+          },
+          record.msg,
+        );
+        committed = fold(committed, record, entry.seq, next.agent);
+      }
+      state = { kind: "ready", committed };
+      restored =
+        committed.view.revision === 0
+          ? null
+          : {
               agent: committed.model,
               msg: null,
               revision: committed.view.revision,
-            },
-            record.msg,
-          );
-          committed = fold(committed, record, entry.seq, next.agent);
-        }
-        state = { kind: "ready", committed };
-        restored =
-          committed.view.revision === 0
-            ? null
-            : {
-                agent: committed.model,
-                msg: null,
-                revision: committed.view.revision,
-              };
-        return restored;
-      });
+            };
+      return restored;
     },
     migrate: (raw) =>
       raw === restored
@@ -273,20 +277,27 @@ export async function openCase(
     async save(next) {
       if (next.msg === null) return;
       try {
-        await journal.withLock(runId, async () => {
-          const previous = current();
-          if (next.revision === previous.view.revision) return;
-          if (next.revision !== previous.view.revision + 1) {
-            throw new Error("case save revision is not the next source entry");
-          }
-          const record = parseRecord({ version: 1, msg: next.msg });
-          validate(record, previous);
-          const { seq } = await journal.append(runId, encodeRecord(record));
-          const committed = fold(previous, record, seq, next.agent);
-          state = { kind: "ready", committed };
-          for (const client of clients)
-            client.offer({ reason: "committed", view: committed.view });
-        });
+        const previous = current();
+        if (next.revision === previous.view.revision) return;
+        if (next.revision !== previous.view.revision + 1) {
+          throw new Error("case save revision is not the next source entry");
+        }
+        const record: CaseRecord = { version: 1, msg: next.msg };
+        validate(record, previous);
+        const ack = await journal.append(runId, [encodeRecord(record)]);
+        if (ack._tag !== "appended")
+          throw new Error(ack.message, { cause: ack });
+        const stored = ack.entries[0];
+        if (!stored) throw new Error("case append acknowledged no entry");
+        const committed = fold(
+          previous,
+          decodeRecord(stored.record),
+          stored.seq,
+          next.agent,
+        );
+        state = { kind: "ready", committed };
+        for (const client of clients)
+          client.offer({ reason: "committed", view: committed.view });
       } catch (error) {
         fail(error);
         throw error;
@@ -308,7 +319,14 @@ export async function openCase(
   return {
     read: (): HostState => structuredClone(state),
     async source() {
-      return journal.list(runId);
+      const source = await journal.read(runId, 0);
+      if (source._tag !== "read")
+        throw new Error(source.message, { cause: source });
+      return source.entries.map((entry) => ({
+        stream: runId,
+        seq: entry.seq,
+        record: decodeRecord(entry.record),
+      }));
     },
     async start() {
       ensureOpen();
@@ -329,13 +347,10 @@ export async function openCase(
     },
     async connect(): Promise<CaseConnection> {
       ensureOpen();
-      return journal.withLock(runId, async () => {
-        ensureOpen();
-        const client = connection(() => clients.delete(client));
-        clients.add(client);
-        client.offer({ reason: "attached", view: current().view });
-        return client;
-      });
+      const client = connection(() => clients.delete(client));
+      clients.add(client);
+      client.offer({ reason: "attached", view: current().view });
+      return client;
     },
     connections: () => clients.size,
     async stop() {

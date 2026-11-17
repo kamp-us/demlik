@@ -128,16 +128,32 @@ the existing four to converge; that break is not worth the churn (this table is
 the cheaper fix).
 
 **Journal factories are a separate family from Store factories.** A `Store<S>`
-is whole-load / whole-save of one state value; a `Journal<R>`
-(`src/internal/journal`, internal since #49) is an append-only, ordered record
-log. `fileJournal` (`./node`, beside `fileStore`) is the one journal factory
-still published, and it carries the journal's **experimental** promise, not the
-`stable` stamp of the subpath it is exported from — `fileJournal` lives in
-`./node` per the #30 ruling (a host file substrate homes with the host's other
-file adapter), and its tier travels with the journal feature. Its TSDoc carries
-`@experimental`, which is what makes its row on the generated `./node` reference
-page read `experimental` while the page reads `stable`. `memoryJournal` and the
-conformance suite are internal.
+is whole-load / whole-save of one state value; a `Journal`
+(`src/internal/journal/`) stores encoded JSON text in order. `append` takes
+one nonempty atomic batch and acknowledges its exact text and assigned positions;
+`read(stream, after)` returns entries strictly after that position. Drivers know
+no log schema or rule. Refusals are tagged data; an uncertain append requires
+reopening and reading before deciding how to recover.
+
+`fileJournal(dir)` (`./node`, beside `fileStore`) is the one journal factory
+still published. It takes no cross-process lock; one writer per stream is the
+caller's precondition; the old implementation locked every append.
+`fileJournal(dir, { fenced: true })` adds `appendFenced` beside the unconditional
+`append`. The checked method reads the real head, compares the expected head and
+appends under the existing `wx` stream lock. A mismatch is `journal_conflict`
+with the real head and no write. A lock that cannot be taken is `journal_io`
+for `append`, with `uncertain: false` and a message naming the lock and clear step.
+Each LF-terminated file frame
+stores a complete batch of opaque strings. Reads omit an incomplete tail without
+changing it; the next append truncates that tail before writing. Controlled byte
+cuts prove whole-batch recovery, not fsync or power-loss durability.
+
+`fileJournal` carries the journal's **experimental** promise, not the `stable`
+stamp of `./node`. Its `@experimental` TSDoc makes its generated reference row
+read `experimental` while the page reads `stable`. The contract types,
+`memoryJournal` (including its opt-in `{ fenced: true }` widening), and the
+K1–K8 conformance kit remain internal. The kit checks order, exclusive reads,
+atomicity, reopen, append cost, stream isolation, optional fencing and torn tails.
 
 ## Semver policy
 
