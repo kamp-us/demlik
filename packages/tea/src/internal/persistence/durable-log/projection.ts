@@ -87,23 +87,27 @@ export function checkpointEligibility<S, M, C>(
   );
 }
 
-function checkpointFields<S>(checkpoint: Checkpoint<S>) {
-  return {
-    snapshot: { through: checkpoint.through, state: checkpoint.state },
-    baseline: checkpoint.baseline,
-  } as const;
+function checkpointFields<S>(checkpoint: Result<Checkpoint<S> | null>) {
+  if (checkpoint._tag === "payload_rejected") return ok(null);
+  if (checkpoint._tag !== "ok") return checkpoint;
+  const accepted = checkpoint.value;
+  return ok(
+    accepted === null
+      ? null
+      : ({
+          snapshot: { through: accepted.through, state: accepted.state },
+          baseline: accepted.baseline,
+        } as const),
+  );
 }
 
 export function installCheckpoint<S, M, C>(
   p: Projection<S, M, C>,
-  checkpoint: Checkpoint<S> | null,
-): Projection<S, M, C> {
-  return checkpoint === null
-    ? p
-    : {
-        ...p,
-        ...checkpointFields(checkpoint),
-      };
+  checkpoint: Result<Checkpoint<S> | null>,
+): Projection<S, M, C> | LogRefusal {
+  const fields = checkpointFields(checkpoint);
+  if (fields._tag !== "ok") return fields;
+  return fields.value === null ? p : { ...p, ...fields.value };
 }
 
 export type FoldInput<S, M, C> = {
@@ -216,13 +220,15 @@ export function fold<S, M, C>(
     if (refusal) return refusal;
     draft.version = seq;
     if (input.snapshot !== null) {
-      const checkpoint = boundary.checkpointSource(input.snapshot, {
-        through: draft.through,
-        snapshot: draft.snapshot,
-      });
+      const checkpoint = checkpointFields(
+        boundary.checkpointSource(input.snapshot, {
+          through: draft.through,
+          snapshot: draft.snapshot,
+        }),
+      );
       if (checkpoint._tag !== "ok") return checkpoint;
       if (checkpoint.value !== null) {
-        Object.assign(draft, checkpointFields(checkpoint.value));
+        Object.assign(draft, checkpoint.value);
       }
     }
   }

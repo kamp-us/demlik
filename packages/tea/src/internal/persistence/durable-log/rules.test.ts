@@ -519,3 +519,66 @@ test("a commit that fails after its write leaves the next read equal to a cold o
   expect(live).toEqual(cold);
   expect(live.records.map((r) => r.seq)).toEqual([1, 2, 3]);
 });
+
+function admittedProjection() {
+  return {
+    ...projection.emptyProjection<
+      z.infer<typeof options.state>,
+      z.infer<typeof options.message>,
+      z.infer<typeof options.command>
+    >(),
+    version: 2,
+    birth: true,
+    state: { n: 0 },
+    storedState: { n: 0 },
+    pending: [{ seq: 2, record: message("a") }],
+  };
+}
+
+test("pure fold ignores a schema-rejected checkpoint after applying its record", () => {
+  const before = admittedProjection();
+  const input = {
+    row: {
+      seq: 3,
+      record: {
+        _tag: "applied",
+        sourceId: "a",
+        state: { n: 1 },
+        owed: [],
+        timers: [],
+      },
+    },
+    storedState: { n: 1 },
+    stored: null,
+    snapshot: { through: 2, state: { n: 1 } },
+  } as const;
+  const boundary: projection.FoldBoundary<{ n: number }> = {
+    checkpointSource: () => ({ _tag: "payload_rejected" }),
+  };
+  const expected = projection.fold(
+    before,
+    [{ ...input, snapshot: null }],
+    boundary,
+  );
+  expect(
+    checkPure((p, row) => projection.fold(p, [row], boundary), before, input),
+  ).toEqual(expected);
+  expect(
+    projection.fold(before, [input], {
+      checkpointSource: () => ({ _tag: "invalid_checkpoint_boundary" }),
+    }),
+  ).toEqual({ _tag: "invalid_checkpoint_boundary" });
+});
+
+test("pure sibling installation ignores a schema-rejected checkpoint", () => {
+  const before = admittedProjection();
+  const rejected = { _tag: "payload_rejected" } as const;
+  expect(checkPure(projection.installCheckpoint, before, rejected)).toEqual(
+    before,
+  );
+  expect(
+    projection.installCheckpoint(before, {
+      _tag: "invalid_checkpoint_boundary",
+    }),
+  ).toEqual({ _tag: "invalid_checkpoint_boundary" });
+});

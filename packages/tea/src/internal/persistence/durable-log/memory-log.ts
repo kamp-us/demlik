@@ -118,7 +118,6 @@ export function memoryLog<S, M extends { _tag: string }, C extends Cmd>(
       if (eligibility._tag !== "ok") return eligibility;
       if (eligibility.value === null) return ok(null);
       const decoded = checkpointState(state, options.state);
-      if (decoded._tag === "payload_rejected") return ok(null);
       if (decoded._tag !== "ok") return decoded;
       return ok({ through, state: decoded.value, baseline: eligibility.value });
     },
@@ -171,8 +170,8 @@ export function memoryLog<S, M extends { _tag: string }, C extends Cmd>(
   };
   const acceptCheckpoint = (bytes: string): void => {
     const raw = requireValue(decodeCheckpoint(bytes));
-    const checkpoint = requireValue(boundary.checkpointSource(raw, projection));
-    projection = installCheckpoint(projection, checkpoint);
+    const checkpoint = boundary.checkpointSource(raw, projection);
+    projection = requireVerb(installCheckpoint(projection, checkpoint));
   };
   const read = (): void => {
     try {
