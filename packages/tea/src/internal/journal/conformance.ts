@@ -159,6 +159,14 @@ async function allOrNone({ make }: KitContext): Promise<KitResult> {
     );
     expect(rows.entries).toEqual(entries(rows.entries.length));
     expect(rows.head).toBe(rows.entries.length);
+    if (ack._tag === "appended") {
+      expect(ack).toEqual({ _tag: "appended", head: 3, entries: entries(3) });
+      expect(rows).toEqual({
+        _tag: "read",
+        head: ack.head,
+        entries: ack.entries,
+      });
+    }
     expect(read(await journal.read("prefix", 0)).entries).toEqual([
       { seq: 1, record: record(0) },
     ]);
@@ -168,6 +176,11 @@ async function allOrNone({ make }: KitContext): Promise<KitResult> {
       head: rows.head + 1,
       entries: [{ seq: rows.head + 1, record: record(4) }],
     });
+    const storedNext = read(await journal.read("s", rows.head));
+    expect(storedNext.head).toBe(next.head);
+    expect(storedNext.entries.filter((entry) => entry.seq > rows.head)).toEqual(
+      next.entries,
+    );
     await close(journal);
     await fixture.dispose();
   }

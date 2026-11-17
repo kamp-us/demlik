@@ -65,6 +65,7 @@ for (let repeat = 1; repeat <= 3; repeat++) {
 
 const broken = {
   dropsBatchTail: "K3",
+  acknowledgesUnstored: "K3",
   rewritesWholeLog: "K5",
   losesOnReopen: "K4",
   reordersRead: "K1",
@@ -101,6 +102,22 @@ const mutations = {
         operation: "append",
         message: "partial batch",
         uncertain: true,
+      };
+    },
+  }),
+  acknowledgesUnstored: ({ journal, cut }) => ({
+    ...journal,
+    async append(stream, records) {
+      if (cut() === undefined) return journal.append(stream, records);
+      const prior = await journal.read(stream, 0);
+      if (prior._tag !== "read") return prior;
+      return {
+        _tag: "appended",
+        head: prior.head + records.length,
+        entries: records.map((record, i) => ({
+          seq: prior.head + i + 1,
+          record,
+        })),
       };
     },
   }),
