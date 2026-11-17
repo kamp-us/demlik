@@ -238,3 +238,21 @@ State, not the log's `timers` field.
 
 A Promise handler that has not finished can keep running after `stop()` returns;
 tea drops its late result ([ADR 0025](https://github.com/kamp-us/demlik/blob/main/.decisions/0025-stop-gives-up-on-handlers.md)).
+
+## 6. Hand long work to an external owner
+
+Use the [executable handler recipe](../../src/docs/how-to/make-durable.test.ts)
+(the `external-work` region) with a `Cmd.define`d job and a log store:
+
+1. Read `deliveryIdOf(ctx)` in the handler. Send that id and the Cmd to the
+   external queue, await its bounded durable acknowledgement, and return `owed()`.
+2. Await dispatch and `stop()`, then read
+   `logLedger(await store.readLog()).surviving()` for the still-owed Cmds and ids.
+   Close the journal; this invocation has ended without producing a result Msg.
+3. On a later activation, the handler receives each surviving Cmd with the same
+   id. The external receiver uses that id to ignore an already accepted handoff.
+
+`owed()` requires a logged invocation; otherwise the existing interpret error
+sink reports the refusal. On Effect, succeed with `owed()` after enqueueing.
+Until later-answer support lands, only the store's existing `confirmEffect(id)`
+clears an entry left owed this way.

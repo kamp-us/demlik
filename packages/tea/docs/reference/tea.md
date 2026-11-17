@@ -8,7 +8,7 @@ Tier: `stable`
 import { … } from "@demlik/tea";
 ```
 
-## Exports (210)
+## Exports (213)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -122,6 +122,7 @@ import { … } from "@demlik/tea";
 | [`LogFailure`](#LogFailure) | Interface | stable | A reducer refusal retained with its source receipt. |
 | [`LoggedStore`](#LoggedStore) | Interface | stable | An optional store capability for engine-owned durable execution. |
 | [`LoggedTimer`](#LoggedTimer) | Interface | stable | A committed timer decision. |
+| [`logLedger`](#logLedger) | Function | stable | Restore the single delivery ledger, including its consumed high-water mark. |
 | [`LogMessage`](#LogMessage) | Interface | stable | A canonical admitted message, saved before reduction. |
 | [`LogRead`](#LogRead) | Interface | stable | A coherent validated log and its derived checkpoint. |
 | [`LogRecord`](#LogRecord) | Type | stable | The atomic records retained by a durable log. |
@@ -148,6 +149,8 @@ import { … } from "@demlik/tea";
 | [`Outcome`](#Outcome) | Variable | stable | Build an Outcome outside a handler's helpers — in a test that calls a handler directly, or in an adapter converting another result type. |
 | [`OutcomeContractError`](#OutcomeContractError) | Class | stable | A `Cmd.define`d handler returned something the engine cannot settle: any Msg (the engine mints the Cmd's `<name>_ok` / `<name>_err`, never the handler — ADR 0021), or any other value that is neither an Outcome nor nothing. |
 | [`OutcomeHelpers`](#OutcomeHelpers) | Interface | stable | The two builders the Promise engine hands a `Cmd.define`d handler on its ctx: `ok(value)` and `err({ _tag })`, with `err` typed to the def's declared tags. |
+| [`owed`](#owed) | Function | stable | End this logged invocation without a Msg or automatic delivery confirmation. |
+| [`Owed`](#Owed) | Type | stable | A logged Cmd handed to an external owner without completing its delivery. |
 | [`OwedEffect`](#OwedEffect) | Interface | stable | A single surviving entry to re-emit: its id and the effect it owes. |
 | [`partitionByAck`](#partitionByAck) | Function | stable | Partition a buffer of seq-tagged commands into ACKED and PENDING against the authoritative `lastAppliedSeq`. |
 | [`pendingEffectsLedger`](#pendingEffectsLedger) | Function | stable | Build a live recorder. |
@@ -1643,7 +1646,7 @@ type InterpretCell<M extends { _tag: string }, C extends Cmd, Ctx> = unknown ext
   cmd: C,
   ctx: HandlerCtx<Ctx> & OutcomeHelpers<OkOfCmd<C>, DeclaredErrorsOf<C>>,
   dispatch?: (msg: M) => void,
-) => Promise<Outcome<OkOfCmd<C>, DeclaredErrorsOf<C>> | void>
+) => Promise<Outcome<OkOfCmd<C>, DeclaredErrorsOf<C>> | Owed | void>
 ```
 
 <a id="InterpretDetached"></a>
@@ -1795,6 +1798,14 @@ interface LoggedTimer<M> {
   readonly msg: M;
   readonly subId: string;
 }
+```
+
+<a id="logLedger"></a>
+
+### `logLedger`
+
+```ts
+function logLedger<S, M, C>(log: LogRead<S, M, C>): PendingEffectsRecorder<C>
 ```
 
 <a id="LogMessage"></a>
@@ -2227,6 +2238,25 @@ class OutcomeContractError extends Error {
 interface OutcomeHelpers<Ok, E> {
   readonly err: (error: E) => Outcome<never, E>;
   readonly ok: (value: Ok) => Outcome<Ok, never>;
+}
+```
+
+<a id="owed"></a>
+
+### `owed`
+
+```ts
+function owed(): Owed
+```
+
+<a id="Owed"></a>
+
+### `Owed`
+
+```ts
+type Owed = {
+  readonly _tag: "Owed";
+  readonly "[owedBrand]": true;
 }
 ```
 
