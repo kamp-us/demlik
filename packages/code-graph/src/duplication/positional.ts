@@ -1,7 +1,7 @@
 import { field, nodeField, type SyntaxNode } from "../syntax/file.js";
 import type { Site } from "./scan.js";
 import type { DuplicationSettings } from "./settings.js";
-import { argumentsOf, referenceName } from "./values.js";
+import { argumentsOf, referenceName, unwrap } from "./values.js";
 
 type Slot = number | string;
 export type CallShape = { key: string; references: { slot: Slot; name: string }[] };
@@ -25,7 +25,7 @@ function optionsKey(property: SyntaxNode): string | null {
   const key = nodeField(property, "key");
   const name =
     key?.type === "Identifier" ? field(key, "name") : key === null ? null : field(key, "value");
-  return typeof name === "string" ? name : null;
+  return typeof name === "string" || typeof name === "number" ? String(name) : null;
 }
 
 function optionsShape(argument: SyntaxNode, index: number) {
@@ -49,7 +49,8 @@ export function callShape(call: SyntaxNode): CallShape | null {
   const references: CallShape["references"] = [];
   const objects: [number, string[]][] = [];
   const args = argumentsOf(call);
-  for (const [index, argument] of args.entries()) {
+  for (const [index, wrapped] of args.entries()) {
+    const argument = unwrap(wrapped);
     const name = referenceName(argument);
     if (name !== null) references.push({ slot: index, name });
     if (argument.type !== "ObjectExpression") continue;

@@ -410,11 +410,37 @@ describe("positional data clumps", () => {
   });
 
   it.each([
+    ["a numeric options key", (t: number) => `{ 0: o${t} }`],
+    ["the same key as a string", (t: number) => `{ "0": o${t} }`],
+    ["a wrapped options object", (t: number) => `({ 0: o${t} } satisfies Opts)`],
+  ])("groups nine sites by slot for %s", (_name, options) => {
+    const source = Array.from(
+      { length: 9 },
+      (_, i) => `run(c, s${i % 3}, t${i % 3}, ${i % 2 ? options(i % 3) : `{ "0": o${i % 3} }`});`,
+    ).join("\n");
+    const result = report(fixture({ "calls.ts": source }), "--clumps");
+    expect(
+      result.clumps.filter((clump: { kind?: string }) => clump.kind === "positional"),
+    ).toMatchObject([{ slots: [1, 2, "3.0"], siteCount: 9, distinctTupleCount: 3 }]);
+  });
+
+  it.each([
     [
       "different options keys",
       ["outage", "failure", "fallback"]
         .flatMap((key, i) =>
           Array.from({ length: 3 }, () => `run(a${i}, b${i}, { ${key}: c${i} });`),
+        )
+        .join("\n"),
+    ],
+    [
+      "different keys inside wrapped options objects",
+      ["outage", "failure", "fallback"]
+        .flatMap((key, i) =>
+          Array.from(
+            { length: 3 },
+            () => `run(a${i}, b${i}, c${i}, ({ ${key}: d${i} } as Opts));`,
+          ),
         )
         .join("\n"),
     ],

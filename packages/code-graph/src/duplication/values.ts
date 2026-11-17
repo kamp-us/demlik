@@ -24,13 +24,16 @@ const REFERENCE_READERS: ReadonlyMap<string, (node: SyntaxNode) => string> = new
   ["Super", () => "super"],
 ]);
 
-export function referenceName(node: SyntaxNode): string | null {
+export function unwrap(node: SyntaxNode): SyntaxNode {
+  if (!WRAPPERS.has(node.type)) return node;
+  const expression = nodeField(node, "expression");
+  return expression === null ? node : unwrap(expression);
+}
+
+export function referenceName(wrapped: SyntaxNode): string | null {
+  const node = unwrap(wrapped);
   const read = REFERENCE_READERS.get(node.type);
   if (read !== undefined) return read(node);
-  if (WRAPPERS.has(node.type)) {
-    const expression = nodeField(node, "expression");
-    return expression === null ? null : referenceName(expression);
-  }
   if (node.type !== "MemberExpression" || field(node, "computed") === true) return null;
   const object = nodeField(node, "object");
   const property = nodeField(node, "property");
