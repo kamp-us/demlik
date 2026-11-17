@@ -4,7 +4,14 @@ import { expect, test } from "vitest";
 import { z } from "zod";
 import type { DispatchOptions, LoggedStore } from "../../index";
 import { appliedEffects, defineMachine, idempotentEffect } from "../../index";
-import { memoryEventSourcedStore } from "../../mem";
+import {
+  copyStorage,
+  createStorage,
+  Dropped,
+  type DurableStorage,
+  durableStore,
+  storageClosed,
+} from "./durable-store.fixture";
 
 /** Persisted uploader State schema. */
 export const stateSchema = z.object({
@@ -58,38 +65,13 @@ export type Driver = (
   upload: (cmd: Upload) => Promise<Msg>,
 ) => Promise<Driven>;
 
-class Dropped extends Error {}
-class Disk extends Map<string, string> {
-  closed = false;
-  constructor(
-    entries: Map<string, string>,
-    private readonly write: () => boolean,
-  ) {
-    super();
-    for (const [k, v] of entries) super.set(k, v);
-  }
-  override get(key: string) {
-    if (this.closed) throw new Dropped();
-    return super.get(key);
-  }
-  override set(key: string, bytes: string) {
-    if (this.closed) throw new Dropped();
-    super.set(key, bytes);
-    if (this.write()) {
-      this.closed = true;
-      throw new Dropped();
-    }
-    return this;
-  }
-}
-
 /** Crash after a selected acknowledged-or-uncertain physical write, including birth. */
 export async function execute(
   driver: Driver,
   cut?: number | readonly number[],
   messageCount = 200,
 ) {
-  let disk: Disk;
+  let disk: DurableStorage;
   let writes = 0;
   const cuts = new Set(typeof cut === "number" ? [cut] : cut);
   const crashedAt = new Set<number>();
@@ -105,31 +87,28 @@ export async function execute(
     }
     return false;
   };
-  disk = new Disk(new Map(), write);
+  disk = createStorage([], write);
   const boot = async (): Promise<Driven> => {
     for (;;) {
       const own = disk;
       try {
-        return await driver(
-          memoryEventSourcedStore(own, options),
-          async (cmd) => {
-            if (own.closed) throw new Dropped();
-            attempts.set(cmd.file, (attempts.get(cmd.file) ?? 0) + 1);
-            await receiver.run(
-              idempotentEffect(cmd.file, () => {
-                // Receiver atomically accepts its business key together with the effect.
-                if (receipts.has(cmd.file)) return;
-                effects.set(cmd.file, (effects.get(cmd.file) ?? 0) + 1);
-                receipts.add(cmd.file);
-              }),
-            );
-            if (own.closed) throw new Dropped();
-            return { _tag: "uploaded", file: cmd.file };
-          },
-        );
+        return await driver(durableStore(own, options), async (cmd) => {
+          if (storageClosed(own)) throw new Dropped();
+          attempts.set(cmd.file, (attempts.get(cmd.file) ?? 0) + 1);
+          await receiver.run(
+            idempotentEffect(cmd.file, () => {
+              // Receiver atomically accepts its business key together with the effect.
+              if (receipts.has(cmd.file)) return;
+              effects.set(cmd.file, (effects.get(cmd.file) ?? 0) + 1);
+              receipts.add(cmd.file);
+            }),
+          );
+          if (storageClosed(own)) throw new Dropped();
+          return { _tag: "uploaded", file: cmd.file };
+        });
       } catch (error) {
-        if (!own.closed) throw error;
-        disk = new Disk(new Map(own), write);
+        if (!storageClosed(own)) throw error;
+        disk = copyStorage(own, write);
         receiver = appliedEffects();
       }
     }
@@ -140,11 +119,11 @@ export async function execute(
     for (;;) {
       try {
         await live.dispatch(msg, { id: msg.file });
-        if (disk.closed) throw new Dropped();
+        if (storageClosed(disk)) throw new Dropped();
         break;
       } catch (error) {
-        if (!disk.closed) throw error;
-        disk = new Disk(new Map(disk), write);
+        if (!storageClosed(disk)) throw error;
+        disk = copyStorage(disk, write);
         receiver = appliedEffects();
         live = await boot();
       }
@@ -152,7 +131,7 @@ export async function execute(
   }
   const final = live.getState();
   await live.stop();
-  const read = memoryEventSourcedStore(new Map(disk), options);
+  const read = durableStore(copyStorage(disk), options);
   const log = await read.readLog();
   const expected = Array.from(
     { length: messageCount },

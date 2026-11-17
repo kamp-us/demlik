@@ -5,7 +5,13 @@ import {
   defineMachine,
   type LoggedStore,
 } from "../../index";
-import { memoryEventSourcedStore } from "../../mem";
+import {
+  copyStorage,
+  createStorage,
+  type DurableStorage,
+  durableStore as memoryEventSourcedStore,
+  storageBytes,
+} from "./durable-store.fixture";
 
 type State = { n: number };
 type Msg = { _tag: "apply" | "ignore" | "reject" };
@@ -50,8 +56,8 @@ export type ReceiptDriver = (
   stop(): Promise<void>;
 }>;
 
-function records(disk: Map<string, string>) {
-  return [...disk.values()]
+function records(disk: DurableStorage) {
+  return [...storageBytes(disk).values()]
     .map((bytes) => JSON.parse(bytes))
     .filter((r) => r.record);
 }
@@ -70,7 +76,7 @@ export function receiptContract(engine: string, driver: ReceiptDriver): void {
     "ignore",
     "reject",
   ] as const)(`${engine}: %s receipt preserves State and the last subscribed value without notifying`, async (kind) => {
-    const disk = new Map<string, string>();
+    const disk = createStorage();
     const program = programFor();
     const store = memoryEventSourcedStore(disk, options);
     const live = await driver(program, store);
@@ -91,7 +97,7 @@ export function receiptContract(engine: string, driver: ReceiptDriver): void {
     expect(result.owed).toEqual([]);
     const wake = await driver(
       program,
-      memoryEventSourcedStore(new Map(disk), options),
+      memoryEventSourcedStore(copyStorage(disk), options),
     );
     expect(wake.getState()).toEqual(stable);
     expect(wake.getState()).toEqual(heard.at(-1));
@@ -102,7 +108,7 @@ export function receiptContract(engine: string, driver: ReceiptDriver): void {
     "ignore",
     "reject",
   ] as const)(`${engine}: %s receipt bytes contain no State, deliveries or timers`, async (kind) => {
-    const disk = new Map<string, string>();
+    const disk = createStorage();
     const live = await driver(
       programFor(),
       memoryEventSourcedStore(disk, options),
@@ -118,7 +124,7 @@ export function receiptContract(engine: string, driver: ReceiptDriver): void {
     "manual",
     "automatic",
   ] as const)(`${engine}: %s checkpoint copies stored State across a trailing ignored receipt`, async (kind) => {
-    const disk = new Map<string, string>();
+    const disk = createStorage();
     const store = memoryEventSourcedStore(disk, {
       ...options,
       snapshotEvery: kind === "automatic" ? 2 : 100,
@@ -142,14 +148,14 @@ export function receiptContract(engine: string, driver: ReceiptDriver): void {
     const applied = frames.find(
       ({ record }) => record.sourceId === lastAppliedMessage.record.id,
     );
-    const checkpoint = [...disk.entries()]
+    const checkpoint = [...storageBytes(disk).entries()]
       .map(([key, bytes]) => ({ key, raw: JSON.parse(bytes) }))
       .filter(({ raw }) => raw.snapshot !== null)
       .at(-1)?.raw.snapshot;
     expect(checkpoint.state).toEqual(applied.record.state);
     const wake = await driver(
       program,
-      memoryEventSourcedStore(new Map(disk), options),
+      memoryEventSourcedStore(copyStorage(disk), options),
     );
     expect(wake.getState()).toEqual(stable);
     expect(wake.getState()).toEqual({ n: 9 });
@@ -157,7 +163,7 @@ export function receiptContract(engine: string, driver: ReceiptDriver): void {
     await live.stop();
   });
   test(`${engine}: repeated ignored id returns the stored admission and folds zero times after wake`, async () => {
-    const disk = new Map<string, string>();
+    const disk = createStorage();
     const visits = { ignored: 0, rejected: 0 };
     const program = programFor(visits);
     const store = memoryEventSourcedStore(disk, options);
@@ -169,9 +175,9 @@ export function receiptContract(engine: string, driver: ReceiptDriver): void {
     );
     if (input?.record._tag !== "message")
       throw new Error("Missing ignored admission");
-    const copied = new Map(disk);
+    const copied = copyStorage(disk);
     const fresh = memoryEventSourcedStore(copied, options);
-    const before = new Map(copied);
+    const before = copyStorage(copied);
     const duplicate = await fresh.appendMessage(input.record);
     expect(duplicate.appended).toBe(false);
     expect(duplicate.entry).toEqual(input);

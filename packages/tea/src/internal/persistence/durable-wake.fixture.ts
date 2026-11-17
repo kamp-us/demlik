@@ -14,7 +14,11 @@ import fc from "fast-check";
 import { expect, test } from "vitest";
 import { z } from "zod";
 import { defineMachine, type LoggedStore } from "../../index";
-import { memoryEventSourcedStore } from "../../mem";
+import {
+  copyStorage,
+  createStorage,
+  durableStore,
+} from "./durable-store.fixture";
 
 type State = { value: unknown; count: number };
 type Msg = { _tag: "set"; value: unknown; to?: string } | { _tag: "boom" };
@@ -136,7 +140,7 @@ export function liveEqualsWake(engine: string, driver: WakeDriver): void {
         async (decoder, snapshotEvery, ops) => {
           const options = optionsFor(decoder, snapshotEvery);
           const decode = decoders[decoder];
-          const disk = new Map<string, string>();
+          const disk = createStorage();
           // What each handler was given, by the step that owed it.
           const seenLive = new Map<number, unknown>();
           let model: State = { value: null, count: 0 };
@@ -147,7 +151,7 @@ export function liveEqualsWake(engine: string, driver: WakeDriver): void {
           const boot = async () => {
             const rt = await driver(
               program,
-              memoryEventSourcedStore(disk, options),
+              durableStore(disk, options),
               (cmd) => {
                 const before = seenLive.get(cmd.n);
                 // A redelivery after a wake carries the same value (Rule C).
@@ -192,7 +196,7 @@ export function liveEqualsWake(engine: string, driver: WakeDriver): void {
             } else if (step.op === "repeat") {
               if (last) await send(last.msg, last.id);
             } else if (step.op === "checkpoint") {
-              await memoryEventSourcedStore(disk, options).checkpoint();
+              await durableStore(disk, options).checkpoint();
             } else if (step.op === "wake") {
               await live.stop();
               live = await boot();
@@ -205,7 +209,7 @@ export function liveEqualsWake(engine: string, driver: WakeDriver): void {
             //     any work it is handed carries the value the live run saw.
             const shadow = await driver(
               program,
-              memoryEventSourcedStore(new Map(disk), options),
+              durableStore(copyStorage(disk), options),
               (cmd) => {
                 if (seenLive.has(cmd.n))
                   expect(

@@ -1,8 +1,13 @@
-import { expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 import { StoreRefusedError } from "../index";
 import { machine, options } from "../internal/persistence/durable-host.fixture";
+import {
+  copyStorage,
+  createStorage,
+  durableStore,
+  storageMutations,
+} from "../internal/persistence/durable-store.fixture";
 import { run } from "../promise";
-import { memoryEventSourcedStore } from "./index";
 
 test("protocol-1 storage refuses boot without writing or deleting any bytes", async () => {
   const state = { files: [], uploaded: [] };
@@ -18,15 +23,13 @@ test("protocol-1 storage refuses boot without writing or deleting any bytes", as
     snapshot: null,
     timers: [],
   });
-  const disk = new Map([
+  const disk = createStorage([
     ["@@es/default/log", bytes],
     ["another namespace", "leave alone"],
   ]);
-  const before = new Map(disk);
-  const set = vi.spyOn(disk, "set");
-  const remove = vi.spyOn(disk, "delete");
-  const clear = vi.spyOn(disk, "clear");
-  const store = memoryEventSourcedStore(disk, options);
+  const before = copyStorage(disk);
+  const { set, remove, clear } = storageMutations(disk);
+  const store = durableStore(disk, options);
   await expect(
     run(machine(), {
       store,

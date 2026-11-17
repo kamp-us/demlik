@@ -6,7 +6,6 @@ import {
   type LoggedStore,
   NoCellError,
 } from "../../index";
-import { memoryEventSourcedStore } from "../../mem";
 import { run } from "../../promise";
 import { detachWorkOf } from "../../pure/core";
 import {
@@ -16,6 +15,12 @@ import {
   type State,
   type Upload,
 } from "./durable-host.fixture";
+import {
+  copyStorage,
+  createStorage,
+  type DurableStorage,
+  durableStore,
+} from "./durable-store.fixture";
 
 function deferred() {
   let resolve!: () => void;
@@ -27,8 +32,8 @@ function deferred() {
 const quiet = () => {};
 
 test("T3: concurrent and repeated caller IDs count once; serialized internal IDs cannot collide", async () => {
-  const disk = new Map<string, string>();
-  const store = memoryEventSourcedStore(disk, options);
+  const disk = createStorage();
+  const store = durableStore(disk, options);
   const live = await run(machine(), {
     store,
     interpret: { upload: async () => {} },
@@ -59,7 +64,7 @@ test("T3: concurrent and repeated caller IDs count once; serialized internal IDs
   ).toHaveLength(3);
   await live.stop();
   const wake = await run(machine(), {
-    store: memoryEventSourcedStore(new Map(disk), options),
+    store: durableStore(copyStorage(disk), options),
     interpret: { upload: async () => {} },
   }).ready;
   await wake.dispatch(input, { id: "pick" });
@@ -68,7 +73,7 @@ test("T3: concurrent and repeated caller IDs count once; serialized internal IDs
 });
 
 test("T4: one birth and ten wakes initialize once, finish birth work once, and redeliver owed work with the same ID", async () => {
-  let disk = new Map<string, string>();
+  let disk = createStorage();
   const initialized = vi.fn(
     (loaded: State | null): readonly [State, readonly Upload[]] => [
       loaded ?? { files: [], uploaded: [] },
@@ -77,12 +82,12 @@ test("T4: one birth and ten wakes initialize once, finish birth work once, and r
   );
   const program = defineMachine({ ...machine(), init: initialized });
   let birthCalls = 0;
-  let owedDisk = new Map<string, string>();
+  let owedDisk = createStorage();
   const ids: (number | undefined)[] = [];
   const interrupted = new Error("activation dropped");
-  const boot = (backing: Map<string, string>) =>
+  const boot = (backing: DurableStorage) =>
     run(program, {
-      store: memoryEventSourcedStore(backing, options),
+      store: durableStore(backing, options),
       onError: quiet,
       interpret: {
         upload: async (cmd, ctx) => {
@@ -91,7 +96,7 @@ test("T4: one birth and ten wakes initialize once, finish birth work once, and r
             return;
           }
           ids.push(deliveryIdOf(ctx));
-          owedDisk = new Map(backing);
+          owedDisk = copyStorage(backing);
           throw interrupted;
         },
       },
@@ -102,7 +107,7 @@ test("T4: one birth and ten wakes initialize once, finish birth work once, and r
     first.dispatch({ _tag: "picked", file: "owed" }, { id: "owed" }),
   ).rejects.toBe(interrupted);
   for (let wake = 0; wake < 10; wake += 1) {
-    disk = new Map(owedDisk);
+    disk = copyStorage(owedDisk);
     await expect(boot(disk).ready).rejects.toBe(interrupted);
   }
   expect(initialized).toHaveBeenCalledTimes(1);
@@ -118,8 +123,8 @@ test.each([
   "before",
   "after",
 ] as const)("T5: recover committed restart State from %s checkpoint history without rerunning reducers", async (checkpoint) => {
-  const disk = new Map<string, string>();
-  const store = memoryEventSourcedStore(disk, {
+  const disk = createStorage();
+  const store = durableStore(disk, {
     state: z.object({ n: z.number() }),
     message: z.object({ _tag: z.enum(["inc", "boom"]) }),
     command: z.never(),
@@ -156,7 +161,7 @@ test.each([
   const wake = await run(
     { ...program, init },
     {
-      store: memoryEventSourcedStore(new Map(disk), {
+      store: durableStore(copyStorage(disk), {
         state: z.object({ n: z.number() }),
         message: z.object({ _tag: z.enum(["inc", "boom"]) }),
         command: z.never(),
@@ -170,8 +175,8 @@ test.each([
 });
 
 test("T6: reducer refusal and handler failure leave the run usable; a failed log write alone poisons later work", async () => {
-  const disk = new Map<string, string>();
-  const inner = memoryEventSourcedStore(disk, options);
+  const disk = createStorage();
+  const inner = durableStore(disk, options);
   let breakWrite = false;
   const failure = new Error("disk write failed");
   const store: LoggedStore<State, Msg, Upload> = {
@@ -212,14 +217,14 @@ test("T6: reducer refusal and handler failure leave the run usable; a failed log
   ).rejects.toMatchObject({ cause: failure });
   expect(handled).toBe(2);
   expect(live.getState().files).toEqual(["first", "second"]);
-  const atFailure = new Map(disk);
+  const atFailure = copyStorage(disk);
   await live.stop();
   expect(disk).toEqual(atFailure);
 });
 
 test("stored deliveries wait for detached answers to be admitted, while the next handler starts", async () => {
-  const disk = new Map<string, string>();
-  const store = memoryEventSourcedStore(disk, options);
+  const disk = createStorage();
+  const store = durableStore(disk, options);
   const blocked = deferred();
   const second = deferred();
   const program = defineMachine({
@@ -273,8 +278,8 @@ test("stored deliveries wait for detached answers to be admitted, while the next
 test("T6: missing cells, escaping reducer failures and ignored messages retain distinct receipts without poisoning", async () => {
   type S = { _tag: "closed"; owner: string } | { _tag: "open"; owner: string };
   type M = { _tag: "open" | "close" | "boom"; to?: string };
-  const disk = new Map<string, string>();
-  const store = memoryEventSourcedStore(disk, {
+  const disk = createStorage();
+  const store = durableStore(disk, {
     state: z.object({ _tag: z.enum(["closed", "open"]), owner: z.string() }),
     message: z.object({
       _tag: z.enum(["open", "close", "boom"]),

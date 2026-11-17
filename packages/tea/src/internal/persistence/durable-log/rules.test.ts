@@ -1,12 +1,18 @@
 import fc from "fast-check";
 import { expect, test, vi } from "vitest";
 import { z } from "zod";
-import { memoryEventSourcedStore } from "../../../mem";
 import { deepFreeze } from "../../../pure/core";
 import type { LogMessage, Schema } from "../../../runtime-types";
+import {
+  copyStorage,
+  createStorage,
+  durableStore as memoryEventSourcedStore,
+  durableLog as memoryLog,
+  seedStorage,
+  storageBytes,
+} from "../durable-store.fixture";
 import { op, optionsFor } from "../durable-wake.fixture";
 import { checkpointState } from "./codec";
-import { memoryLog } from "./memory-log";
 import * as operations from "./operations";
 import * as projection from "./projection";
 
@@ -51,7 +57,7 @@ test("purity, whole projection replay, and cold cache equals incremental cache a
         fc.array(op, { minLength: 1, maxLength: 30 }),
         async (decoder, every, actions) => {
           const options = optionsFor(decoder, every);
-          const disk = new Map<string, string>();
+          const disk = createStorage();
           let live = memoryLog(disk, options);
           type Msg = Parameters<typeof live.store.appendMessage>[0]["msg"];
           let last: LogMessage<Msg> | undefined;
@@ -65,7 +71,7 @@ test("purity, whole projection replay, and cold cache equals incremental cache a
           });
           const verify = () => {
             const current = live.inspect();
-            const cold = memoryLog(new Map(disk), options).inspect();
+            const cold = memoryLog(copyStorage(disk), options).inspect();
             expect(current.projection).toEqual(cold.projection);
             expect(current.readModel).toEqual(cold.readModel);
           };
@@ -168,17 +174,17 @@ test("purity, whole projection replay, and cold cache equals incremental cache a
           message: schema("message", base.message),
           command: schema("command", base.command),
         };
-        const disk = new Map<string, string>();
+        const disk = createStorage();
         let live = memoryLog(disk, faultOptions);
         const verify = () => {
           const current = live.inspect();
-          const cold = memoryLog(new Map(disk), base).inspect();
+          const cold = memoryLog(copyStorage(disk), base).inspect();
           expect(current).toEqual(cold);
           return current;
         };
         const attempt = async (operation: () => Promise<unknown>) => {
           const before = verify();
-          const stored = [...disk];
+          const stored = [...storageBytes(disk)];
           armed = true;
           try {
             await operation();
@@ -192,7 +198,9 @@ test("purity, whole projection replay, and cold cache equals incremental cache a
           }
           const decoded = { ...counts };
           const after = verify();
-          if (JSON.stringify([...disk]) === JSON.stringify(stored)) {
+          if (
+            JSON.stringify([...storageBytes(disk)]) === JSON.stringify(stored)
+          ) {
             expect(after).toEqual(before);
             expect(counts).toEqual(decoded);
           }
@@ -300,7 +308,7 @@ const options = {
   snapshotEvery: 1,
 };
 async function projectionAfter(n: number) {
-  const live = memoryLog(new Map(), {
+  const live = memoryLog(createStorage(), {
     ...options,
     snapshotEvery: Number.MAX_SAFE_INTEGER,
   });
@@ -351,7 +359,7 @@ const message = (id: string) =>
   ({ _tag: "message", id, at: 1, msg: { _tag: "go", n: 0 } }) as const;
 
 test("consumed duplicate storage IDs are refused without overwriting, and a failed partial rebuild is discarded", async () => {
-  const disk = new Map([
+  const disk = createStorage([
     [key, frame(1, birth)],
     [`${key}/2`, frame(2, message("a"))],
     [
@@ -360,16 +368,17 @@ test("consumed duplicate storage IDs are refused without overwriting, and a fail
     ],
     [`${key}/4`, frame(4, message("a"))],
   ]);
-  const before = new Map(disk);
+  const before = copyStorage(disk);
   const live = memoryLog(disk, options);
   await expect(live.store.readLog()).rejects.toThrow("Duplicate log source");
   expect(disk).toEqual(before);
-  disk.set(`${key}/4`, frame(4, message("b")));
-  expect(live.inspect()).toEqual(memoryLog(new Map(disk), options).inspect());
+  seedStorage(disk, `${key}/4`, frame(4, message("b")));
+  const copied = copyStorage(disk);
+  expect(live.inspect()).toEqual(memoryLog(copied, options).inspect());
 });
 
 test("receipt commitment at applied count zero is a valid checkpoint boundary", async () => {
-  const disk = new Map([
+  const disk = createStorage([
     [key, frame(1, birth)],
     [`${key}/2`, frame(2, message("a"))],
     [
@@ -391,7 +400,7 @@ test("receipt commitment at applied count zero is a valid checkpoint boundary", 
 });
 
 test("stored original commitments win across requested dispositions at the current version", async () => {
-  const { store } = memoryLog(new Map(), options);
+  const { store } = memoryLog(createStorage(), options);
   await store.commitStep({
     _tag: "birth",
     at: 0,
@@ -438,7 +447,7 @@ test("delivery gaps preserve high-water allocation and invalid stored confirmati
     effect: { _tag: "work", n: 0 },
   }));
   const { store } = memoryLog(
-    new Map([[key, frame(1, { ...birth, owed })]]),
+    createStorage([[key, frame(1, { ...birth, owed })]]),
     options,
   );
   expect(await store.confirmEffect(5)).toEqual({
@@ -454,7 +463,7 @@ test("delivery gaps preserve high-water allocation and invalid stored confirmati
     timers: [],
   });
   expect(next.owed[0]?.id).toBe(9);
-  const invalid = new Map([
+  const invalid = createStorage([
     [key, frame(1, { ...birth, owed })],
     [
       `${key}/2`,
@@ -484,7 +493,7 @@ function throwsOnSecondDecodeOf(expected: {
 }
 
 test("a commit that fails after its write leaves the next read equal to a cold open", async () => {
-  const disk = new Map<string, string>();
+  const disk = createStorage();
   const store = memoryEventSourcedStore(disk, {
     ...options,
     snapshotEvery: 1,
@@ -513,7 +522,7 @@ test("a commit that fails after its write leaves the next read equal to a cold o
     }),
   ).rejects.toThrow("State decode failed after the write");
   const live = await store.readLog();
-  const cold = await memoryEventSourcedStore(new Map(disk), {
+  const cold = await memoryEventSourcedStore(copyStorage(disk), {
     ...options,
     snapshotEvery: 1,
   }).readLog();
@@ -679,7 +688,7 @@ const trapReplacement = <T extends object>(base: T): T =>
   });
 
 test("a repeated commit answers from storage and never reads the replacement", async () => {
-  const store = memoryEventSourcedStore(new Map(), options);
+  const store = memoryEventSourcedStore(createStorage(), options);
   const born = await store.commitStep({
     _tag: "birth",
     at: 0,
@@ -720,7 +729,7 @@ test("a repeated commit answers from storage and never reads the replacement", a
 });
 
 test("a repeated receipt never reads the replacement", async () => {
-  const store = memoryEventSourcedStore(new Map(), options);
+  const store = memoryEventSourcedStore(createStorage(), options);
   await store.commitStep({
     _tag: "birth",
     at: 0,
@@ -746,7 +755,7 @@ test("a repeated receipt never reads the replacement", async () => {
 });
 
 test("a repeated applied commitment never reads the replacement", async () => {
-  const store = memoryEventSourcedStore(new Map(), options);
+  const store = memoryEventSourcedStore(createStorage(), options);
   await store.commitStep({
     _tag: "birth",
     at: 0,
@@ -776,7 +785,7 @@ test("a repeated applied commitment never reads the replacement", async () => {
 });
 
 test("record rules precede a structurally rejected checkpoint", async () => {
-  const disk = new Map([
+  const disk = createStorage([
     [
       "@@es/default/log",
       JSON.stringify({
