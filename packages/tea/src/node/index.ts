@@ -204,7 +204,7 @@ export interface FileStoreOptions {
  * a file written unfenced resumes fenced and back again; the version lives in a
  * sidecar `<path>.fence` holding a decimal integer, and an absent stamp is `0`.
  *
- * The compare-and-swap is taken under the same `wx` lock file `fileJournal`
+ * The compare-and-swap is taken under the same `wx` lock the fenced `fileJournal`
  * uses, because `open(…, "wx")` is the one primitive that is atomic ACROSS
  * PROCESSES. Without it the read-compare-write is a TOCTOU race and two writers
  * both pass their own check. Rename-over-tmp still does the torn-write work for

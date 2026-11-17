@@ -36,8 +36,9 @@ calls. It prints the same view and checks the same reconnect cycles. A case
 interrupted while still running explicitly resumes its saved pending work.
 
 Keep the directory to keep the case. Stop its host before deleting it. Run only
-one live host for a case: the file journal serializes writes, but the example
-does not provide a lease between competing hosts.
+one live host for a case. The runtime serializes its own saves; plain
+`fileJournal(dir)` requires one writer per stream. When two hosts may write,
+use `fileJournal(dir, { fenced: true })` and `appendFenced`; the example provides no lease.
 
 ## 3. Connect a consumer
 
