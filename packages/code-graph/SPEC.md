@@ -53,6 +53,7 @@ packages/code-graph/
   src/
     index.ts              the RUN: which passes fire, which view answers
     cli.ts                the VOCABULARY: the flag set + the `Opts` commander parses into
+    run/graph.ts          select and load one graph pass, retaining syntax for opt-in reports
     gates/one-gate.ts     the flags that name more than one gate, refused before any ledger is read (§10)
     schema.ts             barrel over schema/ — the import path every consumer writes
     schema/
@@ -385,6 +386,8 @@ code-graph <path> [flags]
 | `--edges` | Opt-in edge pass at `package` scope (§3): summary/plan/smells/graph include `calls`/`calledBy`/`importedBy`/`callChainDepth` and the edge smells (`high-fan-in`, `deep-call-chain`). Without it (and without `--blast`/`--deep`) the run stays cheap. |
 | `--deep` | Edge pass loads the whole monorepo (C3); implies `--edges` at `deep` scope |
 | `--headers` | Every `FunctionNode` in the JSON (`--graph`, `--file <f> --json`, `--tree --json`) carries `header`: its declaration header as written and its overload signatures with their start lines, by the §6-A5 rule (starts where `startLine` places the node, ends at the last token before the body, an arrow's on `=>`, no leading comment). Overloads appear only through this field; they are never nodes (§6-A1). Rides either pass. Without the flag `header` is absent and every output is unchanged |
+| `--clones`, `--clumps` | Opt-in duplication reports (§16), combinable in one run. Reuse the loaded oxc syntax and graph; no tsconfig required. Existing views, collapse JSON, and gates are unchanged |
+| `--duplication-config <file>` | Strict partial duplication settings (§16), with schema-owned defaults; requires `--clones` or `--clumps` |
 | `--html` | Emit a self-contained HTML report (human view — header + hotspot treemap + hub call-graph + sortable top-targets table; see `HTML-VIEW.md`). **Implies the edge pass** (the call-graph section needs `calls`). Pair with `--out <file>` to write the report directly (banner-safe); never an agent surface |
 | `--out <file>` | Write the view payload straight to `<file>` via `fs.writeFileSync` instead of stdout. The **banner-safe** artifact path (#1761): under the `pnpm code-graph` wrapper, pnpm's run banner lands on stdout, so `… --html > report.html` prepends the banner to the file — `--out` sidesteps stdout entirely, so the file carries only the document. Applies to every view (`--html`, `--graph`, `--smells`, `--plan`, `--tree`, `--file`, `--blast`, default summary). A one-line `wrote N bytes to <file>` confirmation goes to **stderr**, never the file |
 | `--comments` | Comment CENSUS. Every comment range from `extract/metrics.ts`'s `collectModuleCommentRanges` (the SAME walk `ModuleNode.commentLines` counts — the census total and `stats.totalCommentLines` are one computation) gets exactly ONE bucket, first match wins: `pragma` → `license` → `marker` → `commented-out-code` → `banner` → `file-header` → `docblock` → `block` → `inline`. Each bucket rolls into exactly one CLASS via `classOf` (an exhaustive switch, so a tenth bucket cannot skip the question): **`mechanical`** = `banner` + `commented-out-code` (removable with no judgment), **`protected`** = `pragma` + `license` + `marker` (never touch), **`prose`** = the rest (the volume — a comment carrying rationale is not a defect, and the tool passes no verdict on it). The three classes partition `commentLines`. Lines are attributed to the FIRST range covering them, so per-bucket lines partition the file's comment lines exactly. Rolled up by bucket, by package scope (`discoverPackageRoots`, longest match), and by file, ranked by comment lines descending, tiebroken on path. Human view caps files and scopes at 20; `--json` emits the whole `CommentCensus`. Report only. Standalone (cheap pass, no Graph) |
@@ -1244,3 +1247,66 @@ bindings, which it names under Not read, and costs the run only where the rules 
 something that config must hold: a `bindingOwners` entry under it, or a `readAllowance`. `--owners`
 takes no other mode: beside a gate, `--hexagon`, `--env-keys` or `--accept-smells` it exits 2 under
 §10.
+
+## 16. Expression clones and data clumps
+
+`code-graph src --clones --clumps --json` reports repeated expressions and groups
+of named values passed together. Either flag works alone. They are views, never
+gates: findings exit 0, no ledger or ceiling is read or written. Gate flags beside
+either view exit 2 before any ledger is read. Existing report precedence applies;
+only the two new flags combine. No existing JSON shape or collapse signal changes,
+so `structure-sweep pairs` continues to consume whole-function candidates only.
+
+Both reuse the selected pass's loaded syntax and graph, exclude test modules,
+and include `parseFailures`. Site coordinates are relative to the analyzed root,
+with a nullable enclosing `functionId`, 1-based lines and columns, and UTF-16
+`startOffset`/`endOffset` (exclusive end). JSON is complete and deterministic;
+human text shows the top 20 groups of each kind. Without these flags no new
+analysis runs and existing output remains unchanged.
+
+### Expression clones
+
+The reference is [jsinspect](https://github.com/danielstjules/jsinspect#overview):
+it compares AST structure, matches identifiers and literals by default, and
+allows a configurable minimum node count. Its default of 30 targets larger
+fragments. This view uses the same size measure, calibrated to small expressions:
+the acceptance fixture `{ kind: "Bad", text: f.text, list: f.list }` has 14 oxc
+AST nodes. `cloneMinNodes` therefore defaults to 14 and `cloneMinFiles` to 3.
+These are report settings, not a claim that jsinspect recommends these defaults.
+
+Fingerprints retain node kinds, operators, child order, identifier names and
+decoded literal values. Positions, comments, raw literal spelling and parentheses
+do not affect equivalence. `cloneIgnoreIdentifiers` and `cloneIgnoreLiterals`
+(both false by default) allow broader structural matching, as jsinspect's
+`--no-identifiers` and `--no-literals` do. No tokenizer or dependency is added.
+Only expression subtrees are candidates, independent of enclosing function names,
+LOC or complexity. A clone contained at every site in a larger reported clone is
+suppressed. Groups rank by file count, then node count, then fingerprint.
+
+### Data clumps
+
+The reference is [Data Clumps](https://refactoring.guru/smells/data-clumps):
+recurring groups of variables passed to methods suggest Introduce Parameter
+Object or Preserve Whole Object, subject to human review.
+
+For each statically named callee, collect identifiers and static dotted members
+passed directly, inside object/array values or inside nested call arguments.
+Object keys and nested callees do not count. Parentheses and TypeScript value
+wrappers are transparent. Computed members, spreads, callbacks and derived
+expressions are not followed. Literals are excluded from cross-site groups.
+Report closed frequent sets of at least `clumpMinValues` (3) names at
+`clumpMinSites` (3) distinct call sites. A subset with the same sites as its
+superset is redundant; a subset with more sites remains useful and is retained.
+Groups rank by site count, then value count, callee and values.
+
+`repeatedArguments` reports a name, string or number present in two or more
+different arguments of a single call, including nested object values. Argument
+indexes are zero-based. Repetition inside only one argument does not count.
+Both reports compare syntax spellings, not binding identity or runtime values;
+same-named locals can be unrelated, and an alias can hide a real clump.
+
+`--duplication-config` reads a strict object through `DuplicationSettingsSchema`.
+Unknown keys, wrong types and invalid floors exit 2. Defaults live only on that
+schema. JSON contains `settings` and `parseFailures`, plus `clones` when requested
+and `clumps`/`repeatedArguments` when requested. Each group includes all its sites;
+clones also carry a fingerprint, node/file counts and a 240-character sample.

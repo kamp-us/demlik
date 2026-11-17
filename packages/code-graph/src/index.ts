@@ -16,21 +16,13 @@ import {
 } from "./config.js";
 import { renderData } from "./data/render.js";
 import { renderFind } from "./declarations/find.js";
+import {
+  duplicationRefusal,
+  readDuplicationSettings,
+  renderDuplication,
+} from "./duplication/report.js";
 import { loadEnvKeyReport } from "./env-keys/query.js";
-import type { AnalysisOptions } from "./extract/analysis.js";
-import {
-  assembleGraph,
-  assembleGraphWithEdges,
-  type DataOptions,
-  type NodeFields,
-} from "./extract/assemble.js";
-import {
-  type EdgeScope,
-  findRepoRoot,
-  type LoadedEdgeProject,
-  loadCheapProject,
-  loadEdgeProject,
-} from "./extract/project.js";
+import { findRepoRoot } from "./extract/project.js";
 import { oneGateRefusal } from "./gates/one-gate.js";
 import { runHexagon } from "./hexagon/cli.js";
 import { loadChurn, resolveChurnWindow, resolveHotspotsCliOptions } from "./hotspots/churn.js";
@@ -56,7 +48,7 @@ import { renderPlan } from "./render/plan.js";
 import { renderSmells } from "./render/smells.js";
 import { renderSummary } from "./render/summary.js";
 import { renderTree } from "./render/tree.js";
-import type { Graph } from "./schema.js";
+import { loadGraph } from "./run/graph.js";
 import { prepareSmellGate, runSmellLedgerGate, smellGateNeedsEdges } from "./smells/gate.js";
 import { isPlanAxis, type PlanAxis } from "./smells/plan.js";
 import { prepareUnreachableGate, runUnreachableGate } from "./unreachable/gate.js";
@@ -110,6 +102,16 @@ defineProgram()
       cleanExit(refusal);
       return;
     }
+    const duplicationError = duplicationRefusal(opts);
+    if (duplicationError !== null) {
+      cleanExit(duplicationError);
+      return;
+    }
+    const duplicationSettings =
+      opts.clones || opts.clumps
+        ? readDuplicationSettings(opts.duplicationConfig, cleanExit)
+        : null;
+    if ((opts.clones || opts.clumps) && duplicationSettings === null) return;
 
     const view = { json, pretty, emit, report: cleanExit };
     if (opts.hexagon === true) return runHexagon(rootAbsolute, view);
@@ -192,65 +194,21 @@ defineProgram()
       return;
     }
 
-    const wantReach = opts.unreachable === true || opts.unguarded === true;
-    const wantKinds = opts.kinds === true || wantReach || opts.collapse === true;
-    const wantClusters = opts.clusters === true;
-    const wantCrossRuntime = opts.crossRuntime === true || wantKinds || wantClusters;
-    const wantInterfaceWidth = opts.interfaceWidth === true;
-
-    const wantEdges =
-      opts.edges === true ||
-      opts.deep === true ||
-      typeof opts.blast === "string" ||
-      typeof opts.find === "string" ||
-      opts.html === true ||
-      opts.cycles === true ||
-      wantCrossRuntime ||
-      wantInterfaceWidth ||
-      smellGateNeedsEdges(smellGate);
-    const scope: EdgeScope = opts.deep === true ? "deep" : "package";
-
     if (opts.plan !== true && opts.by !== undefined && opts.by !== "rot") {
       process.stderr.write(`warning: --by ${opts.by} has no effect without --plan.\n`);
     }
 
-    const data: DataOptions | null =
-      opts.data === true ? { repoRoot: findRepoRoot(rootAbsolute) } : null;
-    const fields: NodeFields = { headers: opts.headers === true };
-
-    let graph: Graph;
-    if (wantEdges) {
-      let loaded: LoadedEdgeProject;
-      try {
-        loaded = loadEdgeProject(rootAbsolute, scope, repoRoot);
-      } catch {
-        cleanExit(`no tsconfig found for edge pass at ${rootAbsolute}; edges unavailable`);
-        return;
-      }
-      const analysis: AnalysisOptions | null =
-        wantCrossRuntime || wantInterfaceWidth
-          ? {
-              crossRuntime: wantCrossRuntime,
-              kinds: wantKinds,
-              reach: wantReach,
-              clusters: wantClusters,
-              interfaceWidth: wantInterfaceWidth,
-              kindRules,
-              repoRoot,
-            }
-          : null;
-      graph = assembleGraphWithEdges(
-        loaded,
-        thresholds,
-        scope,
-        loaded.tsConfigPath,
-        analysis,
-        data,
-        fields,
-      );
-    } else {
-      graph = assembleGraph(loadCheapProject(rootAbsolute), thresholds, data, fields);
-    }
+    const loadedGraph = loadGraph({
+      opts,
+      rootAbsolute,
+      repoRoot,
+      thresholds,
+      kindRules,
+      smellEdges: smellGateNeedsEdges(smellGate),
+      report: cleanExit,
+    });
+    if (loadedGraph === null) return;
+    const { graph, loaded: syntaxProject } = loadedGraph;
 
     if (unreachableGate.kind === "prepared") {
       const out = { emit, report: cleanExit, json, pretty };
@@ -280,6 +238,10 @@ defineProgram()
 
     if (opts.collapse === true) {
       emit(`${renderCollapse(graph, rootAbsolute, collapseSettings, json, pretty)}\n`);
+      return;
+    }
+    if (duplicationSettings !== null) {
+      emit(`${renderDuplication(syntaxProject, graph, duplicationSettings, opts)}\n`);
       return;
     }
 

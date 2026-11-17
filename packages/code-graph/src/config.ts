@@ -16,7 +16,7 @@ import { type Thresholds, ThresholdsSchema } from "./schema.js";
 
 export type Reporter = (message: string) => void;
 
-function loadOverrides<T extends object>(
+export function loadOverrides<T extends object>(
   file: string,
   schema: z.ZodType<Partial<T>>,
   defaults: T,

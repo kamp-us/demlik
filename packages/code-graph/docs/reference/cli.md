@@ -574,6 +574,9 @@ The contract is [SPEC.md §13.11](../../SPEC.md).
 | `--clusters` | Groups of connected files compared with their folders |
 | `--interface-width` | Exports and consumer files outside each package |
 | `--collapse` | Similar functions and shared call blocks for review |
+| `--clones` | Repeated normalized expression subtrees across files, report only |
+| `--clumps` | Named argument groups and values repeated across arguments, report only |
+| `--duplication-config <file>` | Strict settings for `--clones` and `--clumps`, which can combine |
 | `--cycles` | Groups of files in module-import cycles |
 | `--data` | Access to D1, Durable Object, KV, R2, and queue bindings |
 | `--hotspots` | Git churn multiplied by function complexity |

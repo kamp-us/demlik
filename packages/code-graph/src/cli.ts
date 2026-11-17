@@ -38,6 +38,9 @@ export type Opts = {
   boundaryRules?: string;
   collapse?: boolean;
   collapseConfig?: string;
+  clones?: boolean;
+  clumps?: boolean;
+  duplicationConfig?: string;
   hotspots?: boolean;
   hotspotsDays?: string;
   hotspotsSince?: string;
@@ -258,10 +261,25 @@ function outputOptions(command: Command): Command {
     );
 }
 
+function duplicationOptions(command: Command): Command {
+  return command
+    .option(
+      "--clones",
+      "repeated normalized expressions across files (report only; no tsconfig needed)",
+    )
+    .option(
+      "--clumps",
+      "named values passed together and values repeated across arguments (report only)",
+    )
+    .option("--duplication-config <file>", "JSON overrides for --clones and --clumps");
+}
+
 export function defineProgram(): Command {
   const command = new Command()
     .name("code-graph")
     .description("Agent-native TypeScript code-graph tool (SPEC.md)")
     .argument("<path>", "folder to analyze");
-  return outputOptions(apiOptions(featureOptions(analysisOptions(graphOptions(command)))));
+  return outputOptions(
+    apiOptions(duplicationOptions(featureOptions(analysisOptions(graphOptions(command))))),
+  );
 }

@@ -228,6 +228,62 @@ the analyzed directory or in other repositories are not counted. Name
 collisions can inflate consumer counts because detection uses identifier
 occurrences.
 
+## Expression clones and data clumps
+
+```sh
+code-graph src --clones --clumps --json --out duplication.json
+```
+
+Either view works alone; both flags combine in one report. They reuse the loaded
+oxc syntax and graph without requiring a tsconfig. Findings exit 0. Gate flags
+beside either view exit 2, with no ledger read or written. Tests are excluded and
+files that fail to parse are listed in `parseFailures`.
+
+`--clones` finds matching expression subtrees in at least three files, regardless
+of enclosing function names or complexity. It follows
+[jsinspect's AST approach](https://github.com/danielstjules/jsinspect#overview):
+match node kinds, identifiers and literals by default, with a configurable node
+floor. Comments, whitespace, quote spelling and parentheses do not affect matches.
+Operators and child order do. A group contained at every site in a larger group
+is suppressed. These matches are syntactic evidence, not proof of shared intent.
+
+`--clumps` finds closed groups of at least three named values passed to the same
+callee at three or more sites. Values inside object/array arguments and nested
+call arguments count; keys and callees do not. A smaller group remains only when
+it occurs at more sites than its superset. It also lists `repeatedArguments` when
+a name, string or number occurs across different arguments of one call, for
+example `run(value, "Item.name", { label: "Item.name" })`.
+
+[Data Clumps](https://refactoring.guru/smells/data-clumps) describes the smell and
+the candidate treatments, Introduce Parameter Object and Preserve Whole Object.
+Names here are syntax spellings: unrelated locals with the same name can match;
+aliases can hide real groups. Static dotted members count as whole values.
+Computed members, spreads, callbacks and derived expressions are not followed.
+Literals are used only for within-call repetition, never cross-site clumps.
+
+Override report settings with `--duplication-config settings.json`. Unknown keys
+or invalid values exit 2. Defaults live in
+[the settings schema](../../src/duplication/settings.ts):
+
+| Setting | Meaning |
+|---|---|
+| `cloneMinNodes` | Minimum AST nodes per expression. The default is calibrated to the 14-node three-field expression fixture, below jsinspect's larger-fragment default of 30 |
+| `cloneMinFiles` | Minimum distinct files per clone group |
+| `cloneIgnoreIdentifiers` | Replace identifier names with a placeholder |
+| `cloneIgnoreLiterals` | Ignore literal values while retaining their types |
+| `clumpMinValues` | Minimum distinct named values per group |
+| `clumpMinSites` | Minimum distinct call sites per group |
+
+JSON contains `settings`, `parseFailures`, and the requested `clones` and/or
+`clumps`/`repeatedArguments`. Sites include analyzed-root-relative files, nullable
+enclosing function IDs, 1-based lines/columns and UTF-16 start/end offsets
+(exclusive end). Argument indexes are zero-based. JSON lists every site. Human
+text shows the top 20 groups per kind. Clone groups rank by files then nodes;
+clumps rank by sites then values. Ties have deterministic lexical ordering.
+
+These views do not add candidates to collapse JSON; `structure-sweep pairs`
+continues to consume whole-function comparisons.
+
 ## Collapse candidates
 
 `--collapse` reports candidates for human or model review. It does not establish
