@@ -497,9 +497,9 @@ export function createLogStore<S, M extends { _tag: string }, C extends Cmd>(
 }
 
 /**
- * Build an engine-facing durable log from opaque journal storage and schemas.
- *
  * Plain journal-backed stores require one active writer per stream throughout the loaded activation; concurrent plain writers can corrupt history.
+ *
+ * Build an engine-facing durable log from opaque journal storage and schemas.
  * Opt into fencing explicitly with a FencedJournal and `{ fenced: true }`.
  * The caller owns the journal and closes it after the activation ends.
  *

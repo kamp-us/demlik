@@ -8,7 +8,7 @@ tags: [tea, persistence, recovery]
 
 # 0038 — Engine-owned durable log
 
-**What this decides:** A run on a `LoggedStore` persists admission and atomic transition records through tea's shared engine. This slice ships that capability on a single-writer, caller-owned memory Map.
+**What this decides:** A run on a `LoggedStore` persists admission and atomic transition records through tea's shared engine. A tea-owned factory builds that capability from a Journal and schemas, with optional fencing through a FencedJournal.
 
 ## Context
 
@@ -29,22 +29,23 @@ reducer's raw message either.
 owed-delivery recovery when the store exposes `logged: true`.** `Store<S>` and
 the code path for a store without a log retain their existing behavior.
 
-The neutral contract sits beside `Store`. The log format owns validation,
-namespace and admission-ID encoding, sequences, deduplication, committed-State
-projection, checkpoints and delivery high-water. Adapters translate storage
-operations. The engine and handlers communicate through asynchronous store and
-handler calls; initialization and reduction remain synchronous and pure. There
+The neutral contract sits beside `Store`. The pure log rules own deduplication,
+committed State, checkpoints and delivery high-water; the factory parses records,
+maintains their read model and selects streams, while the Journal assigns storage
+positions and preserves opaque text. Adapters translate storage operations.
+The engine and handlers communicate through asynchronous store and handler calls; initialization and reduction remain synchronous and pure. There
 is one transition tail shared by the Promise and Effect engines.
 
-The memory adapter serializes each protocol record into its own namespaced cell
-in a caller-owned `Map<string, string>`. Cold recovery validates retained
-records once and builds admission, receipt and checkpoint indexes. An active
-writer validates and serializes only its new record, without scanning history.
-Each mutation reads, decides and writes synchronously before yielding.
-An applied transition uses one Map mutation containing its State, every newly
-owed command, its source ID and any automatic checkpoint. An ignored or rejected
-message saves only a receipt, without State, commands or timers.
-The engine never calls the inherited snapshot `save` on a log store.
+The tea-owned `eventSourcedStore` interprets pure write values through a Journal.
+A transition's State, owed work, source receipt and automatic checkpoint are one
+atomic append batch in the log stream. Manual checkpoints append to a sibling
+stream. The first store call recovers the projection and read model from both
+streams; loaded calls use acknowledgements without reading, and any append
+failure invalidates the cache so the next call recovers both streams and their
+fencing heads. The factory installs acknowledged decoded values, and discards
+its cache after any failure at or after append begins. Ignored and rejected
+messages save receipts without State, commands or timers. The engine never calls
+the inherited snapshot `save` on a log store.
 
 **Binding constraints.**
 
@@ -76,8 +77,10 @@ The engine never calls the inherited snapshot `save` on a log store.
   State's stored form, retain message and confirmation receipts, and do not
   advance writer revision.
 - Timers remain on their existing path; engine log commits carry `timers: []`.
-  This slice adds no fenced log, file or Durable Object driver, deferred outcome,
-  external delivery confirmation, agent integration or replacement host wrapper.
+  Journal-backed logs can use memory and file drivers, with explicit opt-in
+  fencing; Durable Object integration, deferred outcome, external delivery
+  confirmation, agent integration and replacement host wrappers remain separate
+  slices.
 - [ADR 0025](./0025-stop-gives-up-on-handlers.md) continues to bound stop on both
   engines. A handler that is abandoned remains owed; its late results cannot
   start another store call after stop returns. This slice makes no new clean
@@ -85,14 +88,15 @@ The engine never calls the inherited snapshot `save` on a log store.
 
 ## Consequences
 
-A fresh driver over a copy of the Map can recover admitted inputs and re-hand
-unconfirmed work with the same delivery IDs. Delivery is at least once: a
+A fresh factory over retained journal records recovers admitted inputs and
+re-hands unconfirmed work with the same delivery IDs. Delivery is at least once: a
 receiver must atomically accept its business key with the external effect to
 count that effect once. The receiver helper's marker alone does not close the
 external effect's crash window.
 
-The memory adapter requires one writer per namespace and retains full history
-and receipts. It is a serialized process-memory durability contract, not a disk
-or deployed-host guarantee. File storage, Durable Objects, fencing and logged
-timer decisions need separate slices. The existing `/do` ledger import paths
-remain re-exports of the neutral owner, so this slice removes no public API.
+Plain journal-backed stores require one active writer per stream throughout the loaded activation; concurrent plain writers can corrupt history.
+Fencing is explicitly opted into. Logs retain full history and receipts. Memory
+and file drivers share the journal kit and durable assertions; file tests prove
+controlled interruption, without a power-loss guarantee. Durable Object
+integration and logged timer decisions remain separate slices. Existing `/do`
+ledger import paths keep their current owner.

@@ -8,7 +8,7 @@ Tier: `battery`
 import { … } from "@demlik/tea/persistence";
 ```
 
-## Exports (26)
+## Exports (27)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -16,6 +16,7 @@ import { … } from "@demlik/tea/persistence";
 | [`BreadcrumbsOptions`](#BreadcrumbsOptions) | Interface | battery | Options for breadcrumbsFromTrace. |
 | [`createSnapshot`](#createSnapshot) | Function | battery | Create a snapshot knob from a `SnapshotConfig`. |
 | [`deepEqual`](#deepEqual) | Function | battery | Order-insensitive structural deep-equality — the comparator the record/replay lane owns, exposed so consumers (e.g. |
+| [`eventSourcedStore`](#eventSourcedStore) | Function | experimental | Plain journal-backed stores require one active writer per stream throughout the loaded activation; concurrent plain writers can corrupt history. |
 | [`parseJSONL`](#parseJSONL) | Function | battery | Re-hydrate a Trace from the JSONL produced by Recorder.toJSONL. |
 | [`recorder`](#recorder) | Function | battery | Attach a recorder to a Runtime. |
 | [`Recorder`](#Recorder) | Interface | battery | A live recorder attached to a Runtime. |
@@ -89,6 +90,21 @@ function createSnapshot<V>(config: SnapshotConfig): SnapshotKnob<V>
 
 ```ts
 function deepEqual(a: unknown, b: unknown): boolean
+```
+
+<a id="eventSourcedStore"></a>
+
+### `eventSourcedStore`
+
+```ts
+function eventSourcedStore<S, M extends { _tag: string }, C extends Cmd>(
+  journal: FencedJournal,
+  options: EventSourcedOptions<S, M, C> & { readonly fenced: true },
+): LoggedStore<S, M, C> & FencedStore<S>
+function eventSourcedStore<S, M extends { _tag: string }, C extends Cmd>(
+  journal: Journal,
+  options: EventSourcedOptions<S, M, C> & { readonly fenced?: false },
+): LoggedStore<S, M, C>
 ```
 
 <a id="parseJSONL"></a>

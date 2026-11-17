@@ -8,6 +8,7 @@
  * `src/internal/persistence/` and re-exported unchanged; nothing moved and
  * nothing was renamed to open it. The modules behind it:
  *
+ * - `log-store` — compose a journal and schemas into the engine-facing durable log.
  * - `recorder` — capture a run as a `Trace` (plus breadcrumbs and
  *   attachments), sufficient to reproduce it.
  * - `snapshot` — periodic state checkpoint to a host store, so a long-running
@@ -19,6 +20,7 @@
  * which may break in a minor provided the changelog for that minor says so.
  */
 
+export { eventSourcedStore } from "../internal/persistence/log-store";
 export * from "../internal/persistence/recorder";
 export * from "../internal/persistence/snapshot";
 export * from "../internal/persistence/trace-replay";

@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { eventSourcedStore } from "@demlik/tea/persistence";
 import { Cause, Effect, Exit, Scope } from "effect";
 import { describe, expect, test } from "vitest";
 import { z } from "zod";
@@ -11,7 +12,7 @@ import { sqliteJournal } from "../../node/turn-journal.fixture";
 import { run as promiseRun } from "../../promise";
 import { type FencedJournal, type Journal, memoryJournal } from "../journal";
 import { cacheContract } from "./cache-contract.fixture";
-import { createLogStore, eventSourcedStore } from "./log-store";
+import { createLogStore } from "./log-store";
 
 const options = {
   state: z.object({ n: z.number() }),
