@@ -30,14 +30,9 @@
 
 import type { DeletableStore, FencedStore, Migrated } from "../index";
 import { StoreConflictError } from "../index";
-import {
-  logKey,
-  logWriter,
-  type PreparedLogWrite,
-} from "../internal/persistence/durable-log/format";
+import { memoryLog } from "../internal/persistence/durable-log/memory-log";
 import type { Cmd } from "../pure/core";
 import type { EventSourcedOptions, LoggedStore } from "../runtime-types";
-import { schemaMigrate } from "../runtime-types";
 
 /** Options for {@link memoryStore}. */
 export interface MemoryStoreOptions {
@@ -142,79 +137,5 @@ export function memoryEventSourcedStore<
   backing: Map<string, string>,
   options: EventSourcedOptions<S, M, C>,
 ): LoggedStore<S, M, C> {
-  const key = logKey(options.key);
-  const every = options.snapshotEvery ?? 100;
-  if (!Number.isSafeInteger(every) || every < 1)
-    throw new Error("snapshotEvery must be a positive safe integer");
-  let writer = logWriter(options);
-  let root: string | undefined;
-  let checkpoint: string | undefined;
-  let loaded = false;
-  const read = () => {
-    try {
-      const current = backing.get(key);
-      if (!loaded || current !== root) {
-        writer = logWriter(options);
-        root = current;
-        checkpoint = undefined;
-        loaded = true;
-        if (root !== undefined) writer.restore(root);
-        else if (backing.has(`${key}/2`))
-          throw new Error("Durable log is missing its birth");
-      }
-      for (;;) {
-        const bytes = backing.get(`${key}/${writer.version() + 1}`);
-        if (bytes === undefined) break;
-        writer.restore(bytes);
-      }
-      const saved = backing.get(`${key}/checkpoint`);
-      if (saved !== checkpoint) {
-        if (saved !== undefined) writer.restoreCheckpoint(saved);
-        checkpoint = saved;
-      }
-      return writer;
-    } catch (error) {
-      loaded = false;
-      throw error;
-    }
-  };
-  const mutate = <T>(
-    decide: (
-      log: ReturnType<typeof logWriter<S, M, C>>,
-    ) => T | PreparedLogWrite<T>,
-  ): T => {
-    const result = decide(read());
-    if (typeof result !== "object" || result === null || !("accept" in result))
-      return result;
-    backing.set(key + result.suffix, result.bytes);
-    result.accept();
-    if (result.suffix === "") root = result.bytes;
-    if (result.suffix === "/checkpoint") checkpoint = result.bytes;
-    return result.result;
-  };
-  return {
-    logged: true,
-    async load() {
-      return read().state();
-    },
-    async save() {
-      throw new Error("Logged State can only change through commitStep");
-    },
-    migrate: schemaMigrate(options.state),
-    async readLog() {
-      return read().read();
-    },
-    async appendMessage(message) {
-      return mutate((log) => log.append(message));
-    },
-    async commitStep(step) {
-      return mutate((log) => log.commit(step));
-    },
-    async confirmEffect(id) {
-      return mutate((log) => log.confirm(id));
-    },
-    async checkpoint() {
-      return mutate((log) => log.checkpoint());
-    },
-  };
+  return memoryLog(backing, options).store;
 }

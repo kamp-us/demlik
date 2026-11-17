@@ -63,7 +63,7 @@ const decoders = {
 } satisfies Record<string, (v: unknown) => unknown>;
 type DecoderName = keyof typeof decoders;
 
-function optionsFor(decoder: DecoderName, snapshotEvery: number) {
+export function optionsFor(decoder: DecoderName, snapshotEvery: number) {
   const value = z.unknown().transform(decoders[decoder]);
   return {
     state: z.object({ value, count: z.number() }),
@@ -109,21 +109,22 @@ const value = fc.oneof(
   fc.jsonValue().map((v) => () => v as unknown),
   special,
 );
-const op: fc.Arbitrary<Op | { op: "set" | "ignored"; make: () => unknown }> =
-  fc.oneof(
-    {
-      weight: 5,
-      arbitrary: value.map((make) => ({ op: "set" as const, make })),
-    },
-    {
-      weight: 2,
-      arbitrary: value.map((make) => ({ op: "ignored" as const, make })),
-    },
-    { weight: 2, arbitrary: fc.constant({ op: "rejected" as const }) },
-    { weight: 2, arbitrary: fc.constant({ op: "repeat" as const }) },
-    { weight: 2, arbitrary: fc.constant({ op: "checkpoint" as const }) },
-    { weight: 2, arbitrary: fc.constant({ op: "wake" as const }) },
-  );
+export const op: fc.Arbitrary<
+  Op | { op: "set" | "ignored"; make: () => unknown }
+> = fc.oneof(
+  {
+    weight: 5,
+    arbitrary: value.map((make) => ({ op: "set" as const, make })),
+  },
+  {
+    weight: 2,
+    arbitrary: value.map((make) => ({ op: "ignored" as const, make })),
+  },
+  { weight: 2, arbitrary: fc.constant({ op: "rejected" as const }) },
+  { weight: 2, arbitrary: fc.constant({ op: "repeat" as const }) },
+  { weight: 2, arbitrary: fc.constant({ op: "checkpoint" as const }) },
+  { weight: 2, arbitrary: fc.constant({ op: "wake" as const }) },
+);
 
 export function liveEqualsWake(engine: string, driver: WakeDriver): void {
   test(`${engine}: at every point, live equals a wake from the same storage, and both equal the model`, async () => {
