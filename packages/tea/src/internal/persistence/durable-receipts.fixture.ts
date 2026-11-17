@@ -7,9 +7,10 @@ import {
 } from "../../index";
 import {
   copyStorage,
-  createStorage,
   type DurableStorage,
+  createStorage as defaultStorage,
   durableStore,
+  type StorageFactory,
   storedLog,
 } from "./durable-store.fixture";
 
@@ -71,7 +72,11 @@ async function sendReceipt(
 }
 
 /** Keep the same receipt and stored-State contract on both engines. */
-export function receiptContract(engine: string, driver: ReceiptDriver): void {
+export function receiptContract(
+  engine: string,
+  driver: ReceiptDriver,
+  createStorage: StorageFactory = defaultStorage,
+): void {
   test.each([
     "ignore",
     "reject",
