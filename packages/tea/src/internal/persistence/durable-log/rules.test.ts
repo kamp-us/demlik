@@ -669,3 +669,108 @@ test("checkpoint handling requires every outcome row", () => {
   incomplete satisfies typeof projection.checkpointCases;
   expect(Object.keys(incomplete)).toEqual(["skipped", "decoded"]);
 });
+const trapReplacement = <T extends object>(base: T): T =>
+  new Proxy(base, {
+    get: (target, key, receiver) => {
+      if (key === "_tag" || key === "sourceId")
+        return Reflect.get(target, key, receiver);
+      throw new Error(`read ${String(key)}`);
+    },
+  });
+
+test("a repeated commit answers from storage and never reads the replacement", async () => {
+  const store = memoryEventSourcedStore(new Map(), options);
+  const born = await store.commitStep({
+    _tag: "birth",
+    at: 0,
+    state: { n: 0 },
+    cmds: [],
+    timers: [],
+  });
+  expect(
+    await store.commitStep(
+      trapReplacement({
+        _tag: "birth",
+        at: 1,
+        state: { n: 9 },
+        cmds: [],
+        timers: [],
+      }),
+    ),
+  ).toEqual(born);
+  await store.appendMessage(message("a"));
+  const applied = await store.commitStep({
+    _tag: "applied",
+    sourceId: "a",
+    state: { n: 1 },
+    cmds: [],
+    timers: [],
+  });
+  expect(
+    await store.commitStep(
+      trapReplacement({
+        _tag: "applied",
+        sourceId: "a",
+        state: { n: 9 },
+        cmds: [],
+        timers: [],
+      }),
+    ),
+  ).toEqual(applied);
+});
+
+test("a repeated receipt never reads the replacement", async () => {
+  const store = memoryEventSourcedStore(new Map(), options);
+  await store.commitStep({
+    _tag: "birth",
+    at: 0,
+    state: { n: 0 },
+    cmds: [],
+    timers: [],
+  });
+  await store.appendMessage(message("a"));
+  const receipt = await store.commitStep({
+    _tag: "receipt",
+    sourceId: "a",
+    disposition: "ignored",
+  });
+  expect(
+    await store.commitStep(
+      trapReplacement({
+        _tag: "receipt",
+        sourceId: "a",
+        disposition: "rejected",
+      }),
+    ),
+  ).toEqual(receipt);
+});
+
+test("a repeated applied commitment never reads the replacement", async () => {
+  const store = memoryEventSourcedStore(new Map(), options);
+  await store.commitStep({
+    _tag: "birth",
+    at: 0,
+    state: { n: 0 },
+    cmds: [],
+    timers: [],
+  });
+  await store.appendMessage(message("a"));
+  const applied = await store.commitStep({
+    _tag: "applied",
+    sourceId: "a",
+    state: { n: 1 },
+    cmds: [],
+    timers: [],
+  });
+  expect(
+    await store.commitStep(
+      trapReplacement({
+        _tag: "applied",
+        sourceId: "a",
+        state: { n: 9 },
+        cmds: [],
+        timers: [],
+      }),
+    ),
+  ).toEqual(applied);
+});

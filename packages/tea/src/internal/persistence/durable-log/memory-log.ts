@@ -224,17 +224,16 @@ export function memoryLog<S, M extends { _tag: string }, C extends Cmd>(
         input: Extract<Input, { _tag: K }>,
       ) => Operation<S, M, C>;
     };
-    const source = (
-      step: Extract<LogStep<S, M, C>, { _tag: "applied" | "receipt" }>,
-    ): Operation<S, M, C> => {
-      const place = readModel.places.get(step.sourceId);
-      return { ...step, committed: sourceCommitAt(place?.commit ?? null) };
+    const sourceCommit = (sourceId: string): SourceCommit<S, M, C> | null => {
+      const place = readModel.places.get(sourceId);
+      return sourceCommitAt(place?.commit ?? null);
     };
     const facts = {
       append_message: (op) => {
         const place = readModel.places.get(op.message.id);
         return {
-          ...op,
+          _tag: "append_message",
+          message: op.message,
           stored: place === undefined ? null : admissionAt(place.admission),
         };
       },
@@ -242,11 +241,22 @@ export function memoryLog<S, M extends { _tag: string }, C extends Cmd>(
         const record = readModel.records[0]?.record;
         const committed: Birth<S, M, C> | null =
           record?._tag === "birth" ? record : null;
-        return { ...step, committed };
+        return { _tag: "birth", step, committed };
       },
-      applied: source,
-      receipt: source,
-      confirm_effect: (op) => ({ ...op, id: requireValue(integer(op.id, 1)) }),
+      applied: (step) => ({
+        _tag: "applied",
+        step,
+        committed: sourceCommit(step.sourceId),
+      }),
+      receipt: (step) => ({
+        _tag: "receipt",
+        step,
+        committed: sourceCommit(step.sourceId),
+      }),
+      confirm_effect: (op) => ({
+        _tag: "confirm_effect",
+        id: requireValue(integer(op.id, 1)),
+      }),
       checkpoint: (op) => op,
     } satisfies Cases;
     return facts[input._tag](input as never);

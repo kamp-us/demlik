@@ -19,12 +19,21 @@ export type Operation<S, M, C> =
       readonly message: LogMessage<M>;
       readonly stored: Admission<M> | null;
     }
-  | (Extract<LogStep<S, M, C>, { _tag: "birth" }> & {
+  | {
+      readonly _tag: "birth";
+      readonly step: Extract<LogStep<S, M, C>, { _tag: "birth" }>;
       readonly committed: Birth<S, M, C> | null;
-    })
-  | (Extract<LogStep<S, M, C>, { _tag: "applied" | "receipt" }> & {
+    }
+  | {
+      readonly _tag: "applied";
+      readonly step: Extract<LogStep<S, M, C>, { _tag: "applied" }>;
       readonly committed: SourceCommit<S, M, C> | null;
-    })
+    }
+  | {
+      readonly _tag: "receipt";
+      readonly step: Extract<LogStep<S, M, C>, { _tag: "receipt" }>;
+      readonly committed: SourceCommit<S, M, C> | null;
+    }
   | { readonly _tag: "confirm_effect"; readonly id: DeliveryId }
   | { readonly _tag: "checkpoint" };
 export type Write<S, M, C> =
@@ -157,10 +166,10 @@ function cases<S, M, C>(): Table<S, M, C> {
               _tag: "append_record",
               record: {
                 _tag: "birth",
-                at: op.at,
-                state: op.state,
-                owed: owe(p, op.cmds),
-                timers: op.timers,
+                at: op.step.at,
+                state: op.step.state,
+                owed: owe(p, op.step.cmds),
+                timers: op.step.timers,
               },
               checkpointThrough: null,
             },
@@ -172,7 +181,7 @@ function cases<S, M, C>(): Table<S, M, C> {
     applied: {
       decide: (p, op, policy) => {
         if (op.committed !== null) return [p, []];
-        const admission = source(p, op.sourceId);
+        const admission = source(p, op.step.sourceId);
         if (admission === null) return { _tag: "not_first_pending_source" };
         return [
           p,
@@ -181,10 +190,10 @@ function cases<S, M, C>(): Table<S, M, C> {
               _tag: "append_record",
               record: {
                 _tag: "applied",
-                sourceId: op.sourceId,
-                state: op.state,
-                owed: owe(p, op.cmds),
-                timers: op.timers,
+                sourceId: op.step.sourceId,
+                state: op.step.state,
+                owed: owe(p, op.step.cmds),
+                timers: op.step.timers,
               },
               checkpointThrough:
                 p.applied + 1 - p.baseline >= policy.snapshotEvery
@@ -199,7 +208,7 @@ function cases<S, M, C>(): Table<S, M, C> {
     receipt: {
       decide: (p, op) => {
         if (op.committed !== null) return [p, []];
-        if (source(p, op.sourceId) === null)
+        if (source(p, op.step.sourceId) === null)
           return { _tag: "not_first_pending_source" };
         return [
           p,
@@ -208,9 +217,9 @@ function cases<S, M, C>(): Table<S, M, C> {
               _tag: "append_record",
               record: {
                 _tag: "receipt",
-                sourceId: op.sourceId,
-                disposition: op.disposition,
-                ...(op.failure ? { failure: op.failure } : {}),
+                sourceId: op.step.sourceId,
+                disposition: op.step.disposition,
+                ...(op.step.failure ? { failure: op.step.failure } : {}),
               },
               checkpointThrough: null,
             },
