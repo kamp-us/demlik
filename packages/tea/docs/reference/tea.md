@@ -993,6 +993,8 @@ class DispatchDiscardedError extends RuntimeDiscardNotice {
 
 ```ts
 interface DispatchOptions {
+  /** Answer a logged Cmd with its own builder; cannot be combined with `id`. */
+  readonly answerTo?: number;
   readonly id?: string;
   readonly settle?: DispatchSettle;
 }
@@ -1815,6 +1817,8 @@ function logLedger<S, M, C>(log: LogRead<S, M, C>): PendingEffectsRecorder<C>
 ```ts
 interface LogMessage<M> {
   readonly _tag: "message";
+  /** This admitted answer also confirms the named delivery, in the same write. */
+  readonly answerTo?: number;
   readonly at: number;
   readonly id: string;
   readonly msg: M;

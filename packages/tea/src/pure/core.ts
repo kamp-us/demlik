@@ -446,8 +446,8 @@ export type SettledErr<Name extends string, C, E extends Tagged> = {
  * the minted Msg builders and the declaration hung on it. `E` here is the
  * DECLARED tag union; the settled `_err` arm widens it by `MalformedResult`.
  *
- * `ok` / `err` mint a settled Msg OUTSIDE the runtime (a `replay` log, a unit
- * test) and take an optional `at`. A handler never calls them: it returns an
+ * `ok` / `err` build a settled Msg for a later `dispatch` with `answerTo`, a
+ * `replay` log, or a unit test, and take an optional `at`. A handler returns an
  * {@link Outcome}, and inside `run` the interpret edge mints and stamps.
  */
 export interface CmdDef<

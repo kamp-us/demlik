@@ -226,7 +226,7 @@ afterAll(async () => {
 });
 
 describe("docs/how-to/make-durable.md — it runs", () => {
-  it("hands a Cmd back without a Msg, then re-hands its stable id on a fresh call", async () => {
+  it("hands a Cmd back, re-hands its stable id, then accepts its answer on a later call", async () => {
     const externalState = z.object({ settled: z.array(z.string()) });
     const externalCommand = z.object({
       _tag: z.literal(externalJob.cmdType),
@@ -296,6 +296,49 @@ describe("docs/how-to/make-durable.md — it runs", () => {
     expect(handed).toHaveLength(2);
     expect(handed[1]).toEqual(handed[0]);
     expect(accepted.size).toBe(1);
+
+    const firstDelivery = handed[0];
+    if (!firstDelivery) throw new Error("missing external delivery");
+    const journal = fileJournal(path);
+    const store = eventSourcedStore(journal, {
+      state: externalState,
+      message: externalMessage,
+      command: externalCommand,
+    });
+    const rt = await run(work, {
+      store,
+      interpret: { external_job: handler },
+    }).ready;
+    try {
+      // #region external-answer
+      // The host parses its worker reply, then uses this Cmd's own builder.
+      const reply = { ...firstDelivery, value: "report-ready", atMs: 12_345 };
+      await rt.dispatch(externalJob.ok(reply.cmd, reply.value, reply.atMs), {
+        answerTo: reply.id,
+      });
+      // This admission is also the receipt, so there is no separate confirmation.
+      await rt.stop();
+      const stillOwed = logLedger(await store.readLog()).surviving();
+      // #endregion external-answer
+      expect(stillOwed).toEqual([]);
+      expect(rt.getState().settled).toEqual(["report-ready"]);
+    } finally {
+      await rt.stop();
+      await journal.close();
+    }
+    const nextJournal = fileJournal(path);
+    const wake = await run(work, {
+      store: eventSourcedStore(nextJournal, {
+        state: externalState,
+        message: externalMessage,
+        command: externalCommand,
+      }),
+      interpret: { external_job: handler },
+    }).ready;
+    await wake.stop();
+    await nextJournal.close();
+    expect(wake.getState().settled).toEqual(["report-ready"]);
+    expect(handed).toHaveLength(3);
   });
 
   it("reads an absolute next deadline across closed calls, then delivers the host's wake once", async () => {
