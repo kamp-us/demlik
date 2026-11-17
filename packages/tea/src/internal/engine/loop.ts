@@ -604,12 +604,10 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
   ): Promise<"settled" | "timeout"> {
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      return await Promise.race([
-        work.then(() => "settled" as const),
-        new Promise<"timeout">((resolve) => {
-          timer = setTimeout(() => resolve("timeout"), disposeTimeoutMs);
-        }),
-      ]);
+      return await new Promise<"settled" | "timeout">((resolve, reject) => {
+        timer = setTimeout(() => resolve("timeout"), disposeTimeoutMs);
+        work.then(() => resolve("settled"), reject);
+      });
     } finally {
       if (timer !== undefined) clearTimeout(timer);
     }
