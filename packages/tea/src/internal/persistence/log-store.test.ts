@@ -1,6 +1,6 @@
-import { eventSourcedStore } from "@demlik/tea/persistence";
 import { describe, expect, test } from "vitest";
 import { z } from "zod";
+import { eventSourcedStore } from "../../persistence";
 import { run as promiseRun } from "../../promise";
 import { type FencedJournal, type Journal, memoryJournal } from "../journal";
 import { cacheContract } from "./cache-contract.fixture";

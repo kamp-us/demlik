@@ -1,12 +1,12 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { eventSourcedStore } from "@demlik/tea/persistence";
 import { describe, expect, test } from "vitest";
 import { z } from "zod";
 import { defineMachine, StoreConflictError } from "../../index";
 import { fileJournal } from "../../node";
 import { sqliteJournal } from "../../node/turn-journal.fixture";
+import { eventSourcedStore } from "../../persistence";
 import { type FencedJournal, type Journal, memoryJournal } from "../journal";
 
 export const options = {
