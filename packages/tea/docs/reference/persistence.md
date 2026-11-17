@@ -30,7 +30,7 @@ Install `@demlik/tea` and `fast-check`. A `JournalKitFactory` creates fresh, iso
 
 Call `await journalConformance(make, { records: 10000, now: () => performance.now() })`, where `make` is your factory. `records` sets the fixed scale and `now` supplies a monotonic millisecond clock for K5. Each `KitResult` names K1–K8 with a `passed`, `failed` or `skipped` status; `detail` carries diagnostics, including the seed and shrinking path on generated failures. `KitOptions` also accepts `seed`, `runs`, `repeats` and `replay: { id, path }`.
 
-A fenced driver returned by `open()` exposes `fenced: true` and `appendFenced`; the same call then checks K7's atomic expected-head comparison and competing writers. K7 is skipped for plain drivers, and K8 for non-file fixtures. See [the host fixture and deliberately broken driver](https://github.com/kamp-us/demlik/blob/main/packages/tea/examples/journal-store.ts) for a runnable example.
+A fenced driver returned by `open()` exposes `fenced: true` and `appendFenced`; the same call then checks K7's atomic expected-head comparison and competing writers. K7 is skipped for plain drivers, and K8 for non-file fixtures. K3, the atomic-batch case, needs the fixture's interruption controls: a fixture whose `writePoints` returns no point gets K3 `failed` with "Fixture exposes no interruption points", and its other results still stand. See [the host fixture and deliberately broken driver](https://github.com/kamp-us/demlik/blob/main/packages/tea/examples/journal-store.ts) for a runnable example.
 
 ## Exports (35)
 

@@ -69,7 +69,8 @@ that happens by drift.
 ## When a symbol's tier differs from its subpath's
 
 `fileJournal` is exported from `./node`, beside `fileStore`, and it is the
-one exception to reading the tier off the subpath. `./node` is stamped `stable`;
+first of the journal exceptions to reading the tier off the subpath (the rest are
+listed at the end of this section). `./node` is stamped `stable`;
 `fileJournal` is not. It carries the **journal's own `experimental` promise** —
 it may change or disappear in any release — because its tier travels with the
 journal feature rather than with the host adapter it happens to be published
