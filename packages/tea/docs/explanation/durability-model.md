@@ -131,9 +131,17 @@ The [durability how-to](../how-to/make-durable.md#4-refuse-a-second-writer-if-tw
 shows the setup; [ADR 0017](https://github.com/kamp-us/demlik/blob/main/.decisions/0017-fencing-is-an-optional-store-widening.md)
 records the design.
 
+`rowStore` on `@demlik/tea/persistence` is fenced by construction: the State
+lives in the columns of one SQL row, the fence is the row's revision, and a
+stateless request runs the machine for one Msg with `boot: "restored"`. For an
+existing row, when `init` returns the loaded State itself and storage succeeds,
+such a request costs one read, and one write only if a Msg is accepted. A birth
+adds an insert, and a refused save can add a read and a final save attempt at
+`stop()`. A port bound to the host's transaction makes the save part of it.
+
 ## Forgetting a run: `delete()`
 
-`fileStore`, `memoryStore`, and `doStore` expose `delete()`. Removing the saved
+`fileStore`, `memoryStore`, `doStore`, and `rowStore` expose `delete()`. Removing the saved
 state lets the next runtime boot fresh. A custom `Store` need not expose deletion.
 
 A live unfenced runtime can save again and recreate the state. Deleting a fenced

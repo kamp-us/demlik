@@ -82,10 +82,11 @@ So `fileStore` from `./node` is the `stable` promise; `fileJournal` from the sam
 import is not. Treat it the way you would treat `./agent`: pin an exact version
 and read the changelog before you bump.
 
-`eventSourcedStore` and the journal types on `./persistence`, `memoryJournal`
-on `./mem`, and `journalConformance` with its fixture, result and option types
-on `./pbt` also carry `@experimental`. The conformance runner uses `fast-check`;
-its Vitest wrapper `describeJournalConformance` stays internal.
+`eventSourcedStore`, `rowStore` with `RowPort` and `RowStoreOptions`, and the
+journal types on `./persistence`, `memoryJournal` on `./mem`, and
+`journalConformance` with its fixture, result and option types on `./pbt` also
+carry `@experimental`. The conformance runner uses `fast-check`; its Vitest
+wrapper `describeJournalConformance` stays internal.
 
 ## Why not one flat promise
 

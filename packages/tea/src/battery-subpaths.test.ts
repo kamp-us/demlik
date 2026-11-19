@@ -80,6 +80,7 @@ const SUBPATHS: ReadonlyMap<string, readonly string[]> = new Map([
     "persistence",
     [
       "internal/persistence/recorder",
+      "internal/persistence/row-store",
       "internal/persistence/snapshot",
       "internal/persistence/trace-replay",
     ],

@@ -11,6 +11,7 @@
  * - `log-store` — compose a journal and schemas into the engine-facing durable log.
  * - `recorder` — capture a run as a `Trace` (plus breadcrumbs and
  *   attachments), sufficient to reproduce it.
+ * - `row-store` — a fenced Store over one SQL row.
  * - `snapshot` — periodic state checkpoint to a host store, so a long-running
  *   machine resumes from its last checkpoint rather than from the top.
  * - `trace-replay` — feed a recorded `Trace` back through a machine and report
@@ -22,6 +23,11 @@
 
 export { eventSourcedStore } from "../internal/persistence/log-store";
 export * from "../internal/persistence/recorder";
+export {
+  type RowPort,
+  type RowStoreOptions,
+  rowStore,
+} from "../internal/persistence/row-store";
 export * from "../internal/persistence/snapshot";
 export * from "../internal/persistence/trace-replay";
 

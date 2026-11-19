@@ -32,7 +32,7 @@ Call `await journalConformance(make, { records: 10000, now: () => performance.no
 
 A fenced driver returned by `open()` exposes `fenced: true` and `appendFenced`; the same call then checks K7's atomic expected-head comparison and competing writers. K7 is skipped for plain drivers, and K8 for non-file fixtures. K3, the atomic-batch case, needs the fixture's interruption controls: a fixture whose `writePoints` returns no point gets K3 `failed` with "Fixture exposes no interruption points", and its other results still stand. See [the host fixture and deliberately broken driver](https://github.com/kamp-us/demlik/blob/main/packages/tea/examples/journal-store.ts) for a runnable example.
 
-## Exports (35)
+## Exports (38)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -55,6 +55,9 @@ A fenced driver returned by `open()` exposes `fenced: true` and `appendFenced`; 
 | [`RecorderOptions`](#RecorderOptions) | Interface | battery | Options for recorder. |
 | [`ReplayResult`](#ReplayResult) | Interface | battery | The outcome of replayTrace. |
 | [`replayTrace`](#replayTrace) | Function | battery | Replay a recorded Trace against `machine` and diff the recomputed states against the recorded ones. |
+| [`RowPort`](#RowPort) | Interface | experimental | One SQL row, bound by the host to its table and row id (and, when the save must be part of the host's transaction, to that transaction's connection). |
+| [`rowStore`](#rowStore) | Function | experimental | A fenced `Store` whose storage is one SQL row: the State lives in the row's own columns, and the fence is the row's revision. |
+| [`RowStoreOptions`](#RowStoreOptions) | Interface | experimental | The host's side of the boundary for rowStore. |
 | [`SnapshotConfig`](#SnapshotConfig) | Interface | battery | The snapshot knob. |
 | [`SnapshotFailedMsg`](#SnapshotFailedMsg) | Type | battery | The Msg the engine mints when a write fails. |
 | [`SnapshotKnob`](#SnapshotKnob) | Interface | battery | The bundle `createSnapshot` returns: plain functions plus the two Cmd defs to list in `cmds`. |
@@ -413,6 +416,52 @@ function replayTrace<
   trace: Trace<S, M>,
   _ctx?: Ctx,
 ): ReplayResult<S, M>
+```
+
+<a id="RowPort"></a>
+
+### `RowPort`
+
+```ts
+interface RowPort {
+  /** Insert the row with `columns` at revision 1. `true` if inserted; `false`, writing nothing, if a row already exists. */
+  insert(columns: Readonly<Record<string, unknown>>): Promise<boolean>;
+  /** The row's columns and its revision, or `null` when no row exists. `row` is never `null`. */
+  read(): Promise<{
+    readonly revision: number;
+    readonly row: unknown;
+  } | null>;
+  /** Delete the row. Resolves when no row exists, so deleting nothing is fine. */
+  remove(): Promise<void>;
+  /** Set `columns` and the revision to `expected + 1` where the row's revision is `expected`. `true` if a row changed, `false` if none did. */
+  update(columns: Readonly<Record<string, unknown>>, expected: number): Promise<boolean>;
+}
+```
+
+<a id="rowStore"></a>
+
+### `rowStore`
+
+```ts
+function rowStore<S>(
+  port: RowPort,
+  options: RowStoreOptions<S>,
+): FencedStore<S> & DeletableStore<S>
+```
+
+<a id="RowStoreOptions"></a>
+
+### `RowStoreOptions`
+
+```ts
+interface RowStoreOptions<S> {
+  /** `S` to the row's columns. It must not throw. The revision is the port's, never part of the columns. */
+  readonly encode: (state: S) => Readonly<Record<string, unknown>>;
+  /** Asked for by name, as on every fenced factory (ADR 0017, item 4). There is no unfenced form. */
+  readonly fenced: true;
+  /** The row's columns to `S`, or `refuse(reason)` for a row it cannot read. Never called with `null`. It must not throw. */
+  readonly parse: (row: unknown) => Migrated<S>;
+}
 ```
 
 <a id="SnapshotConfig"></a>
