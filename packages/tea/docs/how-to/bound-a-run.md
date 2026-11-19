@@ -1,11 +1,11 @@
 # Bound a `defineAgent` run
 
-**Goal:** stop an agent run that goes on too long. Each step adds one of the four
+**Goal:** stop an agent run that goes on too long, or keep one from finishing too early. Each step adds one of the four
 guards `defineAgent` takes, `maxTurns`, `deadlineMs`, `maxElapsedMs` and
-`stopWhen`, and the last step puts all four on one agent.
+`stopWhen`, and step 6 puts all four on one agent.
 
-Omit them all and the run is unbounded: it ends only when the model stops asking
-for tools.
+Omit them all and the run is unbounded: it ends when the model stops asking
+for tools. Step 7 adds `continueWhen` to refuse that finish when work remains.
 
 This page is the steps. What each guard measures, and why `deadlineMs` is not the
 wall-clock cap it reads as, is in
@@ -15,12 +15,13 @@ exact behaviour is on
 
 Every sample below is quoted from
 [`examples/agent-stop-conditions.ts`](https://github.com/kamp-us/demlik/blob/main/packages/tea/examples/agent-stop-conditions.ts),
-which runs in-process with a scripted model that never stops asking for tools:
+which runs in-process with scripted models:
 `modelAsking(napMs)` asks for one `tick` every turn, and each `tick` naps that
-many milliseconds. They use these imports:
+many milliseconds. Step 7 uses a model that tries to finish early instead.
+They use these imports:
 
 ```ts
-import { defineAgent, status } from "@demlik/tea/agent";
+import { type AgentMessage, type AgentTurn, defineAgent, status } from "@demlik/tea/agent";
 import { DriveFailedError } from "@demlik/tea";
 ```
 
@@ -210,6 +211,57 @@ not cancel a tool call or model call that is already out, so `run` can settle
 later than the guard fired. If you need a hard limit on how long `run` takes to
 settle, race `agent.run(...)` against your own timer. Losing that race abandons
 the run. It does not stop it.
+
+## 7. Refuse an early finish with `continueWhen`
+
+Pass a pure rule over the run's state. It is consulted after a model turn asks
+for no tools, with that empty turn already recorded. Return `null` to let the
+stage finish, or a string telling the model what remains. The string is stored
+in `conversation.nudges` and rendered as a user message immediately after the
+empty turn it answers.
+
+This model tries to finish every second turn. The gate keeps it working until
+five ticks have settled:
+
+```ts
+const modelFinishingEarly = async (
+  messages: readonly AgentMessage[],
+): Promise<AgentTurn> => {
+  const n = messages.filter((m) => m.role === "assistant").length + 1;
+  return {
+    content: `turn ${n}`,
+    toolCalls:
+      n % 2 === 0
+        ? []
+        : [{ callId: `c${n}`, name: "tick", args: { napMs: 1 } }],
+  };
+};
+
+const untilComplete = defineAgent({
+  model: modelFinishingEarly,
+  tools: [tick],
+  instructions: "Tick five times before finishing.",
+  maxTurns: 12,
+  continueWhen: (state) => {
+    const settled =
+      state.conversation?.toolRecords.filter((r) => r.outcome.kind === "ok")
+        .length ?? 0;
+    return settled < 5 ? `tick more: ${5 - settled} left` : null;
+  },
+});
+```
+
+The run ends `done` with `turn 10` as its output. The model receives four user
+messages: `tick more: 4 left`, then 3, 2 and 1 left.
+
+Keep the rule pure and total, and pass it again on resume, as with `stopWhen`.
+Set `maxTurns` so a rule that never clears is bounded. A refused finish counts
+as a completed round-trip and checks the same stop conditions as a tool batch.
+
+This example counts records in the active conversation. Compaction drops old
+records, so choose evidence your rule can still read after a fold when enabling
+compaction. `transcript().read().nudges` retains the feedback for a completed
+run; the final Model clears its conversation as usual.
 
 ## See also
 

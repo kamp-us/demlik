@@ -208,6 +208,7 @@ describe("a tool's content parts reach the model as parts (#330)", () => {
       conversation: {
         turns: [{ content: "", toolCalls: [call] }],
         toolRecords: [{ call, outcome, turn: 0 }],
+        nudges: [],
         turnCount: 1,
         awaiting: { kind: "llm" },
         contextTokens: null,

@@ -31,7 +31,7 @@
  */
 
 import type { AgentEvent } from "./machine";
-import type { AgentEndedStatus, AgentTurn, Conversation } from "./types";
+import type { AgentEndedStatus, AgentTurn, Conversation, Nudge } from "./types";
 
 /**
  * One tool call the run settled OK, as the transcript keeps it — the `callId`
@@ -63,6 +63,8 @@ export interface TranscriptSnapshot<R> {
   readonly turns: readonly AgentTurn[];
   /** Every tool call that settled OK, in settle order. */
   readonly tools: readonly TranscriptToolResult<R>[];
+  /** Caller feedback, indexed by the empty turn it answers in this transcript. */
+  readonly nudges: readonly Nudge[];
   /** Whether `RunDone` has been seen, and how the run ended if so. */
   readonly outcome: TranscriptOutcome;
 }
@@ -108,6 +110,7 @@ export interface Transcript<R> {
  */
 export function transcript<R>(seed?: TranscriptSeed<R>): Transcript<R> {
   const turns: AgentTurn[] = [...(seed?.conversation?.turns ?? [])];
+  const nudges: Nudge[] = [...(seed?.conversation?.nudges ?? [])];
   const tools: TranscriptToolResult<R>[] = (
     seed?.conversation?.toolRecords ?? []
   ).flatMap((record) =>
@@ -122,6 +125,9 @@ export function transcript<R>(seed?: TranscriptSeed<R>): Transcript<R> {
       switch (event._tag) {
         case "TurnSettled":
           turns.push(event.turn);
+          if (event.nudge !== undefined) {
+            nudges.push({ turn: turns.length - 1, text: event.nudge });
+          }
           return;
         case "ToolSettled":
           tools.push({ callId: event.callId, result: event.result });
@@ -137,6 +143,11 @@ export function transcript<R>(seed?: TranscriptSeed<R>): Transcript<R> {
           return;
       }
     },
-    read: () => ({ turns: [...turns], tools: [...tools], outcome }),
+    read: () => ({
+      turns: [...turns],
+      tools: [...tools],
+      nudges: [...nudges],
+      outcome,
+    }),
   };
 }

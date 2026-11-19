@@ -42,6 +42,7 @@ export function freshConversation<R>(): Conversation<R> {
   return {
     turns: [],
     toolRecords: [],
+    nudges: [],
     turnCount: 0,
     awaiting: { kind: "llm" },
     contextTokens: null,
@@ -95,21 +96,25 @@ export function withTurnUsage<
  * A conversation as a Model persisted before #354 may hold it: with the run's
  * total on it.
  */
-type PersistedConversation<R> = Omit<Conversation<R>, "contextTokens"> & {
+type PersistedConversation<R> = Omit<
+  Conversation<R>,
+  "contextTokens" | "nudges"
+> & {
   readonly contextTokens?: number | null;
+  readonly nudges?: Conversation<R>["nudges"];
   readonly usage?: TurnUsage;
 };
 
 /**
- * The usage rehydration guard, run on entry to every transition. The run's
+ * The state rehydration guard, run on entry to every transition. The run's
  * total lives on `state.usage` and nowhere else; a Model persisted before that
  * held it on `conversation.usage`, and one persisted by 0.17.x held no usage at
  * all. This lifts an old conversation's total onto the run and drops the
  * conversation's copy, starts a total that was never kept from zero, and fills
- * in a missing context size as `null`. Identity on a Model that needs none of
- * it. PURE.
+ * in a missing context size as `null` and missing nudges as `[]`. Identity on
+ * a Model that needs none of it. PURE.
  */
-export function withUsageDefaults<
+export function withStateDefaults<
   Stage,
   P extends string,
   O extends Record<P, unknown>,
@@ -120,12 +125,18 @@ export function withUsageDefaults<
   const current =
     persisted.usage !== undefined &&
     (conv === null ||
-      (conv.usage === undefined && conv.contextTokens !== undefined));
+      (conv.usage === undefined &&
+        conv.contextTokens !== undefined &&
+        conv.nudges !== undefined));
   if (current) return s;
   let conversation: Conversation<R> | null = null;
   if (conv !== null) {
     const { usage: _lifted, ...rest } = conv;
-    conversation = { ...rest, contextTokens: rest.contextTokens ?? null };
+    conversation = {
+      ...rest,
+      contextTokens: rest.contextTokens ?? null,
+      nudges: rest.nudges ?? [],
+    };
   }
   return {
     ...s,
@@ -187,6 +198,9 @@ export function foldSummary<R>(
     ...conv,
     turns: [summaryTurn, ...survivingTurns],
     toolRecords: survivingRecords,
+    nudges: conv.nudges
+      .filter((n) => n.turn >= folding)
+      .map((n) => ({ ...n, turn: n.turn - shift })),
     awaiting: { kind: "llm" },
     contextTokens: null,
   };

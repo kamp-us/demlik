@@ -54,7 +54,7 @@ export is not done until it has a row here. The list itself is pinned by
 | `./flow` | battery | multi-step control flow: fan-out, saga, workflow, poller, reconciler, batch window, monitored run, await-terminal |
 | `./resilience` | battery | call-hardening: deadlines, retries, breakers, rate limits, TTL cache, token refresh, as plain functions and `Cmd.define`d Cmds (ADR 0022) |
 | `./timing` | battery | call-rate: debounce, throttle, throttled input |
-| `./persistence` | battery | record a run, replay a trace, checkpoint a long-running machine |
+| `./persistence` | battery | record a run, replay a trace, checkpoint a long-running machine; also `rowStore`, a fenced Store over one SQL row (experimental) |
 | `./paginate` | battery | the cursor walk, and the resumable end-to-end traversal over it |
 | `./work-queue` | battery | queue lifecycle over `Store<S>`: the adapter, the pure ops, the verb seam |
 | `./jev` | battery | TypeSafe Jev (System One): the wire contract, the one `ask` Cmd over it, and the batching composition — and it breaks when that third-party wire contract does |
@@ -66,8 +66,8 @@ own — the table is per subpath, and a per-export list here would drift the mom
 split. So the agent layer's `transcript` collector is `experimental`, on `./agent`'s promise,
 and graduates with the rest of the layer rather than separately.
 
-`eventSourcedStore` and the journal contract types on `./persistence`,
-`memoryJournal` on `./mem`, and `journalConformance`, `JournalKitFixture`,
+`eventSourcedStore`, `rowStore`, `RowPort` and `RowStoreOptions`, and the journal contract types
+on `./persistence`, `memoryJournal` on `./mem`, and `journalConformance`, `JournalKitFixture`,
 `JournalKitFactory`, `KitResult`, `KitCase` and `KitOptions` on `./pbt`
 carry `@experimental` independently of the containing
 subpath's stamp, following `fileJournal`'s existing exception.
@@ -124,8 +124,15 @@ success while both writers win is worse than none. Adding fencing to a factory i
 
 **Deletion is the same kind of widening.** `DeletableStore<S>` (root entry, beside
 `FencedStore`) adds `delete(): Promise<void>`, and `fileStore`, `memoryStore` and `doStore`
-return one in both forms. `chromeStorageStore` does not yet. Adding `delete` to a factory is a
-**minor**; moving it onto `Store<S>` would break every external implementor, so it stays off.
+return one in both forms, and `rowStore` returns one in its fenced form. `chromeStorageStore`
+does not yet. Adding `delete` to a factory is a **minor**; moving it onto `Store<S>` would break
+every external implementor, so it stays off.
+
+**A SQL row is a mechanism, not a host.** `rowStore` on `./persistence` takes
+`rowStore<S>(port, { parse, encode, fenced: true })`, where the host binds a four-method `RowPort`
+to its table and row id and tea imports no SQL library. It has no unfenced form (a row many
+requests write has no safe one) and returns `FencedStore<S> & DeletableStore<S>`. It carries
+`@experimental` independently of the subpath, like `eventSourcedStore`.
 
 `./react` is a host adapter but binds the runtime to a view; it owns no `Store`
 factory and so has no row. If a future factory is added, prefer the

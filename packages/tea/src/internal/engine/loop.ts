@@ -201,6 +201,17 @@ export interface LoopConfig<S, M extends { _tag: string }, C, Ctx> {
   readonly gate?: SubAdmission;
   readonly handlerFor: (type: string) => LoopHandler<M> | undefined;
   readonly store: Store<S> | undefined;
+  /**
+   * `"restored"` (ADR 0039): this start is a wake, not a new process. With a
+   * State the store loaded, boot folds it through `init` but runs none of
+   * `init`'s Cmds, writes nothing while `init` returns the loaded State
+   * itself, and `stop()` skips its save only while the State is the one the
+   * store is known to hold, which a refused save makes unknown. Absent, every
+   * promise of ADR 0017 (point 5) and ADR 0028 holds as before. Read on the
+   * snapshot path only: a store with a log, or no store, boots as it always
+   * did.
+   */
+  readonly boot?: "restored";
   readonly ctx: Ctx;
   readonly onError: OnError | undefined;
   readonly disposeTimeoutMs: number;
@@ -444,6 +455,10 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
   // The State the listeners were last told about. Behind `state` while a save is
   // pending, and for good when one fails.
   let installed: S | undefined;
+  // The State the store is known to hold: the one it loaded, then the last one
+  // a save accepted. A refused save clears it, because the store may have
+  // written before it failed. `stop()` reads it under `boot: "restored"`.
+  let persisted: S | undefined;
   let saveStatus: SaveStatus = { _tag: "pending" };
   let bootError: unknown = null;
   // The dispatch gate. It only ever ADVANCES — `"open"` → `"draining"` →
@@ -1165,14 +1180,18 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
     next: S,
     msg: M | undefined,
     cmds: readonly C[],
+    // The State is the store's own (a restored boot): nothing to write.
+    saved = false,
   ): Promise<void> {
     state = next;
-    saveStatus = { _tag: "pending" };
-    if (store && gate !== "abandoned") {
+    saveStatus = { _tag: saved ? "saved" : "pending" };
+    if (store && gate !== "abandoned" && !saved) {
       try {
         await store.save(next);
+        persisted = next;
         saveStatus = { _tag: "saved" };
       } catch (error) {
+        persisted = undefined;
         saveStatus = { _tag: "failed", error };
         for (const ext of extensions) ext.saveFailed?.(next, error);
         throw error;
@@ -1244,9 +1263,22 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
       await publishLogged(state, undefined, [], logLedger(log).surviving());
       return;
     }
-    const [initial, cmds] =
-      storeless ?? config.init(await restore(store as Store<S>), config.ctx);
-    await commit(initial, undefined, cmds);
+    // `storeless` is null exactly when a store was handed over.
+    let loaded: S | null = null;
+    if (storeless === null) {
+      loaded = await restore(store as Store<S>);
+      persisted = loaded ?? undefined;
+    }
+    const [initial, cmds] = storeless ?? config.init(loaded, config.ctx);
+    // A wake (`boot: "restored"`, ADR 0039): init's Cmds are not run, and the
+    // State is written only if init moved it off what the store holds.
+    const wake = config.boot === "restored" && loaded !== null;
+    await commit(
+      initial,
+      undefined,
+      wake ? [] : cmds,
+      wake && Object.is(initial, loaded),
+    );
   }
 
   /**
@@ -1407,7 +1439,19 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
     // Flush final State. A save throw does not reject `stop()` (contract:
     // resolves regardless) but IS loss of the last write, so it reaches the
     // sink (invariant 6).
-    if (!session && store && state !== undefined && bootError === null) {
+    // A `boot: "restored"` run skips this flush while the current State is the
+    // one the store is known to hold, the loaded State or the last one a save
+    // accepted: a second write is a second revision for a request that changed
+    // nothing. After a refused save nothing is known, so it flushes as a
+    // default run does (ADR 0039).
+    const held = config.boot === "restored" && Object.is(state, persisted);
+    if (
+      !held &&
+      !session &&
+      store &&
+      state !== undefined &&
+      bootError === null
+    ) {
       try {
         await store.save(state);
       } catch (error) {

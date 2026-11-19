@@ -2247,7 +2247,8 @@ export type Machine<
    *
    * Both fresh and restored init may return a new State and Cmds. Init is
    * pure: it describes effects; handlers perform them. The engine saves the
-   * returned State, reconciles its Subs, then runs its Cmds.
+   * returned State, reconciles its Subs, then runs its Cmds. Under `run`'s
+   * `boot: "restored"` with a loaded State the Cmds are not run (ADR 0039).
    *
    * Put state-conditional resume work here, with the in-flight phase in the
    * returned State so a fast Sub cannot start it again. A host Msg sent after

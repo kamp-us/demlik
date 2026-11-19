@@ -95,6 +95,25 @@ type PromiseRunOptions<
   E extends { _tag: string },
 > = CtxArg<Ctx> & NoInfer<RunHandlers<M, C, U, Ctx>> & StoreAndOnError<S> & {
   /**
+   * How the run starts. Omit it and nothing changes: `init` folds the loaded
+   * State, the engine saves what `init` returned, runs `init`'s Cmds, and
+   * `stop()` saves the last State once more (ADR 0028).
+   *
+   * `"restored"` is for a host that already knows this start is a wake, not
+   * a new process: a Durable Object woken by its next Msg, a request handler.
+   * With a loaded State, `init` still folds it, but its Cmds are not run and
+   * nothing is written at boot while `init` returns the loaded State itself.
+   * A transition still saves before its Cmds run. `stop()` skips its save
+   * only while the State is the one the store is known to hold (the loaded
+   * State or the last one a save accepted), and a refused save clears that,
+   * because the store may have written before it failed. So a start that
+   * changed nothing writes nothing and, on a fenced store, takes no turn at
+   * the fence. With nothing saved, `init(null)` runs, its Cmds run and its
+   * State is saved. A store with a durable log, or no store, is not changed
+   * by it (ADR 0039).
+   */
+  boot?: "restored";
+  /**
    * The clock that stamps `at` on a `Cmd.define`d effect's settled Msg at
    * the interpret edge, and on each `telemetry` event. Defaults to
    * `Date.now`. Inject a fixed one for a deterministic run; a `replay` log
@@ -116,8 +135,10 @@ type PromiseRunOptions<
    * reports a `DrainTimeoutNotice` or a `DisposeTimeoutNotice` (warn-only,
    * like every `RuntimeDiscardNotice`) and resolves anyway, because `stop()`
    * resolving is a contract (ADR 0025). The Subs are still stopped and the
-   * final save still runs. A handler `stop()` gave up on keeps running;
-   * what it returns later is dropped.
+   * final save still runs, except that a run started with `boot: "restored"`
+   * skips it while the State is the one the store is known to hold. A
+   * handler `stop()` gave up on keeps running; what it returns later is
+   * dropped.
    *
    * tea starts no store call after `stop()` has returned. A store call
    * already under way when `stop()` gave up is not cancelled and can

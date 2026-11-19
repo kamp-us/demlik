@@ -52,6 +52,8 @@ interface AgentEventSource<R> {
         readonly turn: number;
       }, { _tag: K }> | Extract<AgentEventHead & {
         readonly _tag: "TurnSettled";
+        /** Feedback issued for this empty turn, when the caller refused its finish. */
+        readonly nudge?: string;
         readonly turn: AgentTurn;
         /** The usage the provider reported for this turn. Absent → none reported. */
         readonly usage?: TurnUsage;

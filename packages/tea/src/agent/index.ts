@@ -149,8 +149,8 @@ import {
   NO_USAGE,
   requireAwaiting,
   toCompactRunCmd,
+  withStateDefaults,
   withTurnUsage,
-  withUsageDefaults,
 } from "./internal";
 import {
   type AgentCmd,
@@ -557,9 +557,8 @@ export function createAgent<
    * Fold ONE model turn (the brain call resolved with an `AgentTurn`). The core
    * of the loop — the seed's `applyAiTurn`, generalized:
    *
-   *   - empty `toolCalls` → the loop is done for this stage → `advance` the
-   *     pipeline (next stage seeds a fresh conversation + brain call, or finish
-   *     to `done`).
+   *   - empty `toolCalls` → consult `continueWhen`; feedback continues the
+   *     loop, otherwise advance the pipeline (or finish to `done`).
    *   - non-empty `toolCalls` → `scatter` them across fan-out (≤ concurrency in
    *     flight), recording the turn and flipping `awaiting` to `tools`. The
    *     returned Cmds are the launched per-tool effects.
@@ -584,11 +583,23 @@ export function createAgent<
     };
     const counted: State = { ...s, usage };
 
-    // ── No tool calls → the stage's loop is done → advance the pipeline. ──
-    // `result` is the terminating turn — threaded into `advanceStage` so it can
-    // be stamped as the run's `output` when this retire finishes the pipeline.
     if (result.toolCalls.length === 0) {
-      return advanceStage({ ...counted, conversation: withTurn }, result, at);
+      const answered: State = { ...counted, conversation: withTurn };
+      const text = config.continueWhen?.(answered) ?? null;
+      if (text === null) return advanceStage(answered, result, at);
+      return nextTurn(
+        {
+          ...noted(answered, { kind: "nudge_recorded", text, at }),
+          conversation: {
+            ...withTurn,
+            nudges: [
+              ...withTurn.nudges,
+              { turn: withTurn.turns.length - 1, text },
+            ],
+          },
+        },
+        at,
+      );
     }
 
     // ── Tool calls → scatter across fan-out (serial by default). ──
@@ -603,7 +614,7 @@ export function createAgent<
     const [tools] = fan.scatter(initFanOut<ToolCall, ToolOutcome<R>>(), batch);
     const nextConv: Conversation<R> = {
       ...withTurn,
-      awaiting: { kind: "tools", batchTurn: withTurn.turnCount },
+      awaiting: { kind: "tools", batchTurn: withTurn.turns.length - 1 },
     };
     // An advance of the loop is progress — bump the monitored-run watchdog.
     const [runSlice] = run.progress(s.run, undefined, at);
@@ -837,15 +848,9 @@ export function createAgent<
 
     const foldedConv: Conversation<R> = {
       ...conv,
-      // Stamp the producing-turn index on the record (#85, A1). At settle time
-      // `conv.turnCount` equals the index in `turns` of the turn that scattered
-      // this batch (each prior drained batch bumped `turnCount` exactly once, and
-      // each tool-bearing turn appended exactly one entry to `turns`), so a record
-      // carrying `turn: conv.turnCount` is dropped iff its producing turn is folded
-      // (`turn < N`) — the association the fold-back relies on.
       toolRecords: [
         ...conv.toolRecords,
-        { call, outcome, turn: conv.turnCount },
+        { call, outcome, turn: conv.turns.length - 1 },
       ],
     };
 
@@ -858,37 +863,30 @@ export function createAgent<
       ];
     }
 
-    // ── Batch drained → fold the turn → fire the next brain call. ──
-    const turnedConv: Conversation<R> = {
-      ...foldedConv,
-      turnCount: foldedConv.turnCount + 1,
-      awaiting: { kind: "llm" },
-    };
+    return nextTurn({ ...s, tools, conversation: foldedConv }, at, launchCmds);
+  }
 
-    // ── The turn boundary's stop conditions, in order. ──
-    const turned: State = { ...s, tools, conversation: turnedConv };
+  function nextTurn(
+    s: State & { readonly conversation: Conversation<R> },
+    at: number,
+    launchCmds: readonly AgentCmd<P, TC>[] = [],
+  ): readonly [State, readonly AgentCmd<P, TC>[]] {
+    const turned: State = {
+      ...s,
+      conversation: {
+        ...s.conversation,
+        turnCount: s.conversation.turnCount + 1,
+        awaiting: { kind: "llm" },
+      },
+    };
     const stopped = stopConditions(turned, at);
     if (stopped !== null) return stopped;
-
-    // The tool ledger resets for the next turn's batch regardless of which
-    // effect (compaction or brain call) fires next.
     const drained: State = {
       ...turned,
       tools: initFanOut<ToolCall, ToolOutcome<R>>(),
     };
-
-    // ── Compaction trigger (#85, design B1). BEFORE the next brain call, ask
-    // the PURE policy how many oldest turns to fold. N > 0 → fire the dedicated
-    // compaction round-trip INSTEAD of the brain call and flip awaiting to
-    // `compacting`; the fold-back (`compact_ok`) then fires the brain call. The
-    // trigger bumps the watchdog (compaction IS liveness, decision C) but does
-    // NOT bump `turnCount` — it already bumped once for this drained batch, and
-    // compaction is not model reasoning progress, so it never trips `maxTurns`.
     const compacting = maybeCompact(drained, at);
     if (compacting !== null) return compacting;
-
-    // ── No compaction → fire the next brain call. ──
-    // An advance of the loop is progress — bump the watchdog, then fire.
     const [runSlice] = run.progress(drained.run, undefined, at);
     const [fired, llmCmds] = fireBrainCall({ ...drained, run: runSlice }, at);
     return [fired, [...launchCmds, ...llmCmds]];
@@ -1642,7 +1640,7 @@ export function createAgent<
   /**
    * Run `verb` as ONE transition: empty the lifecycle outbox on the way in,
    * bring a Model persisted before `state.usage` up to it
-   * ({@link withUsageDefaults}), and note `run_ended` on the way out when this
+   * ({@link withStateDefaults}), and note `run_ended` on the way out when this
    * is the transition that ended the run. Reading the end off `isSettled`
    * before and after, rather than at each site that can end a run, is what
    * makes `RunDone` once-only whichever of them did it — `done`, a turn or
@@ -1660,7 +1658,7 @@ export function createAgent<
     at: number,
     verb: (entered: State) => readonly [State, readonly AgentCmd<P, TC>[]],
   ): readonly [State, readonly AgentCmd<P, TC>[]] {
-    const current = withUsageDefaults(s);
+    const current = withStateDefaults(s);
     const entered: State =
       (current.lifecycle ?? []).length === 0
         ? current
