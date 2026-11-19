@@ -1,6 +1,6 @@
 # Bound a `defineAgent` run
 
-**Goal:** stop an agent run that goes on too long. Each step adds one of the four
+**Goal:** stop an agent run that goes on too long, or keep one from finishing too early. Each step adds one of the four
 guards `defineAgent` takes, `maxTurns`, `deadlineMs`, `maxElapsedMs` and
 `stopWhen`, and step 6 puts all four on one agent.
 

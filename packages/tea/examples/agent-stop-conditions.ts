@@ -75,6 +75,38 @@ const modelAsking = (napMs: number) => {
   };
 };
 
+// #region continue-when
+const modelFinishingEarly = async (
+  messages: readonly AgentMessage[],
+): Promise<AgentTurn> => {
+  const n = messages.filter((m) => m.role === "assistant").length + 1;
+  return {
+    content: `turn ${n}`,
+    toolCalls:
+      n % 2 === 0
+        ? []
+        : [{ callId: `c${n}`, name: "tick", args: { napMs: 1 } }],
+  };
+};
+
+const untilComplete = defineAgent({
+  model: modelFinishingEarly,
+  tools: [tick],
+  instructions: "Tick five times before finishing.",
+  maxTurns: 12,
+  continueWhen: (state) => {
+    const settled =
+      state.conversation?.toolRecords.filter((r) => r.outcome.kind === "ok")
+        .length ?? 0;
+    return settled < 5 ? `tick more: ${5 - settled} left` : null;
+  },
+});
+// #endregion continue-when
+
+const completed = await untilComplete.run("go");
+console.log("continueWhen: five ticks →", status(completed).kind);
+console.log("  final output:", completed.output?.content);
+
 /** Run `agent`, and describe how it ended rather than letting it throw. */
 async function ended(run: () => Promise<unknown>): Promise<string> {
   const startedAt = Date.now();
@@ -320,33 +352,3 @@ console.log("  model calls:", calls);
  * first to come due, at the fourteenth turn boundary, so it ended the run and
  * the other three never fired.
  */
-
-const modelFinishingEarly = async (
-  messages: readonly AgentMessage[],
-): Promise<AgentTurn> => {
-  const n = messages.filter((m) => m.role === "assistant").length + 1;
-  return {
-    content: `turn ${n}`,
-    toolCalls:
-      n % 2 === 0
-        ? []
-        : [{ callId: `c${n}`, name: "tick", args: { napMs: 1 } }],
-  };
-};
-
-const untilComplete = defineAgent({
-  model: modelFinishingEarly,
-  tools: [tick],
-  instructions: "Tick five times before finishing.",
-  maxTurns: 12,
-  continueWhen: (state) => {
-    const settled =
-      state.conversation?.toolRecords.filter((r) => r.outcome.kind === "ok")
-        .length ?? 0;
-    return settled < 5 ? `tick more: ${5 - settled} left` : null;
-  },
-});
-
-const completed = await untilComplete.run("go");
-console.log("continueWhen: five ticks →", status(completed).kind);
-console.log("  final output:", completed.output?.content);

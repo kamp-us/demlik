@@ -850,7 +850,7 @@ export function createAgent<
       ...conv,
       toolRecords: [
         ...conv.toolRecords,
-        { call, outcome, turn: conv.awaiting.batchTurn },
+        { call, outcome, turn: conv.turns.length - 1 },
       ],
     };
 
