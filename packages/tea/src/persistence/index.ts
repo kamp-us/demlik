@@ -1,8 +1,10 @@
 /**
  * @packageDocumentation
  * @demlik/tea/persistence — the durability batteries: record a run to a trace,
- * replay that trace back, and checkpoint a long-running machine to a host
- * store between evictions.
+ * replay that trace back, checkpoint a long-running machine to a host store
+ * between evictions, and keep a machine's State in a store this subpath ships:
+ * `eventSourcedStore`, a durable log over a journal, and `rowStore`, one SQL
+ * row fenced by its revision.
  *
  * The persistence operations live under `src/internal/persistence/`.
  * Journal contract aliases expose the storage door from `src/internal/journal/`
@@ -11,6 +13,7 @@
  * - `log-store` — compose a journal and schemas into the engine-facing durable log.
  * - `recorder` — capture a run as a `Trace` (plus breadcrumbs and
  *   attachments), sufficient to reproduce it.
+ * - `row-store` — a fenced Store over one SQL row.
  * - `snapshot` — periodic state checkpoint to a host store, so a long-running
  *   machine resumes from its last checkpoint rather than from the top.
  * - `trace-replay` — feed a recorded `Trace` back through a machine and report
@@ -22,6 +25,11 @@
 
 export { eventSourcedStore } from "../internal/persistence/log-store";
 export * from "../internal/persistence/recorder";
+export {
+  type RowPort,
+  type RowStoreOptions,
+  rowStore,
+} from "../internal/persistence/row-store";
 export * from "../internal/persistence/snapshot";
 export * from "../internal/persistence/trace-replay";
 

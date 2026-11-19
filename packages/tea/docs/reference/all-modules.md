@@ -23,7 +23,7 @@ discoverable here with a one-line gloss from their source barrel.
 | [`./paginate`](./paginate.md) | battery | the pagination batteries: the cursor walk as pure state, and the resumable end-to-end traversal built over it. |
 | [`./parity`](./parity.md) | stable | the record → replay → normalized-diff go/no-go gate. |
 | [`./pbt`](./pbt.md) | stable | Property-based testing primitives for `@demlik/tea` machines. |
-| [`./persistence`](./persistence.md) | battery | the durability batteries: record a run to a trace, replay that trace back, and checkpoint a long-running machine to a host store between evictions. |
+| [`./persistence`](./persistence.md) | battery | the durability batteries: record a run to a trace, replay that trace back, checkpoint a long-running machine to a host store between evictions, and keep a machine's State in a store this subpath ships: `eventSourcedStore`, a durable log over a journal, and `rowStore`, one SQL row fenced by its revision. |
 | [`./promise`](./promise.md) | stable | the Promise engine: `run` boots a machine and drives its serial dispatch loop on Promises, `driveToDone` runs one to its terminal state, and `tell` puts a Msg on a run's line without waiting for it. |
 | [`./react`](./react.md) | stable | React host adapter for `@demlik/tea`. |
 | [`./resilience`](./resilience.md) | battery | the call-hardening batteries: deadlines, retries, circuit breakers, rate limits, TTL caches and credential refresh, as plain functions and `Cmd.define`d Cmds you call from your own `update` (ADR 0022). |

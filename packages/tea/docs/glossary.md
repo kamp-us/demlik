@@ -221,8 +221,8 @@ Reference: [`Run`](./reference/promise.md#Run),
 
 The interface an engine saves the Model through: `load`, `migrate` and `save`.
 It is exported from `@demlik/tea`. `memoryStore` in `@demlik/tea/mem`,
-`fileStore` in `@demlik/tea/node` and `doStore` in `@demlik/tea/do` implement
-it.
+`fileStore` in `@demlik/tea/node`, `doStore` in `@demlik/tea/do` and `rowStore`
+in `@demlik/tea/persistence` implement it.
 Reference: [`Store`](./reference/tea.md#Store). Why:
 [what durability actually promises](./explanation/durability-model.md).
 

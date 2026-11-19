@@ -52,14 +52,16 @@ execFileSync(
     "NodeNext",
     "--skipLibCheck",
     "examples/journal-store.ts",
+    "examples/row-store.ts",
   ],
   { cwd: pkgDir, stdio: "inherit" },
 );
-execFileSync(
-  process.execPath,
-  ["--experimental-strip-types", "examples/journal-store.ts"],
-  { cwd: pkgDir, stdio: "inherit" },
-);
+for (const example of ["examples/journal-store.ts", "examples/row-store.ts"]) {
+  execFileSync(process.execPath, ["--experimental-strip-types", example], {
+    cwd: pkgDir,
+    stdio: "inherit",
+  });
+}
 const kit = spawnSync(
   process.execPath,
   [
