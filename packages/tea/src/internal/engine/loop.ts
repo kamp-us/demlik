@@ -205,9 +205,10 @@ export interface LoopConfig<S, M extends { _tag: string }, C, Ctx> {
    * `"restored"` (ADR 0039): this start is a wake, not a new process. With a
    * State the store loaded, boot folds it through `init` but runs none of
    * `init`'s Cmds, writes nothing while `init` returns the loaded State
-   * itself, and the run never saves at `stop()`. Absent, every promise of
-   * ADR 0017 (point 5) and ADR 0028 holds as before. Read on the snapshot
-   * path only: a store with a log, or no store, boots as it always did.
+   * itself, and `stop()` saves only a State the store does not hold. Absent,
+   * every promise of ADR 0017 (point 5) and ADR 0028 holds as before. Read on
+   * the snapshot path only: a store with a log, or no store, boots as it
+   * always did.
    */
   readonly boot?: "restored";
   readonly ctx: Ctx;
@@ -453,6 +454,9 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
   // The State the listeners were last told about. Behind `state` while a save is
   // pending, and for good when one fails.
   let installed: S | undefined;
+  // The State the store holds as far as this run knows: the one it loaded, or
+  // the last one a save accepted. `stop()` reads it under `boot: "restored"`.
+  let persisted: S | undefined;
   let saveStatus: SaveStatus = { _tag: "pending" };
   let bootError: unknown = null;
   // The dispatch gate. It only ever ADVANCES — `"open"` → `"draining"` →
@@ -1179,9 +1183,11 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
   ): Promise<void> {
     state = next;
     saveStatus = { _tag: saved ? "saved" : "pending" };
+    if (saved) persisted = next;
     if (store && gate !== "abandoned" && !saved) {
       try {
         await store.save(next);
+        persisted = next;
         saveStatus = { _tag: "saved" };
       } catch (error) {
         saveStatus = { _tag: "failed", error };
@@ -1428,11 +1434,14 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
     // Flush final State. A save throw does not reject `stop()` (contract:
     // resolves regardless) but IS loss of the last write, so it reaches the
     // sink (invariant 6).
-    // A `boot: "restored"` run never re-saves here: each State it installed was
-    // saved by its own commit or came from the store, and a second write is a
-    // second revision for a request that changed nothing (ADR 0039).
+    // A `boot: "restored"` run skips this flush while the current State is one
+    // the store already holds, the loaded State or the last one a save accepted:
+    // a second write is a second revision for a request that changed nothing. A
+    // State whose save was refused is not held, so it is flushed as in a
+    // default run (ADR 0039).
+    const held = config.boot === "restored" && Object.is(state, persisted);
     if (
-      config.boot !== "restored" &&
+      !held &&
       !session &&
       store &&
       state !== undefined &&

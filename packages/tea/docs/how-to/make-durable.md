@@ -132,7 +132,10 @@ A host that sleeps and wakes on its next Msg boots on every wake, so `init`'s
 Cmds run on every wake. When the host already knows this start is a wake, pass
 `boot: "restored"` beside the store. A loaded State still folds through `init`,
 but `init`'s Cmds are not run, and nothing is written until a transition
-commits. `stop()` writes nothing either. With nothing saved, `init(null)` runs
+commits, as long as `init` returns the loaded State itself. If `init` returns a
+different State, that State is saved at boot and still runs no Cmds. `stop()`
+saves only a State the store does not hold, such as one whose save was refused;
+a run that changed nothing writes nothing. With nothing saved, `init(null)` runs
 and its Cmds run, because that start is a birth.
 
 A machine whose `init` marks work in flight and relies on its Cmds to finish it

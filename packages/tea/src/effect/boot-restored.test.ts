@@ -56,6 +56,8 @@ interface Started {
   /** The text of each `notify` that ran, in order. */
   readonly sent: string[];
   getState(): Uploader;
+  result(): Uploader | undefined;
+  done(): Promise<Uploader>;
   dispatch(msg: Msg): Promise<void>;
   stop(): Promise<void>;
 }
@@ -63,6 +65,7 @@ type Start = (
   machine: typeof uploader,
   store: Store<Uploader> | undefined,
   boot?: "restored",
+  terminal?: (state: Uploader) => boolean,
 ) => Promise<Started>;
 
 async function settle<A, E>(effect: Effect.Effect<A, E>): Promise<A> {
@@ -72,11 +75,12 @@ async function settle<A, E>(effect: Effect.Effect<A, E>): Promise<A> {
 }
 
 const start: Record<Engine, Start> = {
-  Promise: async (machine, store, boot) => {
+  Promise: async (machine, store, boot, terminal) => {
     const sent: string[] = [];
     const rt = await runPromise(machine, {
       store,
       boot,
+      terminal,
       onError: () => {},
       interpret: {
         notify: async (cmd) => {
@@ -87,11 +91,13 @@ const start: Record<Engine, Start> = {
     return {
       sent,
       getState: () => rt.getState(),
+      result: () => rt.result(),
+      done: () => rt.done(),
       dispatch: (msg) => rt.dispatch(msg),
       stop: () => rt.stop(),
     };
   },
-  Effect: async (machine, store, boot) => {
+  Effect: async (machine, store, boot, terminal) => {
     const sent: string[] = [];
     const scope = await Effect.runPromise(Scope.make());
     const rt = await settle(
@@ -100,6 +106,7 @@ const start: Record<Engine, Start> = {
           runEffect(machine, {
             store,
             boot,
+            terminal,
             onError: () => {},
             interpret: {
               notify: (cmd) =>
@@ -115,6 +122,8 @@ const start: Record<Engine, Start> = {
     return {
       sent,
       getState: () => rt.getState(),
+      result: () => rt.result(),
+      done: () => settle(rt.done()),
       dispatch: (msg) => settle(rt.dispatch(msg)),
       stop: async () => {
         await settle(rt.stop());
@@ -124,23 +133,29 @@ const start: Record<Engine, Start> = {
   },
 };
 
-/** A plain store over `seed` that records every load and every save. */
+/**
+ * A plain store over `seed` that records every load and every save it accepts.
+ * While `calls.down` is set, a save is refused and recorded nowhere.
+ */
 function counted(seed: Uploader | null) {
   const inner = memoryStore<Uploader>(seed);
-  const calls = { loads: 0, saves: [] as Uploader[] };
+  const calls = { loads: 0, saves: [] as Uploader[], down: false };
   const store: Store<Uploader> = {
     async load() {
       calls.loads += 1;
       return inner.load();
     },
     async save(state) {
+      if (calls.down) throw new Error("storage is down");
       calls.saves.push(state);
       await inner.save(state);
     },
     migrate: (raw) => inner.migrate(raw),
   };
-  return { store, calls };
+  return { store, calls, held: () => inner.load() };
 }
+
+const isDone = (state: Uploader) => state._tag === "done";
 
 /** The fence's version after one accepted Msg on a store saved at version 1. */
 async function versionAfterOneFinish(
@@ -228,6 +243,40 @@ describe.each(ENGINES)("%s engine: boot restored", (engine) => {
     expect(wake.sent).toEqual([]);
     expect(calls.saves).toEqual([{ _tag: "done" }]);
     expect(wake.getState()).toEqual({ _tag: "done" });
+  });
+
+  it("a wake whose transition save was refused flushes that State at stop, as a default run does", async () => {
+    const { store, calls, held } = counted(sending);
+    const wake = await start[engine](uploader, store, "restored");
+    calls.down = true;
+    await expect(wake.dispatch({ _tag: "finish" })).rejects.toThrow();
+    calls.down = false;
+    await wake.stop();
+    expect(wake.getState()).toEqual({ _tag: "done" });
+    expect(calls.saves).toEqual([{ _tag: "done" }]);
+    expect(await held()).toEqual({ _tag: "done" });
+  });
+
+  it("a wake whose later save was accepted writes nothing at stop for the refused one before it", async () => {
+    const { store, calls, held } = counted(idle);
+    const wake = await start[engine](uploader, store, "restored");
+    calls.down = true;
+    await expect(wake.dispatch({ _tag: "send", files: 2 })).rejects.toThrow();
+    calls.down = false;
+    await wake.dispatch({ _tag: "finish" });
+    await wake.stop();
+    expect(calls.saves).toEqual([{ _tag: "done" }]);
+    expect(await held()).toEqual({ _tag: "done" });
+  });
+
+  it("a wake on a terminal State completes at once and writes nothing", async () => {
+    const { store, calls } = counted({ _tag: "done" });
+    const wake = await start[engine](uploader, store, "restored", isDone);
+    expect(wake.result()).toEqual({ _tag: "done" });
+    expect(await wake.done()).toEqual({ _tag: "done" });
+    await wake.stop();
+    expect(wake.sent).toEqual([]);
+    expect(calls.saves).toEqual([]);
   });
 
   it("a run with no store is a first start whatever `boot` says", async () => {

@@ -21,7 +21,7 @@ A host that sleeps when idle and wakes on its next Msg boots on every wake, so `
 1. `boot?: "restored"` on the Promise and Effect engines' `run`. Absent, every promise of 0017 and 0028 holds.
 2. With a loaded State, `init` still folds it and none of its Cmds run. Boot writes nothing while `init` returns the loaded State itself. A different State is a boot transition: it is saved and still runs no Cmds, so a terminal State from `init` crosses the persistence boundary first (0028).
 3. A transition still saves before its Cmds run.
-4. A run started with the option never saves at `stop()`. Every State it installed was saved by its own commit or came from the store.
+4. A run started with the option saves at `stop()` only a State the store does not hold. The store holds the loaded State and the last State a save accepted, compared with `Object.is`. A State that became current without an accepted save, such as one whose save was refused, is flushed exactly as in a default run.
 5. With nothing loaded, `init(null)` runs, its Cmds run and its State is saved. That save is the insert of a row store.
 6. A store with a log and a run with no store are unchanged. A wake on a log already writes nothing at boot and never calls `init`.
 7. There is no second engine entry. The Cmds stay with the engine.
@@ -29,7 +29,7 @@ A host that sleeps when idle and wakes on its next Msg boots on every wake, so `
 ## Consequences
 
 - A machine whose `init` marks work in flight and relies on `init`'s Cmds to finish it must not be started with the option. The host that passes it says the Cmds already ran.
-- A run on a fenced store that changed nothing moves no version, so it cannot make another writer's save lose. A lost fence reaches the host only as the rejection of the dispatch whose save was refused, or of `ready` for a birth race. No `"stop-save"` report comes from such a run.
+- A run on a fenced store that changed nothing moves no version, so it cannot make another writer's save lose. A lost fence reaches the host as the rejection of the dispatch whose save was refused, or of `ready` for a birth race. A run whose saves were all accepted, or that changed nothing, reports no `"stop-save"`; one that ends on a State whose save was refused flushes it and reports `"stop-save"` if that fails too, as a default run does.
 - ADR 0017 point 5 still holds for long-lived runs: the newer starter takes the fence at its boot save.
 - A fenced Store over one SQL row ([#975](https://github.com/kamp-us/demlik/issues/975)) builds on this.
 

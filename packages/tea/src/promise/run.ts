@@ -111,9 +111,9 @@ export type PromiseRunOptions<
      * reports a `DrainTimeoutNotice` or a `DisposeTimeoutNotice` (warn-only,
      * like every `RuntimeDiscardNotice`) and resolves anyway, because `stop()`
      * resolving is a contract (ADR 0025). The Subs are still stopped and the
-     * final save still runs, unless the run was started with `boot: "restored"`.
-     * A handler `stop()` gave up on keeps running; what it returns later is
-     * dropped.
+     * final save still runs, except that a run started with `boot: "restored"`
+     * skips it for a State the store already holds. A handler `stop()` gave up
+     * on keeps running; what it returns later is dropped.
      *
      * tea starts no store call after `stop()` has returned. A store call
      * already under way when `stop()` gave up is not cancelled and can
@@ -134,11 +134,12 @@ export type PromiseRunOptions<
      * a new process: a Durable Object woken by its next Msg, a request handler.
      * With a loaded State, `init` still folds it, but its Cmds are not run and
      * nothing is written at boot while `init` returns the loaded State itself.
-     * A transition still saves before its Cmds run. The run never saves at
-     * `stop()`, so a start that changed nothing writes nothing and, on a fenced
-     * store, takes no turn at the fence. With nothing saved, `init(null)` runs,
-     * its Cmds run and its State is saved. A store with a durable log, or no
-     * store, is not changed by it (ADR 0039).
+     * A transition still saves before its Cmds run. `stop()` saves only a State
+     * the store does not hold, such as one whose save was refused, so a start
+     * that changed nothing writes nothing and, on a fenced store, takes no turn
+     * at the fence. With nothing saved, `init(null)` runs, its Cmds run and its
+     * State is saved. A store with a durable log, or no store, is not changed
+     * by it (ADR 0039).
      */
     boot?: "restored";
     /**
