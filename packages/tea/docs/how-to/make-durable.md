@@ -134,8 +134,9 @@ Cmds run on every wake. When the host already knows this start is a wake, pass
 but `init`'s Cmds are not run, and nothing is written until a transition
 commits, as long as `init` returns the loaded State itself. If `init` returns a
 different State, that State is saved at boot and still runs no Cmds. `stop()`
-saves only a State the store does not hold, such as one whose save was refused;
-a run that changed nothing writes nothing. With nothing saved, `init(null)` runs
+skips its save only while the State is the one the store is known to hold, and a
+refused save makes that unknown, because the store may have written before it
+failed. With nothing saved, `init(null)` runs
 and its Cmds run, because that start is a birth.
 
 A machine whose `init` marks work in flight and relies on its Cmds to finish it

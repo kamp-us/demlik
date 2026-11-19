@@ -49,6 +49,18 @@ const uploader = defineMachine({
   update,
 });
 
+const cycle: Transitions<Uploader, Msg, Cmd> = {
+  idle: { send: () => [sending, []] },
+  sending: { finish: () => [idle, []] },
+  done: {},
+};
+
+const cycling = defineMachine({
+  types: { model: {} as Uploader, msg: {} as Msg, cmd: {} as Cmd },
+  init: (loaded) => [loaded ?? idle, []],
+  update: cycle,
+});
+
 const ENGINES = ["Promise", "Effect"] as const;
 type Engine = (typeof ENGINES)[number];
 
@@ -134,21 +146,28 @@ const start: Record<Engine, Start> = {
 };
 
 /**
- * A plain store over `seed` that records every load and every save it accepts.
- * While `calls.down` is set, a save is refused and recorded nowhere.
+ * A plain store over `seed` that records every load and every State it was
+ * given to write. Each `refuse` entry makes one save fail, in order:
+ * `"before-write"` leaves the store as it was, `"after-write"` writes first.
  */
 function counted(seed: Uploader | null) {
   const inner = memoryStore<Uploader>(seed);
-  const calls = { loads: 0, saves: [] as Uploader[], down: false };
+  const calls = {
+    loads: 0,
+    saves: [] as Uploader[],
+    refuse: [] as ("before-write" | "after-write")[],
+  };
   const store: Store<Uploader> = {
     async load() {
       calls.loads += 1;
       return inner.load();
     },
     async save(state) {
-      if (calls.down) throw new Error("storage is down");
+      const refusal = calls.refuse.shift();
+      if (refusal === "before-write") throw new Error("storage refused");
       calls.saves.push(state);
       await inner.save(state);
+      if (refusal === "after-write") throw new Error("storage refused");
     },
     migrate: (raw) => inner.migrate(raw),
   };
@@ -248,9 +267,8 @@ describe.each(ENGINES)("%s engine: boot restored", (engine) => {
   it("a wake whose transition save was refused flushes that State at stop, as a default run does", async () => {
     const { store, calls, held } = counted(sending);
     const wake = await start[engine](uploader, store, "restored");
-    calls.down = true;
+    calls.refuse.push("before-write");
     await expect(wake.dispatch({ _tag: "finish" })).rejects.toThrow();
-    calls.down = false;
     await wake.stop();
     expect(wake.getState()).toEqual({ _tag: "done" });
     expect(calls.saves).toEqual([{ _tag: "done" }]);
@@ -260,13 +278,24 @@ describe.each(ENGINES)("%s engine: boot restored", (engine) => {
   it("a wake whose later save was accepted writes nothing at stop for the refused one before it", async () => {
     const { store, calls, held } = counted(idle);
     const wake = await start[engine](uploader, store, "restored");
-    calls.down = true;
+    calls.refuse.push("before-write");
     await expect(wake.dispatch({ _tag: "send", files: 2 })).rejects.toThrow();
-    calls.down = false;
     await wake.dispatch({ _tag: "finish" });
     await wake.stop();
     expect(calls.saves).toEqual([{ _tag: "done" }]);
     expect(await held()).toEqual({ _tag: "done" });
+  });
+
+  it("a wake whose refused save may have written flushes the State it returned to, once the store is back", async () => {
+    const { store, calls, held } = counted(idle);
+    const wake = await start[engine](cycling, store, "restored");
+    calls.refuse.push("after-write", "before-write");
+    await expect(wake.dispatch({ _tag: "send", files: 2 })).rejects.toThrow();
+    expect(await held()).toEqual(sending);
+    await expect(wake.dispatch({ _tag: "finish" })).rejects.toThrow();
+    await wake.stop();
+    expect(wake.getState()).toEqual(idle);
+    expect(await held()).toEqual(idle);
   });
 
   it("a wake on a terminal State completes at once and writes nothing", async () => {

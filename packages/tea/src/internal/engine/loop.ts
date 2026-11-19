@@ -205,10 +205,11 @@ export interface LoopConfig<S, M extends { _tag: string }, C, Ctx> {
    * `"restored"` (ADR 0039): this start is a wake, not a new process. With a
    * State the store loaded, boot folds it through `init` but runs none of
    * `init`'s Cmds, writes nothing while `init` returns the loaded State
-   * itself, and `stop()` saves only a State the store does not hold. Absent,
-   * every promise of ADR 0017 (point 5) and ADR 0028 holds as before. Read on
-   * the snapshot path only: a store with a log, or no store, boots as it
-   * always did.
+   * itself, and `stop()` skips its save only while the State is the one the
+   * store is known to hold, which a refused save makes unknown. Absent, every
+   * promise of ADR 0017 (point 5) and ADR 0028 holds as before. Read on the
+   * snapshot path only: a store with a log, or no store, boots as it always
+   * did.
    */
   readonly boot?: "restored";
   readonly ctx: Ctx;
@@ -454,8 +455,9 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
   // The State the listeners were last told about. Behind `state` while a save is
   // pending, and for good when one fails.
   let installed: S | undefined;
-  // The State the store holds as far as this run knows: the one it loaded, or
-  // the last one a save accepted. `stop()` reads it under `boot: "restored"`.
+  // The State the store is known to hold: the one it loaded, then the last one
+  // a save accepted. A refused save clears it, because the store may have
+  // written before it failed. `stop()` reads it under `boot: "restored"`.
   let persisted: S | undefined;
   let saveStatus: SaveStatus = { _tag: "pending" };
   let bootError: unknown = null;
@@ -1183,13 +1185,13 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
   ): Promise<void> {
     state = next;
     saveStatus = { _tag: saved ? "saved" : "pending" };
-    if (saved) persisted = next;
     if (store && gate !== "abandoned" && !saved) {
       try {
         await store.save(next);
         persisted = next;
         saveStatus = { _tag: "saved" };
       } catch (error) {
+        persisted = undefined;
         saveStatus = { _tag: "failed", error };
         for (const ext of extensions) ext.saveFailed?.(next, error);
         throw error;
@@ -1263,7 +1265,10 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
     }
     // `storeless` is null exactly when a store was handed over.
     let loaded: S | null = null;
-    if (storeless === null) loaded = await restore(store as Store<S>);
+    if (storeless === null) {
+      loaded = await restore(store as Store<S>);
+      persisted = loaded ?? undefined;
+    }
     const [initial, cmds] = storeless ?? config.init(loaded, config.ctx);
     // A wake (`boot: "restored"`, ADR 0039): init's Cmds are not run, and the
     // State is written only if init moved it off what the store holds.
@@ -1434,11 +1439,11 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
     // Flush final State. A save throw does not reject `stop()` (contract:
     // resolves regardless) but IS loss of the last write, so it reaches the
     // sink (invariant 6).
-    // A `boot: "restored"` run skips this flush while the current State is one
-    // the store already holds, the loaded State or the last one a save accepted:
-    // a second write is a second revision for a request that changed nothing. A
-    // State whose save was refused is not held, so it is flushed as in a
-    // default run (ADR 0039).
+    // A `boot: "restored"` run skips this flush while the current State is the
+    // one the store is known to hold, the loaded State or the last one a save
+    // accepted: a second write is a second revision for a request that changed
+    // nothing. After a refused save nothing is known, so it flushes as a
+    // default run does (ADR 0039).
     const held = config.boot === "restored" && Object.is(state, persisted);
     if (
       !held &&

@@ -46,8 +46,10 @@ Cmds run on every wake. Passing `boot: "restored"` to `run` says this start is a
 wake: with a loaded State, `init` still folds it, but none of its Cmds run, and
 the run writes nothing until a transition commits, as long as `init` returns the
 loaded State itself. A different State from `init` is saved at boot and still
-runs no Cmds. `stop()` saves only a State the store does not hold, such as one
-whose save was refused. With nothing saved, `init(null)` runs and its Cmds run.
+runs no Cmds. `stop()` skips its save only while the State is the one the store
+is known to hold, and a refused save makes that unknown, because the store may
+have written before it failed. With nothing saved, `init(null)` runs and its
+Cmds run.
 A machine whose `init` marks work in
 flight and relies on its Cmds to finish it must not use the option, and a log
 store already never calls `init` on a wake
@@ -108,8 +110,7 @@ over; the older process is refused at its next save. Effects already running
 can still finish, so fencing does not remove the repeated-effect window.
 A `boot: "restored"` run on a fenced store takes no turn at the fence for a start
 that changed nothing, because `init` returned the loaded State itself and the
-store already holds every State the run installed, so it writes nothing at boot
-or at `stop()`.
+store is known to hold it, so it writes nothing at boot or at `stop()`.
 
 A stopped run can be that stale writer. When `stop()` gives up at
 `disposeTimeoutMs`, tea starts no store call after `stop()` has returned, but a
