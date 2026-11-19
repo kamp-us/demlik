@@ -302,6 +302,18 @@ describe("rowStore: passes", () => {
     expect(parser.mock.calls[0]?.[0]).toBe(raw);
   });
 
+  it("a row re-created after delete starts again at revision 1", async () => {
+    const db = database();
+    seedJob(db, "j1", { _tag: "running", by: "w1" }, 5);
+    const store = storeOf(db.port("j1"));
+    await store.delete();
+    expect(await store.saveFenced({ _tag: "queued" }, 0)).toBe(1);
+    expect(db.live.get("j1")).toEqual({
+      row: { status: "queued", claimed_by: null },
+      revision: 1,
+    });
+  });
+
   it("delete removes the row, and the next read is version 0 again; deleting nothing resolves", async () => {
     const db = database();
     const store = storeOf(db.port("j1"));
@@ -387,25 +399,32 @@ describe("rowStore: an existing row is a State or a refusal", () => {
     });
   });
 
-  it("an existing row whose parse refuses is never overwritten, whatever Msg follows", async () => {
-    const msgs: JobMsg[] = [
-      { _tag: "claim", by: "w1" },
-      { _tag: "cancel" },
-      { _tag: "finish" },
-    ];
-    for (const msg of msgs) {
-      const db = database();
-      const sent: JobCmd[] = [];
-      const row = { status: "paused", claimed_by: null };
-      db.seed("j1", row, 3);
-      const outcome = await request(db.port("j1"), msg, sent);
-      expect(outcome.rejected).toHaveLength(1);
-      expect(outcome.rejected[0]).toBeInstanceOf(StoreRefusedError);
-      expect(outcome.reported).toEqual([]);
-      expect(db.live.get("j1")).toEqual({ row, revision: 3 });
-      expect(db.counts).toEqual({ reads: 1, writes: 0 });
-      expect(sent).toEqual([]);
-    }
+  it("a parse that answers null for an existing row is refused at boot, not booted fresh over it", async () => {
+    const db = database();
+    const sent: JobCmd[] = [];
+    const row = { status: "queued", claimed_by: null };
+    db.seed("j1", row, 3);
+    const answersNull = rowStore(db.port("j1"), {
+      parse: (() => null) as unknown as (row: unknown) => Job | Refusal,
+      encode,
+      fenced: true,
+    });
+    expect(answersNull.migrate(row)).toMatchObject({ _tag: "refusal" });
+    const booting = run(job, {
+      store: answersNull,
+      boot: "restored",
+      interpret: {
+        notify: async (cmd) => {
+          sent.push(cmd);
+        },
+      },
+      onError: () => {},
+    });
+    await expect(booting.ready).rejects.toBeInstanceOf(StoreRefusedError);
+    await booting.stop();
+    expect(db.counts.writes).toBe(0);
+    expect(db.live.get("j1")).toEqual({ row, revision: 3 });
+    expect(sent).toEqual([]);
   });
 });
 

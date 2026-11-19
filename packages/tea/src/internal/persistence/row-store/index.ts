@@ -3,7 +3,7 @@ import type {
   FencedStore,
   Refusal,
 } from "../../../runtime-types";
-import { StoreConflictError } from "../../../runtime-types";
+import { refuse, StoreConflictError } from "../../../runtime-types";
 
 /**
  * One SQL row, bound by the host to its table and row id (and, when the save
@@ -124,7 +124,13 @@ export function rowStore<S>(
     async save(state) {
       await saveFenced(state, (await loadFenced()).version);
     },
-    migrate: (raw) => (raw === null ? null : parse(raw)),
+    migrate: (raw) => {
+      if (raw === null) return null;
+      const parsed = parse(raw);
+      return parsed === null
+        ? refuse("the row exists, and parse answered nothing for it")
+        : parsed;
+    },
     delete: () => port.remove(),
   };
 }
