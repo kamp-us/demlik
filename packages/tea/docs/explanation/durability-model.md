@@ -41,6 +41,20 @@ option for a host message after `ready`, when Subs are already open; combining
 both resume paths for the same work can repeat it.
 An agent's saved retry counters survive too; restarting does not reset its attempt budget.
 
+A host that sleeps and wakes on its next Msg boots on every wake, so `init`'s
+Cmds run on every wake. Passing `boot: "restored"` to `run` says this start is a
+wake: with a loaded State, `init` still folds it, but none of its Cmds run, and
+the run writes nothing until a transition commits, as long as `init` returns the
+loaded State itself. A different State from `init` is saved at boot and still
+runs no Cmds. `stop()` skips its save only while the State is the one the store
+is known to hold, and a refused save makes that unknown, because the store may
+have written before it failed. With nothing saved, `init(null)` runs and its
+Cmds run.
+A machine whose `init` marks work in
+flight and relies on its Cmds to finish it must not use the option, and a log
+store already never calls `init` on a wake
+([ADR 0039](https://github.com/kamp-us/demlik/blob/main/.decisions/0039-a-request-is-run-with-an-opt-in-restored-boot.md)).
+
 Stopping the host and cancelling the run have different meanings. A killed
 process leaves its last saved phase in place. An agent cancellation records a
 terminal outcome, so reopening that store does not continue the cancelled run.
@@ -94,6 +108,9 @@ A `FencedStore` adds a version check to each save. A stale writer gets
 `StoreConflictError`. A later starter can read the current version and take
 over; the older process is refused at its next save. Effects already running
 can still finish, so fencing does not remove the repeated-effect window.
+A `boot: "restored"` run on a fenced store takes no turn at the fence for a start
+that changed nothing, because `init` returned the loaded State itself and the
+store is known to hold it, so it writes nothing at boot or at `stop()`.
 
 A stopped run can be that stale writer. When `stop()` gives up at
 `disposeTimeoutMs`, tea starts no store call after `stop()` has returned, but a
