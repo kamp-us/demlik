@@ -4,8 +4,8 @@ import {
   type DeletableStore,
   defineMachine,
   type FencedStore,
-  type Migrated,
   NoCellError,
+  type Refusal,
   refuse,
   StoreConflictError,
 } from "@demlik/tea";
@@ -37,7 +37,7 @@ const columns = z.union([
 ]);
 
 const options: RowStoreOptions<Ticket> = {
-  parse: (row): Migrated<Ticket> => {
+  parse: (row): Ticket | Refusal => {
     const parsed = columns.safeParse(row);
     if (!parsed.success) return refuse("not a ticket row");
     return parsed.data.status === "open"

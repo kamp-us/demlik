@@ -145,8 +145,11 @@ adds an insert, and a refused save can add a read and a final save attempt at
 state lets the next runtime boot fresh. A custom `Store` need not expose deletion.
 
 A live unfenced runtime can save again and recreate the state. Deleting a fenced
-store also removes its version, so the old writer is refused at its next save.
-Deletion therefore belongs after the current runtime has stopped.
+store also removes its version, so the old writer is refused at its next save
+while the state stays gone. After `delete()` a re-created row starts again at
+revision 1, so a host that re-creates a deleted id must not let writers from
+before the delete continue. Deletion therefore belongs after the current
+runtime has stopped.
 
 ## What a resumed agent run keeps: the prompt it started with
 

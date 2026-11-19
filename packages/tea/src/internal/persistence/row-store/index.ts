@@ -1,7 +1,7 @@
 import type {
   DeletableStore,
   FencedStore,
-  Migrated,
+  Refusal,
 } from "../../../runtime-types";
 import { StoreConflictError } from "../../../runtime-types";
 
@@ -14,7 +14,7 @@ import { StoreConflictError } from "../../../runtime-types";
  * @experimental
  */
 export interface RowPort {
-  /** The row's columns and its revision, or `null` when no row exists. `row` is never `null`. */
+  /** The row's columns and its revision, or `null` when no row exists. `row` is never `null`, and a revision starts at 1. */
   read(): Promise<{ readonly row: unknown; readonly revision: number } | null>;
   /** Insert the row with `columns` at revision 1. `true` if inserted; `false`, writing nothing, if a row already exists. */
   insert(columns: Readonly<Record<string, unknown>>): Promise<boolean>;
@@ -33,8 +33,8 @@ export interface RowPort {
  * @experimental
  */
 export interface RowStoreOptions<S> {
-  /** The row's columns to `S`, or `refuse(reason)` for a row it cannot read. Never called with `null`. It must not throw. */
-  readonly parse: (row: unknown) => Migrated<S>;
+  /** The row's columns to `S`, or `refuse(reason)` for a row it cannot read. It never answers `null`: the row exists, and absence is decided only by `read` returning no row. It is never called with `null`, and it must not throw. */
+  readonly parse: (row: unknown) => S | Refusal;
   /** `S` to the row's columns. It must not throw. The revision is the port's, never part of the columns. */
   readonly encode: (state: S) => Readonly<Record<string, unknown>>;
   /** Asked for by name, as on every fenced factory (ADR 0017, item 4). There is no unfenced form. */
@@ -58,25 +58,33 @@ export interface RowStoreOptions<S> {
  * `saveFenced(state, n)` writes revision `n + 1` or throws `StoreConflictError`
  * carrying both versions; revision 0 is the insert. `actualVersion` is the
  * revision a diagnostic read observed after the refusal, or 0 when it found no
- * row, so it is not necessarily the revision at the failed comparison. A failed
- * diagnostic read propagates its rejection. A run on a fenced store needs an
- * `onError` (ADR 0031).
+ * row, so it is not necessarily the revision at the failed comparison. It
+ * equals `expectedVersion` when that read finds the revision that was expected,
+ * as `StoreConflictError(n, n)` after an update that changed nothing, and as
+ * `StoreConflictError(0, 0)` when a refused insert's row has vanished by then.
+ * A failed diagnostic read propagates its rejection. A run on a fenced store
+ * needs an `onError` (ADR 0031).
  *
  * With `boot: "restored"` (ADR 0039), for an existing row, when `init` returns
  * the loaded State itself (`Object.is`), no Subs or Cmd follow-ups dispatch
  * additional messages, and storage succeeds, a one-Msg request costs one read
  * and zero writes for a no-cell refusal, or one read and one write for an
  * accepted transition. Birth and a changed State from init add a boot write. A
- * failed save can add diagnostic reads and a final save attempt at stop.
- * Restored init's Cmds do not run.
+ * failed save can add diagnostic reads and a final save attempt at stop. On a
+ * wake, restored init's Cmds do not run; on a birth, with nothing loaded,
+ * init's Cmds run.
  *
  * Bind `port` to the host's transaction and the save is part of it. tea opens
  * no transaction and has no commit hook: a lost fence reaches the host as the
- * rejection of the dispatch whose save was refused, and throwing it out of the
- * transaction rolls the sibling writes back.
+ * rejection of the dispatch whose save was refused, or of `ready` for a birth
+ * race, and throwing it out of the transaction rolls the sibling writes back.
+ *
+ * An insert always writes revision 1, so after `delete()` a re-created row
+ * starts again at revision 1: a host that re-creates a deleted id must not let
+ * writers from before the delete continue.
  *
  * Pending work is not stored: keep it in the State (see
- * `docs/explanation/durability-model.md`). A `LoggedStore` over SQL is a later slice.
+ * `docs/explanation/durability-model.md`).
  *
  * @experimental
  */

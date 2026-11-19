@@ -1,6 +1,6 @@
 # @demlik/tea/persistence
 
-> the durability batteries: record a run to a trace, replay that trace back, and checkpoint a long-running machine to a host store between evictions.
+> the durability batteries: record a run to a trace, replay that trace back, checkpoint a long-running machine to a host store between evictions, and keep a machine's State in a store this subpath ships: `eventSourcedStore`, a durable log over a journal, and `rowStore`, one SQL row fenced by its revision.
 
 Tier: `battery`
 
@@ -426,7 +426,7 @@ function replayTrace<
 interface RowPort {
   /** Insert the row with `columns` at revision 1. `true` if inserted; `false`, writing nothing, if a row already exists. */
   insert(columns: Readonly<Record<string, unknown>>): Promise<boolean>;
-  /** The row's columns and its revision, or `null` when no row exists. `row` is never `null`. */
+  /** The row's columns and its revision, or `null` when no row exists. `row` is never `null`, and a revision starts at 1. */
   read(): Promise<{
     readonly revision: number;
     readonly row: unknown;
@@ -459,8 +459,8 @@ interface RowStoreOptions<S> {
   readonly encode: (state: S) => Readonly<Record<string, unknown>>;
   /** Asked for by name, as on every fenced factory (ADR 0017, item 4). There is no unfenced form. */
   readonly fenced: true;
-  /** The row's columns to `S`, or `refuse(reason)` for a row it cannot read. Never called with `null`. It must not throw. */
-  readonly parse: (row: unknown) => Migrated<S>;
+  /** The row's columns to `S`, or `refuse(reason)` for a row it cannot read. It never answers `null`: the row exists, and absence is decided only by `read` returning no row. It is never called with `null`, and it must not throw. */
+  readonly parse: (row: unknown) => Refusal | S;
 }
 ```
 

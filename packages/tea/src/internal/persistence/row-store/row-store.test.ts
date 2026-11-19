@@ -3,8 +3,8 @@ import { z } from "zod";
 import {
   defineMachine,
   isFencedStore,
-  type Migrated,
   NoCellError,
+  type Refusal,
   type RuntimeErrorPhase,
   refuse,
   StoreConflictError,
@@ -73,7 +73,7 @@ const encode = (s: Job) => ({
   status: s._tag,
   claimed_by: "by" in s ? s.by : null,
 });
-const parse = (row: unknown): Migrated<Job> => {
+const parse = (row: unknown): Job | Refusal => {
   const parsed = jobRow.safeParse(row);
   if (!parsed.success) {
     return refuse(`unreadable job row: ${parsed.error.message}`);
@@ -286,9 +286,9 @@ describe("rowStore: passes", () => {
   });
 
   it("migrate answers null for null without asking parse, and forwards any other raw value untouched", () => {
-    const parser = vi.fn(
-      (_row: unknown): Migrated<Job> => ({ _tag: "queued" }),
-    );
+    const parser = vi.fn((_row: unknown): Job | Refusal => ({
+      _tag: "queued",
+    }));
     const store = rowStore(database().port("j1"), {
       parse: parser,
       encode,
@@ -377,6 +377,38 @@ describe("rowStore: the example parser", () => {
   });
 });
 
+describe("rowStore: an existing row is a State or a refusal", () => {
+  it("parse cannot answer null, because absence is decided only by the port finding no row", () => {
+    rowStore(database().port("j1"), {
+      // @ts-expect-error a row that exists is a State or a refusal, never nothing
+      parse: (): Job | null => null,
+      encode,
+      fenced: true,
+    });
+  });
+
+  it("an existing row whose parse refuses is never overwritten, whatever Msg follows", async () => {
+    const msgs: JobMsg[] = [
+      { _tag: "claim", by: "w1" },
+      { _tag: "cancel" },
+      { _tag: "finish" },
+    ];
+    for (const msg of msgs) {
+      const db = database();
+      const sent: JobCmd[] = [];
+      const row = { status: "paused", claimed_by: null };
+      db.seed("j1", row, 3);
+      const outcome = await request(db.port("j1"), msg, sent);
+      expect(outcome.rejected).toHaveLength(1);
+      expect(outcome.rejected[0]).toBeInstanceOf(StoreRefusedError);
+      expect(outcome.reported).toEqual([]);
+      expect(db.live.get("j1")).toEqual({ row, revision: 3 });
+      expect(db.counts).toEqual({ reads: 1, writes: 0 });
+      expect(sent).toEqual([]);
+    }
+  });
+});
+
 describe("rowStore: refusals", () => {
   it("two writers at version 0: one insert wins, the loser's state is not there", async () => {
     const db = database();
@@ -433,6 +465,23 @@ describe("rowStore: refusals", () => {
       storeOf(racing).saveFenced({ _tag: "done" }, 1),
     ).rejects.toMatchObject({ expectedVersion: 1, actualVersion: 9 });
     expect(db.live.get("j1")?.revision).toBe(9);
+  });
+
+  it("a refused save whose diagnostic read finds the expected revision, or no row after an insert, is a conflict of equal versions", async () => {
+    const db = database();
+    seedJob(db, "j1", { _tag: "running", by: "w1" }, 2);
+    const port = db.port("j1");
+    const changedNothing: RowPort = { ...port, update: async () => false };
+    await expect(
+      storeOf(changedNothing).saveFenced({ _tag: "done" }, 2),
+    ).rejects.toMatchObject({ expectedVersion: 2, actualVersion: 2 });
+    const vanished: RowPort = {
+      ...database().port("j2"),
+      insert: async () => false,
+    };
+    await expect(
+      storeOf(vanished).saveFenced({ _tag: "queued" }, 0),
+    ).rejects.toMatchObject({ expectedVersion: 0, actualVersion: 0 });
   });
 
   it("a diagnostic read that fails rejects the save with its own failure, and nothing was written", async () => {
@@ -590,6 +639,10 @@ describe("a request through the engine", () => {
       errorsOf(outcome).some((e) => e instanceof StoreConflictError),
     );
     expect(lost).toHaveLength(1);
+    const [loser] = lost;
+    expect(loser?.rejected).toHaveLength(1);
+    expect(loser?.rejected[0]).toBeInstanceOf(StoreConflictError);
+    expect(loser?.rejected[0]).toMatchObject({ expectedVersion: 0 });
     expect(sent).toHaveLength(1);
     expect(db.live.get("j9")?.revision).toBe(2);
     expect(sent[0]?.to).toBe(db.live.get("j9")?.row.claimed_by);
