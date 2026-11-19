@@ -250,8 +250,9 @@ export type DefinedAgentModel =
 /**
  * What `defineAgent` takes: the model, the tools and the instructions, plus the
  * four optional guards that stop a run — `maxTurns`, `deadlineMs`,
- * `maxElapsedMs` and `stopWhen` — and the one that keeps a run going, `retry`,
- * the brain call's backoff ladder. Omit every guard and the run is unbounded:
+ * `maxElapsedMs` and `stopWhen` — plus `retry`, the brain call's backoff
+ * ladder, and `continueWhen`, the caller's rule for refusing an early finish.
+ * Omit every guard and the run is unbounded:
  * it ends only when the model stops asking for tools.
  *
  * Two more knobs bound what a run COSTS rather than whether it ends:
@@ -341,6 +342,17 @@ export interface DefineAgentConfig<T extends AnyToolDef> {
    * as it uses the `maxTurns` passed to this boot.
    */
   readonly stopWhen?: (state: DefinedAgentState<T>) => boolean;
+  /**
+   * Consulted when a turn asks for no tools. `null` lets the stage retire;
+   * a string keeps it running and is read next turn as a user message.
+   * Omit → the stage retires on its first turn without tools.
+   *
+   * It must be PURE and total over the state it is handed — the reducer calls
+   * it, so a replay of the same Msg log calls it with the same state and must
+   * get the same answer. It is config, not Model: a resumed run consults the
+   * predicate the config passed to THIS boot.
+   */
+  readonly continueWhen?: (state: DefinedAgentState<T>) => string | null;
   /**
    * The backoff ladder a FAILED BRAIN CALL climbs — the same `RetryPolicy`
    * shape `AgentConfigCore.retry` takes, threaded straight to it, so the ladder
@@ -770,6 +782,7 @@ function definedAgent<T extends AnyToolDef>(
       deadlineMs: config.deadlineMs,
       maxElapsedMs: config.maxElapsedMs,
       stopWhen: config.stopWhen,
+      continueWhen: config.continueWhen,
     };
     // `AgentCompactionConfig` is a DISCRIMINATED union — compaction is either
     // structurally absent or a whole policy — and the `compact_run` interpret
@@ -1046,6 +1059,7 @@ function compactionPolicyOf<R>(
         ...conversation,
         turns: conversation.turns.slice(0, folding),
         toolRecords: conversation.toolRecords.filter((r) => r.turn < folding),
+        nudges: conversation.nudges.filter((n) => n.turn < folding),
       },
     }),
   };
@@ -1134,7 +1148,8 @@ function messagesOf(
 }
 
 /**
- * The prompt as messages: the head, then each turn with its tool outcomes.
+ * The prompt as messages: the head, then each turn with its tool outcomes
+ * and caller feedback.
  * `partsOf` reads the parts a settled call shows the model; omit it and no
  * `tool` message carries `parts`. PURE.
  */
@@ -1149,7 +1164,7 @@ export function renderPrompt(
   if (prompt.input !== null) {
     head.push({ role: "user", content: prompt.input });
   }
-  const { turns, toolRecords } = prompt.conversation;
+  const { turns, toolRecords, nudges = [] } = prompt.conversation;
   const transcript = turns.flatMap<AgentMessage>((turn, i) => [
     assistantOf(turn),
     ...toolRecords
@@ -1164,6 +1179,9 @@ export function renderPrompt(
         const parts = partsOf(r.call, r.outcome);
         return parts === null ? message : { ...message, parts };
       }),
+    ...nudges
+      .filter((n) => n.turn === i)
+      .map<AgentMessage>((n) => ({ role: "user", content: n.text })),
   ]);
   return [...head, ...transcript];
 }

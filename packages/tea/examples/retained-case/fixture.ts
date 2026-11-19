@@ -56,7 +56,7 @@ export function verifyCase(host: CaseHost): CaseView {
   assert.equal(view.compactions, 2);
   assert.equal(view.outcome.kind, "done");
   assert.equal(view.maxActiveTurns, 6);
-  assert.equal(view.maxActiveTools, 7);
+  assert.equal(view.maxActiveTools, 6);
   assert.ok(view.maxActiveTools <= MAX_MODEL_TURNS);
   assert.equal(
     new Set(view.history.map((entry) => entry.id)).size,

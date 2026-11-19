@@ -365,6 +365,7 @@ export const PAGE_MIRRORS: readonly PageRow[] = [
       "until-five",
       "budgeted",
       "guarded",
+      "continue-when",
     ),
   },
   {

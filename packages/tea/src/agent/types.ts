@@ -383,7 +383,7 @@ export type ToolResilienceError = ToolTimedOut | ToolRetryExhausted;
  * call + its outcome, in settle order. The consumer's message loader reads
  * these (plus `turns`) to assemble the next brain call's prompt.
  *
- * `turn` is the `turnCount` at the time the record was folded — the association
+ * `turn` is the index of the producing turn in `turns` — the association
  * compaction needs to drop the RIGHT records (#85 / design A1). When compaction
  * folds `turns[0..N]` into a summary, it must also drop every tool record that
  * belonged to those turns; without a turn stamp on the record there is no honest
@@ -393,8 +393,14 @@ export type ToolResilienceError = ToolTimedOut | ToolRetryExhausted;
 export interface ToolRecord<R> {
   readonly call: ToolCall;
   readonly outcome: ToolOutcome<R>;
-  /** The `turnCount` at fold time — which round-trip this record belongs to (#85, A1). */
+  /** The producing turn's index in the current conversation. */
   readonly turn: number;
+}
+
+/** Feedback answering the empty model turn at index `turn` in the conversation. */
+export interface Nudge {
+  readonly turn: number;
+  readonly text: string;
 }
 
 // ===========================================================================
@@ -438,6 +444,8 @@ export interface Conversation<R> {
   readonly turns: readonly AgentTurn[];
   /** Settled tool records, in settle order — the model sees these next turn. */
   readonly toolRecords: readonly ToolRecord<R>[];
+  /** Feedback answering empty model turns, in conversation order. */
+  readonly nudges: readonly Nudge[];
   /** Monotonic round-trip count; the livelock guard compares it to `maxTurns`. */
   readonly turnCount: number;
   /** What the loop is waiting for next. */
@@ -631,6 +639,17 @@ export interface AgentConfigCore<
    * Model: a resumed run consults the predicate the config passed to THIS boot.
    */
   readonly stopWhen?: (state: AgentState<Stage, P, O, R>) => boolean;
+  /**
+   * Consulted when a turn asks for no tools. `null` lets the stage retire;
+   * a string keeps it running and is read next turn as a user message.
+   * Omit → the stage retires on its first turn without tools.
+   *
+   * It must be PURE and total over the state it is handed — the reducer calls
+   * it, so a replay of the same Msg log calls it with the same state and must
+   * get the same answer. It is config, not Model: a resumed run consults the
+   * predicate the config passed to THIS boot.
+   */
+  readonly continueWhen?: (state: AgentState<Stage, P, O, R>) => string | null;
 
   // ---- determinism seam ----------------------------------------------------
   /**
@@ -861,6 +880,11 @@ export type AgentTerminalFailure<Stage> = AgentFailure | RunFailure<Stage>;
  *     this transition.
  */
 export type AgentLifecycleNote =
+  | {
+      readonly kind: "nudge_recorded";
+      readonly text: string;
+      readonly at: number;
+    }
   | {
       readonly kind: "brain_started";
       readonly turn: number;
