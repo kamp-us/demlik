@@ -256,12 +256,32 @@ describe.each(ENGINES)("%s engine: boot restored", (engine) => {
       init: (loaded: Uploader | null): readonly [Uploader, readonly Cmd[]] =>
         loaded === null ? [idle, [ready]] : [{ _tag: "done" }, [ready]],
     };
-    const { store, calls } = counted(sending);
+    const { store, calls, held } = counted(sending);
     const wake = await start[engine](migrating, store, "restored");
+    expect(calls.saves).toEqual([{ _tag: "done" }]);
+    expect(await held()).toEqual({ _tag: "done" });
+    expect(wake.sent).toEqual([]);
     await wake.stop();
     expect(wake.sent).toEqual([]);
     expect(calls.saves).toEqual([{ _tag: "done" }]);
     expect(wake.getState()).toEqual({ _tag: "done" });
+  });
+
+  it("an init that returns a terminal State has it saved before done() resolves, and still runs no Cmds", async () => {
+    const finishing = {
+      ...uploader,
+      init: (loaded: Uploader | null): readonly [Uploader, readonly Cmd[]] =>
+        loaded === null ? [idle, [ready]] : [{ _tag: "done" }, [ready]],
+    };
+    const { store, calls, held } = counted(sending);
+    const wake = await start[engine](finishing, store, "restored", isDone);
+    expect(await wake.done()).toEqual({ _tag: "done" });
+    expect(wake.result()).toEqual({ _tag: "done" });
+    expect(calls.saves).toEqual([{ _tag: "done" }]);
+    expect(await held()).toEqual({ _tag: "done" });
+    expect(wake.sent).toEqual([]);
+    await wake.stop();
+    expect(calls.saves).toEqual([{ _tag: "done" }]);
   });
 
   it("a wake whose transition save was refused flushes that State at stop, as a default run does", async () => {
