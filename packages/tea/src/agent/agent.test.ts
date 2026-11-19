@@ -201,6 +201,7 @@ describe("createAgent — init + start", () => {
     expect(s.conversation).toEqual({
       turns: [],
       toolRecords: [],
+      nudges: [],
       turnCount: 0,
       awaiting: { kind: "llm" },
       contextTokens: null,

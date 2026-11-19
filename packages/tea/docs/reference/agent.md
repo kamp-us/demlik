@@ -21,7 +21,7 @@ These are the ones to read first:
 | [`DefinedAgentState`](#DefinedAgentState) | Type the Model a defined agent persists — what a `Store` reads and writes. |
 | [`createAgent`](#createAgent) | Drop below the lid, once you need to walk a stage pipeline `defineAgent` does not express. |
 
-## Exports (155)
+## Exports (156)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -81,7 +81,7 @@ These are the ones to read first:
 | [`DeadlineSub`](#DeadlineSub) | Type | experimental | One deadline, as a battery lists it. |
 | [`defineAgent`](#defineAgent) | Function | experimental | Define an agent from a model, the tools it may call and its instructions, and get back `run(input)` — a promise of the finished state — plus `machine(input)` for driving the same run yourself, which is the entry point a newcomer picks, `createAgent` being the layer underneath that you drop to only to walk a stage pipeline of your own. |
 | [`DefineAgentCompaction`](#DefineAgentCompaction) | Type | experimental | The lid's compaction budget: when a transcript is too long, and how much of it survives the fold. |
-| [`DefineAgentConfig`](#DefineAgentConfig) | Interface | experimental | What `defineAgent` takes: the model, the tools and the instructions, plus the four optional guards that stop a run — `maxTurns`, `deadlineMs`, `maxElapsedMs` and `stopWhen` — and the one that keeps a run going, `retry`, the brain call's backoff ladder. |
+| [`DefineAgentConfig`](#DefineAgentConfig) | Interface | experimental | What `defineAgent` takes: the model, the tools and the instructions, plus the four optional guards that stop a run — `maxTurns`, `deadlineMs`, `maxElapsedMs` and `stopWhen` — plus `retry`, the brain call's backoff ladder, and `continueWhen`, the caller's rule for refusing an early finish. |
 | [`DefinedAgent`](#DefinedAgent) | Interface | experimental | What `defineAgent` returns. |
 | [`DefinedAgentCmd`](#DefinedAgentCmd) | Type | experimental | The Cmd union a defined agent's machine emits — one interpret cell per member. |
 | [`DefinedAgentCtx`](#DefinedAgentCtx) | Type | experimental | The ctx the tools' handlers read, intersected — what `run` asks for. |
@@ -124,11 +124,12 @@ These are the ones to read first:
 | [`ModelPort`](#ModelPort) | Type | experimental | Either model port. |
 | [`ModelStream`](#ModelStream) | Interface | experimental | The side channel a StreamingModel writes its deltas to — the second argument of the streaming port. |
 | [`MonitoredRunCmd`](#MonitoredRunCmd) | Type | experimental | The checkpoint-write Cmd, generic over the consumer's checkpoint value `V`. |
+| [`Nudge`](#Nudge) | Interface | experimental | Feedback answering the empty model turn at index `turn` in the conversation. |
 | [`omitMedia`](#omitMedia) | Function | experimental | The parts with every image and file replaced by a text placeholder — what a summarizer is handed, since the summary is text and cannot carry the pixels forward. |
 | [`PLAIN_MODEL_MISROUTE_REASON`](#PLAIN_MODEL_MISROUTE_REASON) | Variable | experimental | The reason an `LlmErr` carries when a sync promise-returning function was passed as `model` bare — the one runtime shape neither port can own. |
 | [`plainModel`](#plainModel) | Function | experimental | Lift a plain-function model into the `ModelFactory` port. |
 | [`PlainModel`](#PlainModel) | Type | experimental | The plain-function model port — the common path. |
-| [`renderPrompt`](#renderPrompt) | Function | experimental | The prompt as messages: the head, then each turn with its tool outcomes. |
+| [`renderPrompt`](#renderPrompt) | Function | experimental | The prompt as messages: the head, then each turn with its tool outcomes and caller feedback. |
 | [`ReservedToolName`](#ReservedToolName) | Type | experimental | A tool name `tool()` and `agentTool()` refuse. |
 | [`RunFailure`](#RunFailure) | Type | experimental | Why a run terminated as `failed`. |
 | [`Schema`](#Schema) | Interface | experimental | The minimal structured-output schema contract: `parse(unknown) => T`, the zod-style call `decode` uses to validate the model's output before it settles `resilient_run_ok`. |
@@ -323,6 +324,17 @@ interface AgentConfigCore<
   TC extends Cmd = Cmd,
   Msg = unknown,
 > {
+  /**
+   * Consulted when a turn asks for no tools. `null` lets the stage retire;
+   * a string keeps it running and is read next turn as a user message.
+   * Omit → the stage retires on its first turn without tools.
+   *
+   * It must be PURE and total over the state it is handed — the reducer calls
+   * it, so a replay of the same Msg log calls it with the same state and must
+   * get the same answer. It is config, not Model: a resumed run consults the
+   * predicate the config passed to THIS boot.
+   */
+  readonly continueWhen?: (state: AgentState<Stage, P, O, R>) => string | null;
   /** No-progress watchdog budget, in ms. Omit → no watchdog. */
   readonly deadlineMs?: number;
   /**
@@ -473,6 +485,8 @@ type AgentEvent<R> =
   }
   | AgentEventHead & {
     readonly _tag: "TurnSettled";
+    /** Feedback issued for this empty turn, when the caller refused its finish. */
+    readonly nudge?: string;
     readonly turn: AgentTurn;
     /** The usage the provider reported for this turn. Absent → none reported. */
     readonly usage?: TurnUsage;
@@ -610,6 +624,11 @@ interface AgentKnob<
 
 ```ts
 type AgentLifecycleNote =
+  | {
+    readonly at: number;
+    readonly kind: "nudge_recorded";
+    readonly text: string;
+  }
   | {
     readonly at: number;
     readonly kind: "brain_started";
@@ -1161,6 +1180,8 @@ interface Conversation<R> {
    * at the start of each stage. `compaction.afterContextTokens` reads it.
    */
   readonly contextTokens: number | null;
+  /** Feedback answering empty model turns, in conversation order. */
+  readonly nudges: readonly Nudge[];
   /** Settled tool records, in settle order — the model sees these next turn. */
   readonly toolRecords: readonly ToolRecord<R>[];
   /** Monotonic round-trip count; the livelock guard compares it to `maxTurns`. */
@@ -1336,6 +1357,17 @@ interface DefineAgentConfig<T extends AnyToolDef> {
    * a silent budget would change the prompt every existing caller sends.
    */
   readonly compaction?: DefineAgentCompaction;
+  /**
+   * Consulted when a turn asks for no tools. `null` lets the stage retire;
+   * a string keeps it running and is read next turn as a user message.
+   * Omit → the stage retires on its first turn without tools.
+   *
+   * It must be PURE and total over the state it is handed — the reducer calls
+   * it, so a replay of the same Msg log calls it with the same state and must
+   * get the same answer. It is config, not Model: a resumed run consults the
+   * predicate the config passed to THIS boot.
+   */
+  readonly continueWhen?: (state: DefinedAgentState<T>) => string | null;
   /**
    * Stops a run that stops progressing: milliseconds the run may sit without
    * advancing before it fails. The budget is a no-progress watchdog, not a
@@ -2002,6 +2034,17 @@ interface ModelStream {
 type MonitoredRunCmd<V> = SnapshotWriteCmd<V>
 ```
 
+<a id="Nudge"></a>
+
+### `Nudge`
+
+```ts
+interface Nudge {
+  readonly text: string;
+  readonly turn: number;
+}
+```
+
 <a id="omitMedia"></a>
 
 ### `omitMedia`
@@ -2398,7 +2441,7 @@ type ToolPartsOf = (call: ToolCall, outcome: ToolOutcome<unknown>) => readonly C
 interface ToolRecord<R> {
   readonly call: ToolCall;
   readonly outcome: ToolOutcome<R>;
-  /** The `turnCount` at fold time — which round-trip this record belongs to (#85, A1). */
+  /** The producing turn's index in the current conversation. */
   readonly turn: number;
 }
 ```
@@ -2630,6 +2673,8 @@ interface TranscriptSeed<R> {
 
 ```ts
 interface TranscriptSnapshot<R> {
+  /** Caller feedback, indexed by the empty turn it answers in this transcript. */
+  readonly nudges: readonly Nudge[];
   /** Whether `RunDone` has been seen, and how the run ended if so. */
   readonly outcome: TranscriptOutcome;
   /** Every tool call that settled OK, in settle order. */

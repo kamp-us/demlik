@@ -468,6 +468,8 @@ export type AgentEvent<R> =
   | (AgentEventHead & {
       readonly _tag: "TurnSettled";
       readonly turn: AgentTurn;
+      /** Feedback issued for this empty turn, when the caller refused its finish. */
+      readonly nudge?: string;
       /** The usage the provider reported for this turn. Absent → none reported. */
       readonly usage?: TurnUsage;
     })
@@ -592,7 +594,10 @@ export function agentEvents<
     const run = state.run;
     const runId = run.phase === "idle" ? null : run.runId;
     if (runId === null) return events;
-    if (run.phase !== "cancelled") {
+    const nudge = state.lifecycle?.find(
+      (note) => note.kind === "nudge_recorded",
+    )?.text;
+    if (run.phase !== "cancelled" || nudge !== undefined) {
       // A call the ladder already settled is silent on EVERY public channel: the
       // fan-out drops its late value, and `state.refusedCalls` is what lets this
       // projector drop the matching event (#145). The `??` is the same
@@ -613,7 +618,13 @@ export function agentEvents<
           });
         }
       } else {
-        projectOwn(msg as AgentMachineMsg<P, O, R>, runId, events, refused);
+        projectOwn(
+          msg as AgentMachineMsg<P, O, R>,
+          runId,
+          events,
+          refused,
+          nudge,
+        );
       }
     }
     const outbox = state.lifecycle ?? [];
@@ -632,10 +643,16 @@ function turnSettled<R>(
   turn: AgentTurn,
   runId: string,
   at: number,
+  nudge?: string,
 ): AgentEvent<R> {
-  return turn.usage === undefined
-    ? { _tag: "TurnSettled", runId, at, turn }
-    : { _tag: "TurnSettled", runId, at, turn, usage: turn.usage };
+  return {
+    _tag: "TurnSettled",
+    runId,
+    at,
+    turn,
+    ...(turn.usage === undefined ? {} : { usage: turn.usage }),
+    ...(nudge === undefined ? {} : { nudge }),
+  };
 }
 
 // One outbox note → its public event. `run_ended` reads the ending off the
@@ -647,6 +664,8 @@ function projectNote<Stage, P extends string, O extends Record<P, unknown>, R>(
   state: AgentState<Stage, P, O, R>,
 ): AgentEvent<R> | null {
   switch (note.kind) {
+    case "nudge_recorded":
+      return null;
     case "brain_started":
       return {
         _tag: "BrainStarted",
@@ -724,6 +743,7 @@ function projectOwn<P extends string, O extends Record<P, AgentTurn>, R>(
   runId: string,
   events: AgentEvent<R>[],
   refused: ReadonlySet<string>,
+  nudge?: string,
 ): void {
   switch (msg._tag) {
     case MsgType.ResilientOk:
@@ -731,7 +751,7 @@ function projectOwn<P extends string, O extends Record<P, AgentTurn>, R>(
       // `value.output` is the parsed `AgentTurn` (the `O extends Record<P,
       // AgentTurn>` bound pins every purpose's output to an `AgentTurn`, the
       // same reasoning `state.output` relies on, #46/#48).
-      events.push(turnSettled(msg.value.output, runId, msg.at));
+      events.push(turnSettled(msg.value.output, runId, msg.at, nudge));
       break;
     case MsgType.AgentToolOk:
       // The PRIVATE tool-fan-out settle Msg → the public ToolSettled, unless
