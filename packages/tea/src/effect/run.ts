@@ -241,6 +241,8 @@ export type EffectRunOptions<
      * the same store after a `stop()` that gave up needs a fenced store.
      */
     readonly disposeTimeoutMs?: number;
+    /** `"restored"`: this start is a wake; see `run` in `@demlik/tea/promise`. */
+    readonly boot?: "restored";
   };
 
 // === Built-in runners ===
@@ -508,6 +510,7 @@ function start<
     gate: subGateOf(opts),
     handlerFor,
     store: opts.store,
+    boot: opts.boot,
     ctx: (opts.ctx ?? {}) as Ctx,
     onError: (error, context) => sink(unwrapped(error), context),
     disposeTimeoutMs: opts.disposeTimeoutMs ?? 5_000,

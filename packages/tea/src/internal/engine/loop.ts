@@ -201,6 +201,15 @@ export interface LoopConfig<S, M extends { _tag: string }, C, Ctx> {
   readonly gate?: SubAdmission;
   readonly handlerFor: (type: string) => LoopHandler<M> | undefined;
   readonly store: Store<S> | undefined;
+  /**
+   * `"restored"` (ADR 0039): this start is a wake, not a new process. With a
+   * State the store loaded, boot folds it through `init` but runs none of
+   * `init`'s Cmds, writes nothing while `init` returns the loaded State
+   * itself, and the run never saves at `stop()`. Absent, every promise of
+   * ADR 0017 (point 5) and ADR 0028 holds as before. Read on the snapshot
+   * path only: a store with a log, or no store, boots as it always did.
+   */
+  readonly boot?: "restored";
   readonly ctx: Ctx;
   readonly onError: OnError | undefined;
   readonly disposeTimeoutMs: number;
@@ -1165,10 +1174,12 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
     next: S,
     msg: M | undefined,
     cmds: readonly C[],
+    // The State is the store's own (a restored boot): nothing to write.
+    saved = false,
   ): Promise<void> {
     state = next;
-    saveStatus = { _tag: "pending" };
-    if (store && gate !== "abandoned") {
+    saveStatus = { _tag: saved ? "saved" : "pending" };
+    if (store && gate !== "abandoned" && !saved) {
       try {
         await store.save(next);
         saveStatus = { _tag: "saved" };
@@ -1244,9 +1255,19 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
       await publishLogged(state, undefined, [], logLedger(log).surviving());
       return;
     }
-    const [initial, cmds] =
-      storeless ?? config.init(await restore(store as Store<S>), config.ctx);
-    await commit(initial, undefined, cmds);
+    // `storeless` is null exactly when a store was handed over.
+    let loaded: S | null = null;
+    if (storeless === null) loaded = await restore(store as Store<S>);
+    const [initial, cmds] = storeless ?? config.init(loaded, config.ctx);
+    // A wake (`boot: "restored"`, ADR 0039): init's Cmds are not run, and the
+    // State is written only if init moved it off what the store holds.
+    const wake = config.boot === "restored" && loaded !== null;
+    await commit(
+      initial,
+      undefined,
+      wake ? [] : cmds,
+      wake && Object.is(initial, loaded),
+    );
   }
 
   /**
@@ -1407,7 +1428,16 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
     // Flush final State. A save throw does not reject `stop()` (contract:
     // resolves regardless) but IS loss of the last write, so it reaches the
     // sink (invariant 6).
-    if (!session && store && state !== undefined && bootError === null) {
+    // A `boot: "restored"` run never re-saves here: each State it installed was
+    // saved by its own commit or came from the store, and a second write is a
+    // second revision for a request that changed nothing (ADR 0039).
+    if (
+      config.boot !== "restored" &&
+      !session &&
+      store &&
+      state !== undefined &&
+      bootError === null
+    ) {
       try {
         await store.save(state);
       } catch (error) {

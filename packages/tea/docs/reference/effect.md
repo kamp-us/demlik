@@ -333,6 +333,8 @@ type EffectRunOptions<
   I,
   B,
 > = CtxArg<Ctx> & InterpretOption<C, I> & SubscribeOption<U, B> & StoreAndOnError<S> & {
+  /** `"restored"`: this start is a wake; see `run` in `@demlik/tea/promise`. */
+  readonly boot?: "restored";
   /** Stamps `at` on minted Msgs and telemetry. Defaults to `Date.now`. */
   readonly clock?: () => number;
   /**

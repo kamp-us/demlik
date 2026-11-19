@@ -126,6 +126,21 @@ message automatically. Do not also dispatch that message for work init resumes.
 Handlers must tolerate a repeated attempt if their previous result was not
 saved; see [the repeated-effect window](../explanation/durability-model.md#effects-are-at-least-once).
 
+### Wake without running init's Cmds
+
+A host that sleeps and wakes on its next Msg boots on every wake, so `init`'s
+Cmds run on every wake. When the host already knows this start is a wake, pass
+`boot: "restored"` beside the store. A loaded State still folds through `init`,
+but `init`'s Cmds are not run, and nothing is written until a transition
+commits. `stop()` writes nothing either. With nothing saved, `init(null)` runs
+and its Cmds run, because that start is a birth.
+
+A machine whose `init` marks work in flight and relies on its Cmds to finish it
+must not use the option: the host that passes it says those Cmds already ran. A
+store with a durable log needs no option, because a wake on a log never calls
+`init`. The rule is recorded in
+[ADR 0039](https://github.com/kamp-us/demlik/blob/main/.decisions/0039-a-request-is-run-with-an-opt-in-restored-boot.md).
+
 ## 4. Refuse a second writer, if two processes can reach the storage
 
 A plain `Store` does not refuse anything. Two runtimes pointed at one file both
