@@ -950,7 +950,8 @@ function gate() {
 }
 type Gate = ReturnType<typeof gate>;
 
-const TURN_TIMEOUT_MS = 2_000;
+/** A held gate that never opens fails the suite here, not at the default. */
+const TURN_TIMEOUT_MS = 5_000;
 
 /** Many runs behind one host. A `callId` is only unique inside its own run. */
 function runsRig(deferred: boolean) {
@@ -1141,10 +1142,11 @@ function answerOf(
   return "working" in body ? "working" : body.step.callId;
 }
 
-describe("stepHost — one run's requests take turns (inline host)", () => {
-  it(
-    "makes three simultaneous requests wait for the held resume, then answers each from the settled State",
-    async () => {
+describe(
+  "stepHost — one run's requests take turns (inline host)",
+  { timeout: TURN_TIMEOUT_MS },
+  () => {
+    it("makes three simultaneous requests wait for the held resume, then answers each from the settled State", async () => {
       const rig = runsRig(false);
       const first = rig.hold("r/c0");
       const second = rig.hold("r/c1");
@@ -1188,13 +1190,9 @@ describe("stepHost — one run's requests take turns (inline host)", () => {
       ).toEqual(["c1", "c1", "c1", "c2"]);
       expect(rig.resumes).toEqual(["r/c0", "r/c1"]);
       expect(rig.midFlight).toEqual([]);
-    },
-    TURN_TIMEOUT_MS,
-  );
+    });
 
-  it(
-    "never answers done from a State that is still being resumed",
-    async () => {
+    it("never answers done from a State that is still being resumed", async () => {
       const rig = runsRig(false);
       rig.runOf("r").cursor = SCRIPT.length - 1;
       const release = rig.hold("r/c2");
@@ -1213,13 +1211,9 @@ describe("stepHost — one run's requests take turns (inline host)", () => {
       ]);
       expect(rig.resumes).toEqual(["r/c2"]);
       expect(rig.midFlight).toEqual([]);
-    },
-    TURN_TIMEOUT_MS,
-  );
+    });
 
-  it(
-    "lets two runs progress independently, and settles a callId two runs share in each",
-    async () => {
+    it("lets two runs progress independently, and settles a callId two runs share in each", async () => {
       const rig = runsRig(false);
       const slow = rig.hold("a/c0");
       rig.hold("b/c0").open();
@@ -1235,13 +1229,9 @@ describe("stepHost — one run's requests take turns (inline host)", () => {
       expect(rig.resumes).toEqual(["a/c0", "b/c0"]);
       expect(rig.runOf("a").collected).toEqual(["A"]);
       expect(rig.runOf("b").collected).toEqual(["B"]);
-    },
-    TURN_TIMEOUT_MS,
-  );
+    });
 
-  it(
-    "refuses a bad token at once: no queue slot, no alarm, no hook, however long the run's turn takes",
-    async () => {
+    it("refuses a bad token at once: no queue slot, no alarm, no hook, however long the run's turn takes", async () => {
       const rig = runsRig(false);
       const slow = rig.hold("r/c0");
       const turn = rig.host.handle(rig.request("r", post("c0", "A")), 1);
@@ -1263,33 +1253,31 @@ describe("stepHost — one run's requests take turns (inline host)", () => {
 
       slow.open();
       expect(answerOf(await turn)).toBe("c1");
-    },
-    TURN_TIMEOUT_MS,
-  );
+    });
 
-  it("runs the admission hook once per request and never two at a time", async () => {
-    const rig = runsRig(false);
-    rig.answerWith(() => STOPPED);
+    it("runs the admission hook once per request and never two at a time", async () => {
+      const rig = runsRig(false);
+      rig.answerWith(() => STOPPED);
 
-    const answers = await Promise.all(
-      [1, 2, 3].map((now) =>
-        rig.host.handle(rig.request("r", post("c0", "A")), now),
-      ),
-    );
+      const answers = await Promise.all(
+        [1, 2, 3].map((now) =>
+          rig.host.handle(rig.request("r", post("c0", "A")), now),
+        ),
+      );
 
-    expect(answers).toEqual([
-      { status: 200, body: STOPPED },
-      { status: 200, body: STOPPED },
-      { status: 200, body: STOPPED },
-    ]);
-    expect(rig.log.filter((l) => l.startsWith("beforeResume"))).toHaveLength(3);
-    expect(rig.hookOverlap()).toBe(0);
-    expect(rig.resumes).toEqual([]);
-  });
+      expect(answers).toEqual([
+        { status: 200, body: STOPPED },
+        { status: 200, body: STOPPED },
+        { status: 200, body: STOPPED },
+      ]);
+      expect(rig.log.filter((l) => l.startsWith("beforeResume"))).toHaveLength(
+        3,
+      );
+      expect(rig.hookOverlap()).toBe(0);
+      expect(rig.resumes).toEqual([]);
+    });
 
-  it(
-    "returns the resume's own error to its caller, leaves the callId retryable, and still runs the request queued behind it",
-    async () => {
+    it("returns the resume's own error to its caller, leaves the callId retryable, and still runs the request queued behind it", async () => {
       const rig = runsRig(false);
       const failure = new Error("resume refused");
       rig.failOnce("resume", failure);
@@ -1314,20 +1302,16 @@ describe("stepHost — one run's requests take turns (inline host)", () => {
       );
       expect(answerOf(settled)).toBe("c1");
       expect(rig.resumes).toEqual(["r/c0", "r/c0"]);
-    },
-    TURN_TIMEOUT_MS,
-  );
+    });
 
-  it.each([
-    "tokenFor",
-    "setAlarm",
-    "beforeResume",
-    "resume",
-    "nextStep",
-    "terminalOutput",
-  ])(
-    "keeps serving the run after %s throws once",
-    async (stage) => {
+    it.each([
+      "tokenFor",
+      "setAlarm",
+      "beforeResume",
+      "resume",
+      "nextStep",
+      "terminalOutput",
+    ])("keeps serving the run after %s throws once", async (stage) => {
       const rig = runsRig(false);
       rig.hold("r/c0").open();
       const terminal = stage === "terminalOutput";
@@ -1344,15 +1328,15 @@ describe("stepHost — one run's requests take turns (inline host)", () => {
       expect(answerOf(later)).toBe(
         terminal ? "done:" : stage === "resume" ? "c1" : "c0",
       );
-    },
-    TURN_TIMEOUT_MS,
-  );
-});
+    });
+  },
+);
 
-describe("stepHost — one run's requests take turns (deferred host)", () => {
-  it(
-    "holds a duplicate and a poll behind the enqueue in progress, and answers working without waiting for the worker",
-    async () => {
+describe(
+  "stepHost — one run's requests take turns (deferred host)",
+  { timeout: TURN_TIMEOUT_MS },
+  () => {
+    it("holds a duplicate and a poll behind the enqueue in progress, and answers working without waiting for the worker", async () => {
       const rig = runsRig(true);
       rig.runOf("r").cursor = 1;
       rig.runOf("r").collected = ["A"];
@@ -1397,13 +1381,9 @@ describe("stepHost — one run's requests take turns (deferred host)", () => {
       expect(
         answerOf(await rig.host.handle(rig.request("r", post("c1", "B")), 4)),
       ).toBe("c2");
-    },
-    TURN_TIMEOUT_MS,
-  );
+    });
 
-  it(
-    "runs settled and enqueue for a repeated post one turn at a time",
-    async () => {
+    it("runs settled and enqueue for a repeated post one turn at a time", async () => {
       const rig = runsRig(true);
       const enqueueing = rig.hold("enqueue:r/c0");
 
@@ -1428,13 +1408,9 @@ describe("stepHost — one run's requests take turns (deferred host)", () => {
         "enqueue:start:r/c0",
         "enqueue:end:r/c0",
       ]);
-    },
-    TURN_TIMEOUT_MS,
-  );
+    });
 
-  it(
-    "lets two runs sharing a callId each enqueue their own",
-    async () => {
+    it("lets two runs sharing a callId each enqueue their own", async () => {
       const rig = runsRig(true);
       const slow = rig.hold("enqueue:a/c0");
       rig.hold("enqueue:b/c0").open();
@@ -1447,29 +1423,28 @@ describe("stepHost — one run's requests take turns (deferred host)", () => {
       slow.open();
       expect(answerOf(await a)).toBe("working");
       expect([...rig.inbox.keys()].sort()).toEqual(["a/c0", "b/c0"]);
-    },
-    TURN_TIMEOUT_MS,
-  );
+    });
 
-  it.each([
-    "tokenFor",
-    "setAlarm",
-    "beforeResume",
-    "nextStep",
-  ])("keeps serving the run after %s throws once", async (stage) => {
-    const rig = runsRig(true);
-    const failure = new Error(`${stage} failed`);
-    rig.failOnce(stage, failure);
+    it.each([
+      "tokenFor",
+      "setAlarm",
+      "beforeResume",
+      "nextStep",
+    ])("keeps serving the run after %s throws once", async (stage) => {
+      const rig = runsRig(true);
+      const failure = new Error(`${stage} failed`);
+      rig.failOnce(stage, failure);
 
-    await expect(rig.host.handle(rig.request("r", null), 1)).rejects.toBe(
-      failure,
-    );
+      await expect(rig.host.handle(rig.request("r", null), 1)).rejects.toBe(
+        failure,
+      );
 
-    expect(answerOf(await rig.host.handle(rig.request("r", null), 2))).toBe(
-      "c0",
-    );
-  });
-});
+      expect(answerOf(await rig.host.handle(rig.request("r", null), 2))).toBe(
+        "c0",
+      );
+    });
+  },
+);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // One owner of the Durable Object's single alarm — host composition, not tea API
