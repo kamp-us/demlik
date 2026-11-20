@@ -91,9 +91,11 @@ run, never both. Each block below is a piece of that Durable Object.
 and dispatches `agent_boot` once if the run was `running` or `suspended`. That
 covers a run lost while its model call or its compaction was in flight, and one
 lost while its tools were. The one outstanding operation is issued again, and the
-tool results already folded are not read again. A run that is `idle`, `done`,
-`failed` or `cancelled` is left alone. Do not dispatch `agent_boot` yourself
-beside it, or the run boots twice.
+tool results already folded are not read again. `host.runtime()` resolves once
+`agent_boot` is queued, not when the work it re-fired is done, so a run waiting
+on a tool your driver has not answered does not hold it up. A run that is `idle`,
+`done`, `failed` or `cancelled` is left alone. Do not dispatch `agent_boot`
+yourself beside it, or the run boots twice.
 
 ```ts
 const host = createAgentHost({
@@ -111,14 +113,6 @@ const runtime = await host.runtime();
 Call it from the request or alarm that wakes the object, once the stop below has
 been read: `host.runtime()` is the point where a restored run starts working
 again.
-
-`host.runtime()` resolves when the reissued operation has settled. If that
-operation ends parked on a tool that only your driver can answer, it stays
-pending until the driver answers. A `/step` engine therefore starts it without
-awaiting it, and reads the next step and the output from the saved state, which
-every applied transition writes. `host.reset()` waits for a build that is still
-pending in the same way, so read the stop before anything in the activation has
-started the runtime, as the first pull of a wake does.
 
 ### Stop: answer the pull before any work resumes
 
@@ -148,8 +142,9 @@ const admit = async (runId: string) => {
 const steps = stepHost({ storage: owner }, { ...engine, beforeResume: admit });
 ```
 
-`engine` is the `StepEngine` you already pass; `host.reset()` drops a runtime an
-earlier pull cached, so only one runtime writes the run. `beforeResume` bounds
+`engine` is the `StepEngine` you already pass; `host.reset()` stops the runtime
+an earlier pull started, even one waiting on a tool, so only one runtime writes
+the run. `beforeResume` bounds
 the pull it runs in. A model call that has already started, or a stop that
 arrives after the hook returned, is outside it, and a worker that runs queued
 work later has to check the stop again itself. A throw or a rejection from the

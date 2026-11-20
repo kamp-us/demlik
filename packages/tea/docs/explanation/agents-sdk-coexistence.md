@@ -141,7 +141,7 @@ This is the part where the concern is real.
 
 `createAgentHost` is documented as *"the runtime cell + the SSE hub + the
 framework test seam, owned ONCE"*, and it means it. It builds the machine, wraps
-it in `run(...)`, wires `agentEvents()` into an SSE hub, runs `autoBoot`, and
+it in `run(...)`, wires `agentEvents()` into an SSE hub, re-fires `agent_boot` for a restored run, and
 hands back the lifecycle surface. There is no seam in it for a loop you are
 already running. If your DO drives LangGraph, or any other orchestrator, you
 cannot adopt `createAgentHost` for part of the run — it either owns the loop or

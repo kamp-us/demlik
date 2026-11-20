@@ -58,10 +58,31 @@ export async function bootResume<
   port: ResumePort<S, M>,
   now: () => number = Date.now,
 ): Promise<void> {
+  const resumed = await beginResume(booting, port, now);
+  await resumed?.finished;
+}
+
+/**
+ * After `runtime.ready`, dispatch the resume Msg once, as {@link bootResume} does,
+ * and hand back the promise for the whole chain instead of waiting on it; `null`
+ * when the State is not resumable. The Msg is in the runtime's inbox when this
+ * returns, ahead of anything the caller dispatches next. Not on the `./do`
+ * barrel: `bootResume` waits for `finished`, and `createAgentHost` does not, so
+ * a host can hand out the run's handle while the re-fired work is still waiting
+ * on a tool the driver has not answered.
+ */
+export async function beginResume<
+  S,
+  M extends { _tag: string },
+  E extends { _tag: string } = never,
+>(
+  booting: RunHandle<S, M, E>,
+  port: ResumePort<S, M>,
+  now: () => number = Date.now,
+): Promise<{ readonly finished: Promise<void> } | null> {
   const runtime = await booting.ready;
-  if (port.isResumable(runtime.getState())) {
-    await runtime.dispatch(port.resumeMsg(now()));
-  }
+  if (!port.isResumable(runtime.getState())) return null;
+  return { finished: runtime.dispatch(port.resumeMsg(now())) };
 }
 
 /**
@@ -107,11 +128,21 @@ export async function autoBoot<
   booting: RunHandle<AgentState<Stage, P, O, R>, AgentMachineMsg<P, O, R>, E>,
   now: () => number = Date.now,
 ): Promise<void> {
-  await bootResume(
-    booting,
-    { isResumable: agentIsResumable, resumeMsg: agentBootMsg },
-    now,
-  );
+  await bootResume(booting, agentBootPort(), now);
+}
+
+/**
+ * The agent's resume port: resumable per {@link agentIsResumable}, resumed by the
+ * agent-owned `agentBootMsg`. `autoBoot` and `createAgentHost` both read it, so
+ * the pairing is written once.
+ */
+export function agentBootPort<
+  Stage,
+  P extends string,
+  O extends Record<P, unknown>,
+  R,
+>(): ResumePort<AgentState<Stage, P, O, R>, AgentMachineMsg<P, O, R>> {
+  return { isResumable: agentIsResumable, resumeMsg: agentBootMsg };
 }
 
 /**

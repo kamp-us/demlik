@@ -16,7 +16,11 @@
  * answer the hands' retried post, and the run reaches `done` with every turn
  * once. A stop recorded in that storage before the third result is posted is read
  * by `beforeResume` on a fresh activation and ends the run cancelled, with no
- * further model call, whether the step host resumes inline or defers.
+ * further model call, whether the step host resumes inline or defers. The same
+ * stop, recorded after a cold wake has handed out a tool step, reaches a warm
+ * host whose boot is parked on that unanswered tool, for a run left `running` and
+ * one left `suspended`: the next post is answered `cancelled` in one request and
+ * `reset()` resolves.
  *
  * Every case runs ten times.
  *
@@ -167,7 +171,6 @@ function storage(seed: S | null = null) {
 // teardown as intentional; any other report fails the test.
 function hostOver<C extends Cmd>(wired: AgentWired<C>, store: Store<S>) {
   const teardown: string[] = [];
-  const stops: Array<() => Promise<void>> = [];
   const host = createAgentHost<
     Stage,
     Purpose,
@@ -178,11 +181,8 @@ function hostOver<C extends Cmd>(wired: AgentWired<C>, store: Store<S>) {
     DeadlinesSub,
     object
   >({
-    run: (machine, options) => {
-      const booting = run(machine, { ...options, disposeTimeoutMs: 0 });
-      stops.push(() => booting.stop());
-      return booting;
-    },
+    run: (machine, options) =>
+      run(machine, { ...options, disposeTimeoutMs: 0 }),
     onError: (error, context) => {
       if (context.phase !== "discard") throw error;
       teardown.push(error instanceof Error ? error.name : String(error));
@@ -193,7 +193,7 @@ function hostOver<C extends Cmd>(wired: AgentWired<C>, store: Store<S>) {
     toSseFrame: () => null,
     now: () => 2,
   });
-  return { host, teardown, stops };
+  return { host, teardown };
 }
 
 const start = (mode: string) =>
@@ -286,7 +286,7 @@ describe.each([
     try {
       expect(second).toBe(first);
       expect(third).toBe(first);
-      expect(status(first.getState())).toMatchObject({
+      expect(await reaches(first, (now) => now.kind === "done")).toMatchObject({
         kind: "done",
         output: ANSWER,
       });
@@ -410,6 +410,30 @@ type World = ReturnType<typeof world>;
 
 type Mode = "model" | "compaction";
 
+// Resolves with the run's status the first time `settled` accepts it, off the
+// transitions the runtime reports.
+function reaches(
+  runtime: {
+    getState(): S;
+    subscribe(listener: () => void): () => void;
+  },
+  settled: (now: ReturnType<typeof status>) => boolean,
+): Promise<ReturnType<typeof status>> {
+  return new Promise((resolve) => {
+    const unsubscribe = runtime.subscribe(() => {
+      const now = status(runtime.getState());
+      if (!settled(now)) return;
+      unsubscribe();
+      resolve(now);
+    });
+    const now = status(runtime.getState());
+    if (settled(now)) {
+      unsubscribe();
+      resolve(now);
+    }
+  });
+}
+
 // The hands' results, handed to the tool cell that waits for them. A result that
 // arrives before the cell has been reissued is kept for it.
 function mailbox() {
@@ -508,10 +532,8 @@ async function cancelThrough(booting: {
   return kind;
 }
 
-// The step engine reads the run off the retained storage. A reissued operation
-// that parks on a tool keeps `host.runtime()` pending until the hands answer, so
-// the engine starts the runtime and never waits on it: it waits on the saved
-// state, which every applied transition writes.
+// The step engine, over the host exactly as a Durable Object holds it: `runtime()`
+// to reach the run, `reset()` to stop it, `status()` to read the end.
 function assemble<C extends Cmd>(
   wired: AgentWired<C>,
   r: Retained,
@@ -520,23 +542,9 @@ function assemble<C extends Cmd>(
   deferred: boolean,
   cancelOver: (store: Store<S>) => Promise<string>,
 ) {
-  const { host, teardown, stops } = hostOver(wired, r.store);
+  const { host, teardown } = hostOver(wired, r.store);
   const calls = { resumes: 0, enqueues: 0 };
   const order: string[] = [];
-  let alive = true;
-  const stopAll = () => Promise.all(stops.splice(0).map((stop) => stop()));
-  const wake = () => void host.runtime().catch(noop);
-
-  const quiet = async (waiting: (s: ReturnType<typeof status>) => boolean) => {
-    for (let polls = 0; polls < 2_000; polls++) {
-      if (!alive) throw new Error("activation was lost");
-      const saved = await r.state();
-      const now = saved === null ? { kind: "idle" as const } : status(saved);
-      if (now.kind !== "running" && !waiting(now)) return now;
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
-    }
-    throw new Error("run never went quiet");
-  };
 
   const engine: StepEngine<string, Hands, string> = {
     tokenFor: async (runId) =>
@@ -544,31 +552,37 @@ function assemble<C extends Cmd>(
     async beforeResume(runId) {
       order.push("check-stop");
       if ((await r.storage.get<boolean>(`stop:${runId}`)) !== true) return null;
-      await stopAll();
+      await host.reset();
       return { done: true, output: await cancelOver(r.store) };
     },
     async resume(_runId, posted) {
       calls.resumes++;
       order.push("resume");
-      wake();
+      const runtime = await host.runtime();
       results.deliver(posted.callId, posted.result);
-      await quiet(
+      await reaches(
+        runtime,
         (s) =>
-          s.kind === "suspended" &&
-          s.pending.some((call) => call.callId === posted.callId),
+          s.kind !== "running" &&
+          !(
+            s.kind === "suspended" &&
+            s.pending.some((call) => call.callId === posted.callId)
+          ),
       );
     },
     async nextStep() {
       order.push("next-step");
-      wake();
-      const now = await quiet(() => false);
+      const now = await reaches(
+        await host.runtime(),
+        (s) => s.kind !== "running",
+      );
       const call = now.kind === "suspended" ? now.pending[0] : undefined;
       return call === undefined
         ? null
         : { callId: call.callId, tool: call.name, input: call.args };
     },
     async terminalOutput() {
-      const now = status(await r.saved());
+      const now = await host.status();
       return now.kind === "done" ? (now.output?.content ?? "") : now.kind;
     },
   };
@@ -597,11 +611,10 @@ function assemble<C extends Cmd>(
       await r.storage.put(`token:${runId}`, TOKEN);
       const runtime = await host.runtime();
       void runtime.dispatch({ _tag: "agent_start", runId, at: 0 }).catch(noop);
-      await quiet((s) => s.kind === "idle");
+      await reaches(runtime, (s) => s.kind !== "idle" && s.kind !== "running");
     },
     async evict() {
-      alive = false;
-      await stopAll();
+      await host.reset();
     },
   };
 }
@@ -758,5 +771,57 @@ describe.each([
     }
     expect(status(await r.saved()).kind).not.toBe("cancelled");
     await next.evict();
+  });
+});
+
+describe.each([
+  "running",
+  "suspended",
+] as const)("a stop recorded after cold recovery handed out a tool step, run left %s", (left) => {
+  it.each(
+    REPEATS,
+  )("the next post cancels the run in one request and reset resolves (repeat %i)", async () => {
+    const r = retained();
+    const w = world();
+    const lost = activation("model", r, w, left === "running" ? "model" : null);
+    await lost.launch(RUN);
+    if (left === "running") {
+      void drive(lost, w, pull).catch(noop);
+      await lost.reached;
+    } else {
+      await drive(lost, w, pull, "document-3");
+    }
+    expect(status(await r.saved()).kind).toBe(left);
+    await lost.evict();
+
+    const warm = activation("model", r, w, null);
+    const handedOut = await drive(
+      warm,
+      w,
+      left === "running" ? post("document-3") : pull,
+      left === "running" ? "document-4" : "document-3",
+    );
+    const step = left === "running" ? "document-4" : "document-3";
+    expect(handedOut).toMatchObject({
+      status: 200,
+      body: { done: false, step: { callId: step } },
+    });
+    const calls = w.invocations;
+    const resumes = warm.calls.resumes;
+
+    await r.storage.put(`stop:${RUN}`, true);
+    expect(await warm.handle(post(step), NOW)).toEqual({
+      status: 200,
+      body: { done: true, output: "cancelled" },
+    });
+
+    expect(w.invocations).toBe(calls);
+    expect(warm.calls.resumes).toBe(resumes);
+    expect(warm.order.at(-1)).toBe("check-stop");
+    expect(status(await r.saved()).kind).toBe("cancelled");
+    await warm.evict();
+    expect(
+      warm.teardown.every((name) => INTENTIONAL_TEARDOWN.includes(name)),
+    ).toBe(true);
   });
 });

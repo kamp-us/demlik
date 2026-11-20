@@ -27,7 +27,7 @@ import type {
   Sub,
   Wired,
 } from "../index";
-import { autoBoot } from "./resume";
+import { agentBootPort, beginResume } from "./resume";
 import { type SseHub, sseFromAgentEvents, sseHub } from "./sse";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -48,7 +48,7 @@ import { type SseHub, sseFromAgentEvents, sseHub } from "./sse";
 //   - the `events: agentEvents()` wiring + `sseFromAgentEvents(runtime, hub, …)`
 //     so SSE is driven off the SEMANTIC `AgentEvent` stream, never the private
 //     Msg firehose,
-//   - the `autoBoot` re-fire on a rehydrated running or suspended run,
+//   - the `agent_boot` re-fire on a rehydrated running or suspended run,
 //   - the SSE hub (so `host.sse.open()` / `host.sse.register(...)` is the route +
 //     the test seam), and
 //   - the framework test/lifecycle seam ONCE: `status()`, `result()`, `reset()`.
@@ -160,10 +160,16 @@ export interface AgentHost<
   /**
    * Get (or build) the booted runtime. Build-once-boot-once: the first call
    * builds the machine, wires SSE off the semantic event stream, awaits the boot
-   * gate, runs the `autoBoot` re-fire for a rehydrated running or suspended run
-   * (one that was waiting on its model call, its compaction or its tools), and
-   * caches the booted handle; subsequent calls return the cached handle. The
-   * single assembly every consumer used to hand-roll in `getRuntime()`.
+   * gate, dispatches `agent_boot` for a rehydrated running or suspended run (one
+   * that was waiting on its model call, its compaction or its tools), and caches
+   * the booted handle; subsequent calls return the cached handle. The single
+   * assembly every consumer used to hand-roll in `getRuntime()`.
+   *
+   * The call resolves once `agent_boot` is queued, not when the work it
+   * re-fired is done. That work can wait on a tool whose result a driver has not
+   * posted yet, and the driver reaches the run through this call, so waiting for
+   * it would deadlock. Read how far the run got from `getState()`, `subscribe` or
+   * `status()`.
    */
   runtime(): Promise<
     BootedRunHandle<
@@ -197,8 +203,10 @@ export interface AgentHost<
    * Tear down the cached runtime (drain its tail via `stop()`, up to
    * `disposeTimeoutMs`, then drop the handle) so the next `runtime()` rebuilds
    * from storage. A Cmd handler that has not returned by the limit is given up
-   * on, so `reset()` returns either way. The framework `settle` test seam,
-   * owned once.
+   * on, so `reset()` returns either way, including while the run is waiting on a
+   * tool nobody has answered. It stops the handle the host holds from the moment
+   * `run` returned it, so it also stops a build that has not finished booting.
+   * The framework `settle` test seam, owned once.
    */
   reset(): Promise<void>;
 }
@@ -296,6 +304,9 @@ export function createAgentHost<
   // build-once-boot-once this host promises. Assigning the promise synchronously,
   // before the first await, means the second caller shares the one build.
   let cached: Promise<BootedRunHandle<S, M, E>> | null = null;
+  // The handle of the run the cell is building or holds. `reset()` stops this
+  // directly instead of waiting on `cached`.
+  let current: RunHandle<S, M, E> | null = null;
 
   async function build(): Promise<BootedRunHandle<S, M, E>> {
     // `run()` hands back a `RunHandle` synchronously (#45). Wire the SEMANTIC
@@ -315,6 +326,9 @@ export function createAgentHost<
       onError: config.onError,
       events: agentEvents<Stage, P, O, R>(),
     } as RunOptions<S, M, C, U, Ctx, E>);
+    // Held from the moment `run` returns it, before any await, so `reset()` can
+    // stop this run whatever its boot is waiting on.
+    current = booting;
 
     // SSE off the semantic stream. Subscriptions attach on the booting handle
     // (total before boot), so the hub catches every event from the first
@@ -324,9 +338,18 @@ export function createAgentHost<
 
     // Re-fire the one outstanding operation (model call, compaction or tool
     // effects) IFF this wake rehydrated a running or suspended run (no-op on a
-    // fresh DO). `autoBoot` awaits the same boot gate.
-    await autoBoot(booting, now);
-    return booting.ready;
+    // fresh DO). The gate opens once `agent_boot` is queued, not when the work
+    // it re-fired is done: that work can be waiting on a tool the driver has not
+    // answered, and the driver reaches the run through this very call. Failures
+    // of that work reach `onError`, as any Cmd's do.
+    try {
+      const resumed = await beginResume(booting, agentBootPort(), now);
+      resumed?.finished.catch(() => undefined);
+      return await booting.ready;
+    } catch (error) {
+      if (current === booting) current = null;
+      throw error;
+    }
   }
 
   function runtime(): Promise<BootedRunHandle<S, M, E>> {
@@ -355,13 +378,14 @@ export function createAgentHost<
     },
     sse,
     async reset(): Promise<void> {
-      if (cached === null) return;
-      // Await the settled build before tearing down — a reset racing an
-      // in-flight build still drains the one runtime rather than orphaning it.
-      // A failed build has no runtime to stop.
-      const built = await cached.catch(() => null);
+      // Stop the run through the handle held since `run` returned it, so a
+      // reset racing a build still drains the one runtime rather than orphaning
+      // it, and a boot waiting on an unanswered tool cannot hold it up. A failed
+      // build has cleared its handle: it has no runtime to stop.
+      const stopping = current;
+      current = null;
       cached = null;
-      await built?.stop();
+      await stopping?.stop();
     },
   };
 }

@@ -169,8 +169,10 @@ interface AgentHost<Stage, P extends string, O extends Record<P, AgentTurn>, R, 
    * Tear down the cached runtime (drain its tail via `stop()`, up to
    * `disposeTimeoutMs`, then drop the handle) so the next `runtime()` rebuilds
    * from storage. A Cmd handler that has not returned by the limit is given up
-   * on, so `reset()` returns either way. The framework `settle` test seam,
-   * owned once.
+   * on, so `reset()` returns either way, including while the run is waiting on a
+   * tool nobody has answered. It stops the handle the host holds from the moment
+   * `run` returned it, so it also stops a build that has not finished booting.
+   * The framework `settle` test seam, owned once.
    */
   reset(): Promise<void>;
   /**
@@ -182,10 +184,16 @@ interface AgentHost<Stage, P extends string, O extends Record<P, AgentTurn>, R, 
   /**
    * Get (or build) the booted runtime. Build-once-boot-once: the first call
    * builds the machine, wires SSE off the semantic event stream, awaits the boot
-   * gate, runs the `autoBoot` re-fire for a rehydrated running or suspended run
-   * (one that was waiting on its model call, its compaction or its tools), and
-   * caches the booted handle; subsequent calls return the cached handle. The
-   * single assembly every consumer used to hand-roll in `getRuntime()`.
+   * gate, dispatches `agent_boot` for a rehydrated running or suspended run (one
+   * that was waiting on its model call, its compaction or its tools), and caches
+   * the booted handle; subsequent calls return the cached handle. The single
+   * assembly every consumer used to hand-roll in `getRuntime()`.
+   *
+   * The call resolves once `agent_boot` is queued, not when the work it
+   * re-fired is done. That work can wait on a tool whose result a driver has not
+   * posted yet, and the driver reaches the run through this call, so waiting for
+   * it would deadlock. Read how far the run got from `getState()`, `subscribe` or
+   * `status()`.
    */
   runtime(): Promise<BootedRunHandle<AgentState<Stage, P, O, R>, AgentMachineMsg<P, O, R>, AgentEvent<R>>>;
   /**

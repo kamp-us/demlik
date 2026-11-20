@@ -24,10 +24,13 @@ One table, keyed by every `AgentStatus` kind and checked with `satisfies Record<
 
 `agent_boot` reissues the one outstanding operation: the model call, the compaction, or the tool calls still in flight, and it skips a tool call whose next attempt a retry timer already owes. `createAgentHost` runs it once per activation, never per request.
 
+**The host's boot gate opens when `agent_boot` is queued.** [Invariant 6](../.patterns/tea/tea-invariants.md) says "Boot is a named, awaitable moment" and names `await runtime.ready` as that moment; `bootResume` dispatches after it. `createAgentHost.runtime()` resolves once the boot Msg is in the runtime's inbox, ahead of anything the caller dispatches next, and not when the work it re-fired has finished. That work can be parked on a tool that only the driver can answer, and the driver reaches the run through `runtime()`, so waiting for it deadlocks a `/step` engine. `reset()` stops the handle the host holds from the moment `run` returned it, so it never waits on a boot. `bootResume` and `autoBoot` keep their contract and resolve when the resumed work finishes.
+
 **Binding constraints.**
 
 - Do not add a status kind, a second boot Msg, or a host-side read of `awaiting`.
 - Do not pair `agent_boot` with restored-init Cmds for the same work.
+- A `/step` engine reaches the run with `host.runtime()` and stops it with `host.reset()`. Neither waits on a tool nobody has answered, so no engine reads saved state to get around either.
 - An `idle`, `done`, `failed` or `cancelled` run is not booted.
 
 ## Consequences
@@ -35,6 +38,7 @@ One table, keyed by every `AgentStatus` kind and checked with `satisfies Record<
 - A run lost during its model call or its compaction finishes after the next wake, with its completed tool results still folded and its retry budgets as persisted.
 - The call that was in flight is issued again, so a provider can bill it twice. Cloudflare eviction and billing are not measured by the tests that pin this.
 - A host that dispatched `agent_boot` by hand beside `createAgentHost` to cover a `running` run now boots it twice. Delete that dispatch.
+- A caller that read a finished run right after `await host.runtime()` now reads the run as it stands and waits with `subscribe` or `status()`.
 - The two copies of the rule collapse into one table, so a new status kind is a compile error there.
 
 ## Records
