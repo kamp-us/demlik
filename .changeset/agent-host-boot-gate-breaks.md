@@ -8,4 +8,4 @@
 
 **Breaking:** A `createAgentHost().runtime()` call still waiting when `reset()` arrives now rejects with a `DispatchDiscardedError` instead of resolving a stopped handle, and the build resumes nothing into the stopped runtime. A boot failure that races `reset()` is still reported to `onError` under `"boot"`; only the engine's own teardown refusal is not.
 
-**Breaking:** `createAgentHost()` refuses a call that overlaps a `reset()`. A second `reset()` while one is stopping the run, a `reset()` from inside `run()`, and a `runtime()` while a `reset()` is stopping the run now throw a `HostOverlapError`. `reset()` is a test and lifecycle seam for one caller at a time: await it before the next call. To stop a run, dispatch `agentCancelMsg` into `await host.runtime()`.
+**Breaking:** `createAgentHost()` refuses a call that overlaps a `reset()`. A second `reset()` while one is stopping the run, a `reset()` from inside `run()`, and a `runtime()` while a `reset()` is stopping the run now throw a `HostOverlapError`. `reset()` is a test and lifecycle seam for one caller at a time: await it before the next call. To stop a run, give `run` a `cancellation` signal and abort it.

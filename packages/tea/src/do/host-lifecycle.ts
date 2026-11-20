@@ -42,8 +42,8 @@ export function deferred<T>(): Deferred<T> {
  * `reset()` from inside `run()`, or a `runtime()` while a `reset()` is still
  * stopping the run. `reset()` is a test and lifecycle seam for one caller at a
  * time, so no handler can do anything useful with the overlap: await the first
- * call before making the next. To stop a run from production code, dispatch
- * `agentCancelMsg` into `await host.runtime()`.
+ * call before making the next. To stop a run from production code, give `run`
+ * a `cancellation` signal and abort it.
  */
 export class HostOverlapError extends Error {
   override readonly name = "HostOverlapError";
@@ -56,10 +56,10 @@ export class HostOverlapError extends Error {
       `@demlik/tea: createAgentHost().${call}() was called while ` +
         (during === "teardown"
           ? "a reset() was still stopping the run"
-          : "the host was still starting the run, before run() returned its handle") +
+          : "run() was still building the handle") +
         `. reset() is a test and lifecycle seam for one caller at a time: ` +
-        `await it before the next call. To stop a run, dispatch ` +
-        `agentCancelMsg into \`await host.runtime()\`.`,
+        `await it before the next call. To stop a run, give run a ` +
+        `cancellation signal and abort it.`,
     );
   }
 }

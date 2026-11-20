@@ -177,9 +177,9 @@ interface AgentHost<Stage, P extends string, O extends Record<P, AgentTurn>, R, 
    * rejects with a `DispatchDiscardedError`.
    *
    * The framework `settle` test seam, owned once: a test and lifecycle seam for
-   * one caller at a time, not the way to stop a run in production. Dispatch
-   * `agentCancelMsg` into `await host.runtime()` for that, and await a
-   * `reset()` before the next `reset()` or `runtime()`.
+   * one caller at a time, not the way to stop a run in production. Give `run`
+   * a `cancellation` signal and abort it for that, and await a `reset()` before
+   * the next `reset()` or `runtime()`.
    */
   reset(): Promise<void>;
   /**
@@ -267,16 +267,6 @@ interface AgentHostWiring<
    * host imports no engine; it boots the machine through this.
    */
   readonly run: EngineRun<AgentState<Stage, P, O, R>, AgentMachineMsg<P, O, R>, C, U, Ctx, AgentEvent<R>>;
-  /**
-   * The run's persisted stop, read once at the start of each build, before the
-   * run is loaded or anything is re-fired. When it answers `true` and the
-   * restored run is `running` or `suspended`, the host dispatches
-   * `agentCancelMsg` as the boot message instead of `agent_boot`, so a stopped
-   * run re-fires no model call, compaction or tool. Omit it and every restored
-   * run boots. A run that is already live is stopped by dispatching
-   * `agentCancelMsg` into `await host.runtime()`.
-   */
-  readonly stopped?: () => Promise<boolean>;
   /**
    * The run-terminality predicate (#46) — what makes `result()` first-class.
    * Defaults to the agent's own terminal phases (`done` / `failed`).

@@ -30,7 +30,7 @@ One table, keyed by every `AgentStatus` kind and checked with `satisfies Record<
 
 - Do not add a status kind, a second boot Msg, or a host-side read of `awaiting`.
 - Do not pair `agent_boot` with restored-init Cmds for the same work.
-- A persisted stop replaces the boot: `createAgentHost` reads its optional `stopped` once per build, before anything is re-fired, and dispatches `agentCancelMsg` in place of `agent_boot` for a `running` or `suspended` run. A `/step` engine stops a run that is already live by dispatching `agentCancelMsg` into `host.runtime()`, then releasing the tool calls the run is parked on. `runtime()` does not wait on a tool nobody has answered, so no engine reads saved state to get around it. `reset()` stays a test and lifecycle seam for one caller at a time, and an overlapping call throws a `HostOverlapError`.
+- The stop is tea's run signal, handed to the engine's `run` as `cancellation: { signal, cancel }`, not a second path in the host. An aborted signal makes the runtime queue `agentCancelMsg`, start no further Cmd and stop waiting on the handler in flight, so a stop never waits on a tool nobody has answered; one aborted before the run finishes loading settles the cancel before `ready`, so `createAgentHost` re-fires nothing. A `/step` engine records the stop, aborts the signal, and answers a pull from the recorded flag in `beforeResume`. `runtime()` does not wait on a tool nobody has answered, so no engine reads saved state to get around it. `reset()` stays a test and lifecycle seam for one caller at a time, and an overlapping call throws a `HostOverlapError`.
 - An `idle`, `done`, `failed` or `cancelled` run is not booted.
 
 ## Consequences

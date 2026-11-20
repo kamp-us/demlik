@@ -141,16 +141,6 @@ export interface AgentHostWiring<
   /** The plain Ctx the machine threads to its interpret cells. */
   readonly ctx: Ctx;
   /**
-   * The run's persisted stop, read once at the start of each build, before the
-   * run is loaded or anything is re-fired. When it answers `true` and the
-   * restored run is `running` or `suspended`, the host dispatches
-   * `agentCancelMsg` as the boot message instead of `agent_boot`, so a stopped
-   * run re-fires no model call, compaction or tool. Omit it and every restored
-   * run boots. A run that is already live is stopped by dispatching
-   * `agentCancelMsg` into `await host.runtime()`.
-   */
-  readonly stopped?: () => Promise<boolean>;
-  /**
    * The run-terminality predicate (#46) — what makes `result()` first-class.
    * Defaults to the agent's own terminal phases (`done` / `failed`).
    */
@@ -238,9 +228,9 @@ export interface AgentHost<
    * rejects with a `DispatchDiscardedError`.
    *
    * The framework `settle` test seam, owned once: a test and lifecycle seam for
-   * one caller at a time, not the way to stop a run in production. Dispatch
-   * `agentCancelMsg` into `await host.runtime()` for that, and await a
-   * `reset()` before the next `reset()` or `runtime()`.
+   * one caller at a time, not the way to stop a run in production. Give `run`
+   * a `cancellation` signal and abort it for that, and await a `reset()` before
+   * the next `reset()` or `runtime()`.
    *
    * @throws {HostOverlapError} A `reset()` while another `reset()` is still
    * stopping the run, or from inside `run()`, and a `runtime()` while a
@@ -396,9 +386,6 @@ export function createAgentHost<
 
   async function build(mine: Build): Promise<Booted> {
     const { signal } = mine.abort;
-    // The stop is decided once, before `run` loads anything or the boot
-    // dispatches: a stopped run is cancelled in place of being booted.
-    const stop = config.stopped === undefined ? false : await config.stopped();
     // `run()` hands back a `RunHandle` synchronously (#45). Wire the SEMANTIC
     // event projector (#47) so `runtime.on(...)` lights up, then drive the SSE
     // hub off that named stream (never the private-Msg firehose).
@@ -439,12 +426,7 @@ export function createAgentHost<
     // (invariant 6) and is never dropped. It is teardown, and left out, only
     // when this build was reset AND the engine rejected with one of the values
     // it refuses work with once stopped: the engine already reported that.
-    const resumed = await beginResume(
-      booting,
-      agentBootPort(stop ? "stop" : "boot"),
-      now,
-      signal,
-    );
+    const resumed = await beginResume(booting, agentBootPort(), now, signal);
     resumed?.finished.catch((error: unknown) => {
       const teardown =
         signal.aborted &&

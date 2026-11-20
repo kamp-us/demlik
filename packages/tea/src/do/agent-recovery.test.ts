@@ -14,19 +14,18 @@
  * storage. The hands pull a step, run it and post its result. The activation is
  * evicted mid call; a fresh host, runtime and step host over the same storage
  * answer the hands' retried post, and the run reaches `done` with every turn
- * once. A stop recorded in that storage before the third result is posted is read
- * by `beforeResume` on a fresh activation and ends the run cancelled, with no
- * further model call, whether the step host resumes inline or defers. The same
- * stop, recorded after a cold wake has handed out a tool step, reaches a warm
- * host whose boot is parked on that unanswered tool, for a run left `running` and
- * one left `suspended`: `beforeResume` dispatches `agentCancelMsg` into the run
- * the host already holds, and the next post is answered `cancelled` in one
- * request, with no `reset()` and no further model call.
+ * once. A stop recorded in that storage before the third result is posted ends
+ * the run cancelled on a fresh activation, with no further model call, whether
+ * the step host resumes inline or defers.
  *
- * A stop recorded before the activation wakes is read by the host's `stopped`
- * ahead of the boot, which then cancels in place of `agent_boot`: a restored
- * `running` or `suspended` run starts no model call, compaction or tool, with the
- * boot's save held as well. Those rows run over the real deferred gateway.
+ * The stop is tea's run signal: one `AbortController` per run, handed to `run` as
+ * `cancellation`, aborted by the stop request after it records the key, and
+ * aborted at wake when the key is already set. `beforeResume` only answers the
+ * pull. Over the real deferred gateway, a stop that lands before the wake, while
+ * the cold load is pending, while the boot message's save is held, or while the
+ * run waits on a tool the hands have not answered, for a run left `running` and
+ * one left `suspended`, ends the run cancelled with no further model call or
+ * tool start, and the stop request never waits on the tool.
  *
  * Every case runs ten times.
  *
@@ -53,7 +52,7 @@ import type { DeadlinesSub } from "../internal/resilience/deadline";
 import { run } from "../promise";
 import { DispatchDiscardedError } from "../runtime-types";
 import { createAgentHost } from "./agent-host";
-import { deferredGateway } from "./deferred-gateway";
+import { type DeferredGateway, deferredGateway } from "./deferred-gateway";
 import { HostOverlapError } from "./host-lifecycle";
 import { doStore } from "./index";
 import {
@@ -183,7 +182,7 @@ function storage(seed: S | null = null) {
 function hostOver<C extends Cmd>(
   wired: AgentWired<C>,
   store: Store<S>,
-  stopped?: () => Promise<boolean>,
+  signal?: AbortSignal,
 ) {
   const teardown: string[] = [];
   const host = createAgentHost<
@@ -197,13 +196,18 @@ function hostOver<C extends Cmd>(
     object
   >({
     run: (machine, options) =>
-      run(machine, { ...options, disposeTimeoutMs: 0 }),
+      signal === undefined
+        ? run(machine, { ...options, disposeTimeoutMs: 0 })
+        : run(machine, {
+            ...options,
+            disposeTimeoutMs: 0,
+            cancellation: { signal, cancel: () => agentCancelMsg(NOW) },
+          }),
     onError: (error, context) => {
       if (context.phase !== "discard") throw error;
       teardown.push(error instanceof Error ? error.name : String(error));
     },
     buildMachine: () => wired,
-    ...(stopped === undefined ? {} : { stopped }),
     store,
     ctx: {},
     toSseFrame: () => null,
@@ -420,6 +424,7 @@ const world = () => ({
   returned: [] as number[],
   compactions: { started: 0, folded: 0 },
   executed: [] as string[],
+  started: [] as string[],
   sent: [] as Request[],
 });
 type World = ReturnType<typeof world>;
@@ -473,6 +478,32 @@ function mailbox() {
   };
 }
 
+// What the hands post to, and what holds a wake in place. By default a read
+// parks in the mailbox; with a `gateway` it registers in the real deferred
+// gateway, as a tool run outside the object does. `loadHeld` parks the cold
+// load, and `saveHeld` parks the save of the boot message's own transition (the
+// first save is boot writing the restored State).
+interface Wiring {
+  readonly gateway?: DeferredGateway<string>;
+  readonly loadHeld?: Promise<void>;
+  readonly saveHeld?: Promise<void>;
+}
+
+type Results = {
+  deliver(callId: string, result: string): void;
+  take(callId: string): Promise<string>;
+};
+
+function gatewayResults(gateway: DeferredGateway<string>, w: World): Results {
+  return {
+    deliver: (callId: string, result: string) => gateway.settle(callId, result),
+    take: (callId: string) =>
+      gateway
+        .await(callId, () => void w.started.push(callId), 30_000)
+        .catch(() => "ended"),
+  };
+}
+
 // One activation of the Durable Object: a fresh host, a fresh runtime and a
 // fresh step host over `r`. The model and the compaction are the world's. A
 // read parks until the hands post its result, as a tool run outside the
@@ -483,9 +514,13 @@ function activation(
   w: World,
   hangOn: Mode | null,
   deferred = false,
+  wiring: Wiring = {},
 ) {
   const reached = gate();
-  const results = mailbox();
+  const results =
+    wiring.gateway === undefined
+      ? mailbox()
+      : gatewayResults(wiring.gateway, w);
   const invoke = async () => {
     w.invocations++;
     const next = w.returned.length + 1;
@@ -514,27 +549,46 @@ function activation(
   };
   if (mode === "compaction") {
     const wired = wireCompacting(compactingAgent(invoke), read, compact);
-    return assemble(wired, r, results, reached.reached, deferred);
+    return assemble(wired, r, results, reached.reached, deferred, wiring);
   }
   const wired = wirePlain(plainAgent(invoke), read);
-  return assemble(wired, r, results, reached.reached, deferred);
+  return assemble(wired, r, results, reached.reached, deferred, wiring);
 }
 
-// The step engine, over the host exactly as a Durable Object holds it: `runtime()`
-// to reach the run, a dispatched `agentCancelMsg` to stop it, `status()` to read
-// the end. `reset()` is only the test's way to evict the activation.
+// The step engine, over the host exactly as a Durable Object holds it. The stop
+// is tea's run signal: one controller per run, in memory, handed to `run`. A wake
+// that finds `stop:<runId>` recorded aborts it before any request is served, as
+// `blockConcurrencyWhile` holds one; a stop request records the key and aborts.
+// `beforeResume` only answers the pull. `reset()` is the test's way to evict the
+// activation.
 function assemble<C extends Cmd>(
   wired: AgentWired<C>,
   r: Retained,
-  results: ReturnType<typeof mailbox>,
+  results: Results,
   reached: Promise<void>,
   deferred: boolean,
+  wiring: Wiring,
 ) {
-  const { host, teardown } = hostOver(
-    wired,
-    r.store,
-    async () => (await r.storage.get<boolean>(`stop:${RUN}`)) === true,
-  );
+  const stopRun = new AbortController();
+  const woken = r.storage.get<boolean>(`stop:${RUN}`).then((recorded) => {
+    if (recorded === true) stopRun.abort();
+  });
+  let saves = 0;
+  const held = wiring.loadHeld !== undefined || wiring.saveHeld !== undefined;
+  const store: Store<S> = held
+    ? {
+        ...r.store,
+        load: async () => {
+          await wiring.loadHeld;
+          return r.store.load();
+        },
+        save: async (state) => {
+          if (++saves === 2) await wiring.saveHeld;
+          await r.store.save(state);
+        },
+      }
+    : r.store;
+  const { host, teardown } = hostOver(wired, store, stopRun.signal);
   const calls = { resumes: 0, enqueues: 0 };
   const order: string[] = [];
 
@@ -544,17 +598,7 @@ function assemble<C extends Cmd>(
     async beforeResume(runId) {
       order.push("check-stop");
       if ((await r.storage.get<boolean>(`stop:${runId}`)) !== true) return null;
-      const runtime = await host.runtime();
-      // The loop runs one transition's tools at a time, so the cancel folds only
-      // once the tool the run is parked on has returned: queue it first, then
-      // release that tool, whose late result the cancelled run drops.
-      const cancelled = runtime.dispatch(agentCancelMsg(NOW));
-      const waiting = status(runtime.getState());
-      if (waiting.kind === "suspended")
-        for (const call of waiting.pending)
-          results.deliver(call.callId, "stopped");
-      await cancelled;
-      return { done: true, output: status(runtime.getState()).kind };
+      return { done: true, output: (await host.status()).kind };
     },
     async resume(_runId, posted) {
       calls.resumes++;
@@ -589,7 +633,7 @@ function assemble<C extends Cmd>(
   };
 
   const ctx = { storage: r.storage };
-  const handle: (request: Request, now: number) => Promise<Outcome> = deferred
+  const serve: (request: Request, now: number) => Promise<Outcome> = deferred
     ? stepHost(ctx, engine, {
         deferResume: {
           settled: () => false,
@@ -601,7 +645,10 @@ function assemble<C extends Cmd>(
     : stepHost(ctx, engine).handle;
 
   return {
-    handle,
+    async handle(request: Request, now: number) {
+      await woken;
+      return serve(request, now);
+    },
     host,
     calls,
     order,
@@ -610,10 +657,17 @@ function assemble<C extends Cmd>(
     // The run route: record the capability, start the run, wait for its first
     // tool call.
     async launch(runId: string) {
+      await woken;
       await r.storage.put(`token:${runId}`, TOKEN);
       const runtime = await host.runtime();
       void runtime.dispatch({ _tag: "agent_start", runId, at: 0 }).catch(noop);
       await reaches(runtime, (s) => s.kind !== "idle" && s.kind !== "running");
+    },
+    // The stop request: record it, then abort. It answers without waiting on
+    // the run or on any tool the hands have not answered.
+    async stop() {
+      await r.storage.put(`stop:${RUN}`, true);
+      stopRun.abort();
     },
     async evict() {
       await host.reset();
@@ -782,7 +836,7 @@ describe.each([
 ] as const)("a stop recorded after cold recovery handed out a tool step, run left %s", (left) => {
   it.each(
     REPEATS,
-  )("the next post cancels the run through the held runtime in one request (repeat %i)", async () => {
+  )("the run ends cancelled with the tool unanswered, and the next post is answered at once (repeat %i)", async () => {
     const r = retained();
     const w = world();
     const lost = activation("model", r, w, left === "running" ? "model" : null);
@@ -812,7 +866,8 @@ describe.each([
     const resumes = warm.calls.resumes;
     const held = await warm.host.runtime();
 
-    await r.storage.put(`stop:${RUN}`, true);
+    await warm.stop();
+    await reaches(held, (now) => now.kind === "cancelled");
     expect(await warm.handle(post(step), NOW)).toEqual({
       status: 200,
       body: { done: true, output: "cancelled" },
@@ -1303,169 +1358,129 @@ describe("a teardown in flight: tearingDown × runtime", () => {
   });
 });
 
-// A run left `suspended` by an activation that was lost while its first tool
-// call was out: the checkpoint holds that one call as pending.
-async function suspendedOnATool() {
-  const reached = gate();
-  const saved = storage();
-  const { host } = hostOver(
-    wirePlain(
-      plainAgent(async () => turn(1)),
-      async () => {
-        reached.release();
-        return hangs<M>();
-      },
-    ),
-    saved.store,
-  );
-  const old = await host.runtime();
-  void old.dispatch(start("tool"));
-  await reached.reached;
-  const checkpoint = saved.snapshot();
-  await host.reset();
-  return checkpoint;
-}
-
-// A host over the real deferred gateway. A tool call registers in the gateway
-// and waits for the hands: `starts` lists every call whose send went out, and
-// `models` counts the model calls the host paid for.
-function gatewayHost(
-  store: Store<S>,
-  stopped: () => Promise<boolean>,
-  firstTurn: number,
-) {
-  const gateway = deferredGateway<string>();
-  const starts: string[] = [];
-  let models = 0;
-  let attempts = firstTurn - 1;
-  const read: Read = async (cmd) => {
-    try {
-      const result = await gateway.await(
-        cmd.callId,
-        () => void starts.push(cmd.callId),
-        30_000,
-      );
-      return { _tag: "agent_tool_ok", callId: cmd.callId, result, at: 1 };
-    } catch (error) {
-      return {
-        _tag: "agent_tool_err",
-        callId: cmd.callId,
-        reason: error instanceof Error ? error.message : String(error),
-        at: 1,
-      };
-    }
-  };
-  const wired = wirePlain(
-    plainAgent(async () => {
-      models++;
-      return turn(++attempts);
-    }),
-    read,
-  );
-  const { host } = hostOver(wired, store, stopped);
-  return {
-    host,
-    gateway,
-    starts,
-    models: () => models,
-    // The warm path, as the guide writes it: cancel the run the host holds,
-    // then fail the tool calls it is parked on.
-    async stop(runtime: Awaited<ReturnType<typeof host.runtime>>) {
-      const cancelled = runtime.dispatch(agentCancelMsg(NOW));
-      for (const callId of gateway.inFlight()) gateway.fail(callId, "stopped");
-      await cancelled;
-    },
-  };
-}
+const parked = () => {
+  let release: () => void = noop;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return { held, release };
+};
 
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 5));
 
-const waitUntil = async (ready: () => boolean) => {
-  for (let i = 0; i < 200 && !ready(); i++) await tick();
-  expect(ready()).toBe(true);
-};
+// A run lost mid-run, left `running` or `suspended` in `r`.
+async function checkpointed(left: "running" | "suspended") {
+  const r = retained();
+  const w = world();
+  const lost = activation("model", r, w, left === "running" ? "model" : null);
+  await lost.launch(RUN);
+  if (left === "running") {
+    void drive(lost, w, pull).catch(noop);
+    await lost.reached;
+  } else {
+    await drive(lost, w, pull, "document-3");
+  }
+  expect(status(await r.saved()).kind).toBe(left);
+  await lost.evict();
+  return { r, w };
+}
 
-const CHECKPOINT = {
-  running: async () => (await lostDuring("model")).checkpoint,
-  suspended: suspendedOnATool,
-} satisfies Record<"running" | "suspended", () => Promise<S | null>>;
-
-// The persisted stop replaces the boot: the host reads it before anything is
-// re-fired and cancels in place of `agent_boot`, so a stopped run starts no
-// model call and no tool, even with the first save held.
-describe.each([
-  ["running", "free"],
-  ["running", "held"],
-  ["suspended", "free"],
-  ["suspended", "held"],
-] as const)("a run restored %s, with a persisted stop and the boot save %s", (left, save) => {
-  it.each(
-    REPEATS,
-  )("is cancelled with no model call and no tool start (repeat %i)", async () => {
-    const checkpoint = await CHECKPOINT[left]();
-    expect(status(checkpoint as S).kind).toBe(left);
-    const persisted = storage(checkpoint);
-    let releaseSave: () => void = noop;
-    const saveHeld = new Promise<void>((resolve) => {
-      releaseSave = resolve;
+// Where a stop can land against a wake, for a run left `running` or `suspended`.
+// Each row brings the wake to that point over the real deferred gateway, makes
+// the stop request, and reads the run through `stepHost.handle`. The run ends
+// cancelled; the stop request answers at once, with no tool answered and none
+// to wait for; and the activation pays for no model call and starts no tool
+// after the stop.
+const WHEN = {
+  "before the wake": async (w: World, r: Retained) => {
+    await r.storage.put(`stop:${RUN}`, true);
+    const gateway = deferredGateway<string>();
+    const next = activation("model", r, w, null, false, { gateway });
+    return { next, gateway, stopped: async () => await next.host.runtime() };
+  },
+  "while the cold load is pending": async (w: World, r: Retained) => {
+    const load = parked();
+    const gateway = deferredGateway<string>();
+    const next = activation("model", r, w, null, false, {
+      gateway,
+      loadHeld: load.held,
     });
-    let saves = 0;
-    const store: Store<S> = {
-      ...persisted.store,
-      save: async (state) => {
-        // The first save is boot writing the restored State; the second is the
-        // boot message's own transition.
-        if (++saves === 2 && save === "held") await saveHeld;
-        await persisted.store.save(state);
+    const building = next.host.runtime();
+    building.catch(noop);
+    await tick();
+    return {
+      next,
+      gateway,
+      stopped: async () => {
+        await next.stop();
+        load.release();
+        return building;
       },
     };
-    const rig = gatewayHost(store, async () => true, DOCUMENTS);
-
-    const runtime = await rig.host.runtime();
-    const stopping = rig.stop(runtime);
+  },
+  "while the boot save is held": async (w: World, r: Retained) => {
+    const save = parked();
+    const gateway = deferredGateway<string>();
+    const next = activation("model", r, w, null, false, {
+      gateway,
+      saveHeld: save.held,
+    });
+    const building = await next.host.runtime();
     await tick();
-    releaseSave();
-    await stopping;
+    return {
+      next,
+      gateway,
+      stopped: async () => {
+        await next.stop();
+        save.release();
+        return building;
+      },
+    };
+  },
+  "while the run waits on a tool": async (w: World, r: Retained) => {
+    const gateway = deferredGateway<string>();
+    const next = activation("model", r, w, null, false, { gateway });
+    const runtime = await next.host.runtime();
+    while (gateway.inFlight().length === 0) await tick();
+    return {
+      next,
+      gateway,
+      stopped: async () => {
+        await next.stop();
+        return runtime;
+      },
+    };
+  },
+} satisfies Record<string, (w: World, r: Retained) => Promise<unknown>>;
 
-    expect(status(runtime.getState()).kind).toBe("cancelled");
-    expect(status(persisted.snapshot() as S).kind).toBe("cancelled");
-    expect(rig.models()).toBe(0);
-    expect(rig.starts).toEqual([]);
-    expect(rig.gateway.inFlight()).toEqual([]);
-    await rig.host.reset();
-  });
-});
+describe.each(
+  Object.keys(WHEN) as (keyof typeof WHEN)[],
+)("a stop %s", (when) => {
+  describe.each([
+    "running",
+    "suspended",
+  ] as const)("on a run left %s", (left) => {
+    it.each(
+      REPEATS,
+    )("ends it cancelled with no further model call or tool start (repeat %i)", async () => {
+      const { r, w } = await checkpointed(left);
+      const { next, gateway, stopped } = await WHEN[when](w, r);
+      const models = w.invocations;
+      const starts = [...w.started];
 
-// A stop recorded while the run is live goes through the warm path: the tool
-// the run is parked on is already registered in the gateway, so failing the
-// calls in flight lets the cancel fold.
-describe.each([
-  "running",
-  "suspended",
-] as const)("a stop recorded while a run restored %s is live", (left) => {
-  it.each(
-    REPEATS,
-  )("cancels through the held runtime and fails the registered tool (repeat %i)", async () => {
-    const checkpoint = await CHECKPOINT[left]();
-    const persisted = storage(checkpoint);
-    let recorded = false;
-    const rig = gatewayHost(persisted.store, async () => recorded, DOCUMENTS);
+      const runtime = await stopped();
+      await reaches(runtime, (now) => now.kind === "cancelled");
 
-    const runtime = await rig.host.runtime();
-    await waitUntil(() => rig.gateway.inFlight().length === 1);
-    const models = rig.models();
-    const started = [...rig.starts];
-    expect(started).toHaveLength(1);
-    expect(status(runtime.getState()).kind).toBe("suspended");
-
-    recorded = true;
-    await rig.stop(runtime);
-
-    expect(await rig.host.runtime()).toBe(runtime);
-    expect(status(runtime.getState()).kind).toBe("cancelled");
-    expect(status(persisted.snapshot() as S).kind).toBe("cancelled");
-    expect(rig.models()).toBe(models);
-    expect(rig.starts).toEqual(started);
-    await rig.host.reset();
+      expect(await next.handle(post("document-3"), NOW)).toEqual({
+        status: 200,
+        body: { done: true, output: "cancelled" },
+      });
+      expect(w.invocations).toBe(models);
+      expect(w.started).toEqual(starts);
+      expect(status(await r.saved()).kind).toBe("cancelled");
+      expect(next.calls).toEqual({ resumes: 0, enqueues: 0 });
+      for (const callId of gateway.inFlight()) gateway.fail(callId, "ended");
+      await next.evict();
+    });
   });
 });
