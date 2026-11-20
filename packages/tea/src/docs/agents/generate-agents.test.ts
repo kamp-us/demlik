@@ -196,6 +196,11 @@ describe("coding agent guide", () => {
       expect(Buffer.byteLength(renderAgents(), "utf8")).toBeLessThan(12_000);
     });
 
+    it("the committed AGENTS.md is what the generator writes", async () => {
+      // The package's own test run is the gate: a stale guide fails here, in CI's tea job.
+      expect(drift(await readFile(AGENTS, "utf8"))).toEqual([]);
+    });
+
     it("a tampered AGENTS.md is reported as drift", async () => {
       expect(
         drift(`${await readFile(AGENTS, "utf8")}\n<!-- tampered -->`),
