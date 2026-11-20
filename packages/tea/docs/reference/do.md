@@ -268,6 +268,16 @@ interface AgentHostWiring<
    */
   readonly run: EngineRun<AgentState<Stage, P, O, R>, AgentMachineMsg<P, O, R>, C, U, Ctx, AgentEvent<R>>;
   /**
+   * The run's persisted stop, read once at the start of each build, before the
+   * run is loaded or anything is re-fired. When it answers `true` and the
+   * restored run is `running` or `suspended`, the host dispatches
+   * `agentCancelMsg` as the boot message instead of `agent_boot`, so a stopped
+   * run re-fires no model call, compaction or tool. Omit it and every restored
+   * run boots. A run that is already live is stopped by dispatching
+   * `agentCancelMsg` into `await host.runtime()`.
+   */
+  readonly stopped?: () => Promise<boolean>;
+  /**
    * The run-terminality predicate (#46) — what makes `result()` first-class.
    * Defaults to the agent's own terminal phases (`done` / `failed`).
    */

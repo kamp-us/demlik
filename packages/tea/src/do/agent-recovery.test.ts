@@ -23,6 +23,11 @@
  * the host already holds, and the next post is answered `cancelled` in one
  * request, with no `reset()` and no further model call.
  *
+ * A stop recorded before the activation wakes is read by the host's `stopped`
+ * ahead of the boot, which then cancels in place of `agent_boot`: a restored
+ * `running` or `suspended` run starts no model call, compaction or tool, with the
+ * boot's save held as well. Those rows run over the real deferred gateway.
+ *
  * Every case runs ten times.
  *
  * Globals are NOT enabled in vitest.config.ts — describe/it/expect are imported.
@@ -48,6 +53,7 @@ import type { DeadlinesSub } from "../internal/resilience/deadline";
 import { run } from "../promise";
 import { DispatchDiscardedError } from "../runtime-types";
 import { createAgentHost } from "./agent-host";
+import { deferredGateway } from "./deferred-gateway";
 import { HostOverlapError } from "./host-lifecycle";
 import { doStore } from "./index";
 import {
@@ -174,7 +180,11 @@ function storage(seed: S | null = null) {
 
 // A host over one activation. A handler that never returns is reported at
 // teardown as intentional; any other report fails the test.
-function hostOver<C extends Cmd>(wired: AgentWired<C>, store: Store<S>) {
+function hostOver<C extends Cmd>(
+  wired: AgentWired<C>,
+  store: Store<S>,
+  stopped?: () => Promise<boolean>,
+) {
   const teardown: string[] = [];
   const host = createAgentHost<
     Stage,
@@ -193,6 +203,7 @@ function hostOver<C extends Cmd>(wired: AgentWired<C>, store: Store<S>) {
       teardown.push(error instanceof Error ? error.name : String(error));
     },
     buildMachine: () => wired,
+    ...(stopped === undefined ? {} : { stopped }),
     store,
     ctx: {},
     toSseFrame: () => null,
@@ -519,7 +530,11 @@ function assemble<C extends Cmd>(
   reached: Promise<void>,
   deferred: boolean,
 ) {
-  const { host, teardown } = hostOver(wired, r.store);
+  const { host, teardown } = hostOver(
+    wired,
+    r.store,
+    async () => (await r.storage.get<boolean>(`stop:${RUN}`)) === true,
+  );
   const calls = { resumes: 0, enqueues: 0 };
   const order: string[] = [];
 
@@ -1285,5 +1300,172 @@ describe("a teardown in flight: tearingDown × runtime", () => {
       "document-4",
     ]);
     await host.reset();
+  });
+});
+
+// A run left `suspended` by an activation that was lost while its first tool
+// call was out: the checkpoint holds that one call as pending.
+async function suspendedOnATool() {
+  const reached = gate();
+  const saved = storage();
+  const { host } = hostOver(
+    wirePlain(
+      plainAgent(async () => turn(1)),
+      async () => {
+        reached.release();
+        return hangs<M>();
+      },
+    ),
+    saved.store,
+  );
+  const old = await host.runtime();
+  void old.dispatch(start("tool"));
+  await reached.reached;
+  const checkpoint = saved.snapshot();
+  await host.reset();
+  return checkpoint;
+}
+
+// A host over the real deferred gateway. A tool call registers in the gateway
+// and waits for the hands: `starts` lists every call whose send went out, and
+// `models` counts the model calls the host paid for.
+function gatewayHost(
+  store: Store<S>,
+  stopped: () => Promise<boolean>,
+  firstTurn: number,
+) {
+  const gateway = deferredGateway<string>();
+  const starts: string[] = [];
+  let models = 0;
+  let attempts = firstTurn - 1;
+  const read: Read = async (cmd) => {
+    try {
+      const result = await gateway.await(
+        cmd.callId,
+        () => void starts.push(cmd.callId),
+        30_000,
+      );
+      return { _tag: "agent_tool_ok", callId: cmd.callId, result, at: 1 };
+    } catch (error) {
+      return {
+        _tag: "agent_tool_err",
+        callId: cmd.callId,
+        reason: error instanceof Error ? error.message : String(error),
+        at: 1,
+      };
+    }
+  };
+  const wired = wirePlain(
+    plainAgent(async () => {
+      models++;
+      return turn(++attempts);
+    }),
+    read,
+  );
+  const { host } = hostOver(wired, store, stopped);
+  return {
+    host,
+    gateway,
+    starts,
+    models: () => models,
+    // The warm path, as the guide writes it: cancel the run the host holds,
+    // then fail the tool calls it is parked on.
+    async stop(runtime: Awaited<ReturnType<typeof host.runtime>>) {
+      const cancelled = runtime.dispatch(agentCancelMsg(NOW));
+      for (const callId of gateway.inFlight()) gateway.fail(callId, "stopped");
+      await cancelled;
+    },
+  };
+}
+
+const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 5));
+
+const waitUntil = async (ready: () => boolean) => {
+  for (let i = 0; i < 200 && !ready(); i++) await tick();
+  expect(ready()).toBe(true);
+};
+
+const CHECKPOINT = {
+  running: async () => (await lostDuring("model")).checkpoint,
+  suspended: suspendedOnATool,
+} satisfies Record<"running" | "suspended", () => Promise<S | null>>;
+
+// The persisted stop replaces the boot: the host reads it before anything is
+// re-fired and cancels in place of `agent_boot`, so a stopped run starts no
+// model call and no tool, even with the first save held.
+describe.each([
+  ["running", "free"],
+  ["running", "held"],
+  ["suspended", "free"],
+  ["suspended", "held"],
+] as const)("a run restored %s, with a persisted stop and the boot save %s", (left, save) => {
+  it.each(
+    REPEATS,
+  )("is cancelled with no model call and no tool start (repeat %i)", async () => {
+    const checkpoint = await CHECKPOINT[left]();
+    expect(status(checkpoint as S).kind).toBe(left);
+    const persisted = storage(checkpoint);
+    let releaseSave: () => void = noop;
+    const saveHeld = new Promise<void>((resolve) => {
+      releaseSave = resolve;
+    });
+    let saves = 0;
+    const store: Store<S> = {
+      ...persisted.store,
+      save: async (state) => {
+        // The first save is boot writing the restored State; the second is the
+        // boot message's own transition.
+        if (++saves === 2 && save === "held") await saveHeld;
+        await persisted.store.save(state);
+      },
+    };
+    const rig = gatewayHost(store, async () => true, DOCUMENTS);
+
+    const runtime = await rig.host.runtime();
+    const stopping = rig.stop(runtime);
+    await tick();
+    releaseSave();
+    await stopping;
+
+    expect(status(runtime.getState()).kind).toBe("cancelled");
+    expect(status(persisted.snapshot() as S).kind).toBe("cancelled");
+    expect(rig.models()).toBe(0);
+    expect(rig.starts).toEqual([]);
+    expect(rig.gateway.inFlight()).toEqual([]);
+    await rig.host.reset();
+  });
+});
+
+// A stop recorded while the run is live goes through the warm path: the tool
+// the run is parked on is already registered in the gateway, so failing the
+// calls in flight lets the cancel fold.
+describe.each([
+  "running",
+  "suspended",
+] as const)("a stop recorded while a run restored %s is live", (left) => {
+  it.each(
+    REPEATS,
+  )("cancels through the held runtime and fails the registered tool (repeat %i)", async () => {
+    const checkpoint = await CHECKPOINT[left]();
+    const persisted = storage(checkpoint);
+    let recorded = false;
+    const rig = gatewayHost(persisted.store, async () => recorded, DOCUMENTS);
+
+    const runtime = await rig.host.runtime();
+    await waitUntil(() => rig.gateway.inFlight().length === 1);
+    const models = rig.models();
+    const started = [...rig.starts];
+    expect(started).toHaveLength(1);
+    expect(status(runtime.getState()).kind).toBe("suspended");
+
+    recorded = true;
+    await rig.stop(runtime);
+
+    expect(await rig.host.runtime()).toBe(runtime);
+    expect(status(runtime.getState()).kind).toBe("cancelled");
+    expect(status(persisted.snapshot() as S).kind).toBe("cancelled");
+    expect(rig.models()).toBe(models);
+    expect(rig.starts).toEqual(started);
+    await rig.host.reset();
   });
 });

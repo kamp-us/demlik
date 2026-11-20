@@ -56,7 +56,7 @@ export class HostOverlapError extends Error {
       `@demlik/tea: createAgentHost().${call}() was called while ` +
         (during === "teardown"
           ? "a reset() was still stopping the run"
-          : "run() was still building the handle") +
+          : "the host was still starting the run, before run() returned its handle") +
         `. reset() is a test and lifecycle seam for one caller at a time: ` +
         `await it before the next call. To stop a run, dispatch ` +
         `agentCancelMsg into \`await host.runtime()\`.`,

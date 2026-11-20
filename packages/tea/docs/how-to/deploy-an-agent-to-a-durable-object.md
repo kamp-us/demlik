@@ -113,19 +113,27 @@ const runtime = await host.runtime();
 Call it from the request or alarm that wakes the object: `host.runtime()` is the
 point where a restored run starts working again.
 
-### Stop: cancel the run you already hold
+### Stop: a persisted stop replaces the boot
 
-A stop your application recorded ends the run by dispatching `agentCancelMsg`
-into the run the host already holds. Give `stepHost` an engine whose
-`beforeResume` reads the stop from your own storage, cancels through
-`await host.runtime()`, and returns the terminal response. `stepHost` calls it
-for every authenticated pull, including the first pull and a repeated post,
-after the token check and before it settles a posted result, defers it, or reads
-the next step. Returning `null` continues as a host without the hook does.
+A stop your application recorded ends the run in one of two places, and both read
+the same persisted flag. Give `createAgentHost` a `stopped` read, and give
+`stepHost` an engine whose `beforeResume` uses it too.
 
 ```ts
-const admit = async (runId: string) => {
-  if (!(await this.ctx.storage.get<boolean>(`stop:${runId}`))) return null;
+const stopped = async () =>
+  (await this.ctx.storage.get<boolean>(`stop:${runId}`)) === true;
+
+const host = createAgentHost({
+  run,
+  buildMachine: () => agent.toMachine<object>({ toolInterpret }),
+  store: doStore(this.ctx.storage, parse),
+  ctx: {},
+  toSseFrame: () => null,
+  stopped,
+});
+
+const admit = async () => {
+  if (!(await stopped())) return null;
   const runtime = await host.runtime();
   const cancelled = runtime.dispatch(agentCancelMsg(Date.now()));
   for (const callId of gateway.inFlight()) gateway.fail(callId, "stopped");
@@ -136,26 +144,36 @@ const admit = async (runId: string) => {
 const steps = stepHost({ storage: owner }, { ...engine, beforeResume: admit });
 ```
 
-`host.runtime()` resolves once `agent_boot` is queued, so it does not wait on a
-tool nobody has answered. The run folds one transition's tool calls at a time, so
-the cancel is applied only after the tool calls the run is parked on have
-returned. Dispatch the cancel first, then release those calls: with a
-`deferredGateway`, `gateway.fail` settles each call in flight, and the run drops
-a tool result that reaches a cancelled run. Waiting for the dispatch before you
-release them never returns.
+On a wake, the host reads `stopped` once, before it loads the run or re-fires
+anything. When it answers `true` and the run is `running` or `suspended`, the
+host dispatches `agentCancelMsg` in place of `agent_boot`, so a stopped run
+starts no model call, compaction or tool. `stopped` is not read again for a run
+that is already live.
+
+`beforeResume` covers that live run. `stepHost` calls it for every authenticated
+pull, including the first pull and a repeated post, after the token check and
+before it settles a posted result, defers it, or reads the next step. Returning
+`null` continues as a host without the hook does. `host.runtime()` resolves once
+`agent_boot` is queued, so it does not wait on a tool nobody has answered. The
+run folds one transition's tool calls at a time, so the cancel is applied only
+after the tool calls the run is parked on have returned. Dispatch the cancel
+first, then release those calls: with a `deferredGateway`, `gateway.fail`
+settles each call in flight, and the run drops a tool result that reaches a
+cancelled run. A tool the live run is parked on is already registered in the
+gateway. Waiting for the dispatch before you release the calls never returns.
 
 Do not stop the run with `host.reset()`. It is the test and lifecycle seam, for
 one caller at a time: a second `reset()` while one is stopping the run, a
-`reset()` from inside `run()`, and a `runtime()` while a `reset()` is stopping
-the run each throw a `HostOverlapError`. `engine` is the `StepEngine` you already
-pass.
+`reset()` before `run()` has returned its handle, and a `runtime()` while a
+`reset()` is stopping the run each throw a `HostOverlapError`. `engine` is the
+`StepEngine` you already pass.
 
-`beforeResume` bounds the pull it runs in. A model call that has already started,
-including the one `host.runtime()` reissued on a cold wake, finishes first and the
-cancelled run drops its answer. A stop that arrives after the hook returned is
-outside it, and a worker that runs queued work later has to check the stop again
-itself. A throw or a rejection from the hook propagates out of `handle`, and the
-same result posted again is still treated as new.
+`beforeResume` bounds the pull it runs in. A model call already in flight on the
+live run finishes first, and the cancelled run drops its answer. A stop that
+arrives after the hook returned is outside it, and a worker that runs queued work
+later has to check the stop again itself. A throw or a rejection from the hook,
+or from `stopped`, propagates out of `handle` or `runtime()`, and the same result
+posted again is still treated as new.
 
 ### Deadline: arm it when the run is created
 

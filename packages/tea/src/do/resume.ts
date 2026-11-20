@@ -9,6 +9,7 @@ import {
   type AgentMachineMsg,
   type AgentState,
   agentBootMsg,
+  agentCancelMsg,
 } from "../agent/index";
 import { isMidRun } from "../agent/mid-run";
 import type { RunHandle } from "../index";
@@ -139,16 +140,23 @@ export async function autoBoot<
 
 /**
  * The agent's resume port: resumable per {@link agentIsResumable}, resumed by the
- * agent-owned `agentBootMsg`. `autoBoot` and `createAgentHost` both read it, so
- * the pairing is written once.
+ * agent-owned `agentBootMsg`, or by `agentCancelMsg` when the run's stop is
+ * already persisted (`"stop"`), so a stopped run re-fires nothing. `autoBoot` and
+ * `createAgentHost` both read it, so the pairing is written once.
  */
 export function agentBootPort<
   Stage,
   P extends string,
   O extends Record<P, unknown>,
   R,
->(): ResumePort<AgentState<Stage, P, O, R>, AgentMachineMsg<P, O, R>> {
-  return { isResumable: agentIsResumable, resumeMsg: agentBootMsg };
+>(
+  decision: "boot" | "stop" = "boot",
+): ResumePort<AgentState<Stage, P, O, R>, AgentMachineMsg<P, O, R>> {
+  const resumeMsg = {
+    boot: agentBootMsg,
+    stop: agentCancelMsg,
+  } satisfies Record<"boot" | "stop", (at: number) => AgentMachineMsg<P, O, R>>;
+  return { isResumable: agentIsResumable, resumeMsg: resumeMsg[decision] };
 }
 
 /**
