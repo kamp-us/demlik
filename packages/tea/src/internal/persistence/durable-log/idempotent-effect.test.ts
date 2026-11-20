@@ -15,9 +15,11 @@ import { Refusal } from "../../../runtime-types";
 
 import fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
+import { fakeDoStorage as fakeStorage } from "../../../__fixtures__/do-storage";
 import { doEventSourcedStore } from "../../../do/event-sourced-store";
 import { doStore } from "../../../do/index";
 import { defineMachine, type Reducer } from "../../../index";
+import { run } from "../../../promise";
 import {
   type AppliedEffectsEvent,
   appliedEffects,
@@ -27,35 +29,6 @@ import {
   idempotentEffect,
   isApplied,
 } from "./idempotent-effect";
-
-// ── An in-memory `DurableObjectStorage` fake (mirrors the sibling do-store
-//    tests). Enough of the surface for `doStore` / `doEventSourcedStore`. ──────
-function fakeStorage(backing: Map<string, string> = new Map()) {
-  const storage = {
-    async get<T = unknown>(key: string): Promise<T | undefined> {
-      return backing.get(key) as T | undefined;
-    },
-    async put<T>(key: string, value: T): Promise<void> {
-      backing.set(key, value as unknown as string);
-    },
-    async delete(key: string): Promise<boolean> {
-      return backing.delete(key);
-    },
-    async list<T = unknown>(options?: {
-      readonly prefix?: string;
-    }): Promise<Map<string, T>> {
-      const out = new Map<string, T>();
-      const prefix = options?.prefix ?? "";
-      for (const [k, v] of [...backing.entries()].sort(([a], [b]) =>
-        a < b ? -1 : a > b ? 1 : 0,
-      )) {
-        if (k.startsWith(prefix)) out.set(k, v as unknown as T);
-      }
-      return out;
-    },
-  };
-  return { backing, storage: storage as unknown as DurableObjectStorage };
-}
 
 describe("foldApplied — the pure fold (no side table)", () => {
   it("rebuilds the same applied set after a simulated eviction (PBT)", () => {
@@ -301,15 +274,18 @@ describe("composition — the marker lives in the Store alongside State", () => 
     const { storage } = fakeStorage();
     const ctx: Record<string, never> = {};
 
-    // Activation 1: append two applied markers to the log.
+    // Activation 1: dispatch two applied markers; the store writes each to the
+    // log before the dispatch settles.
     const es1 = doEventSourcedStore<Model, Msg, typeof ctx>(
       storage,
       machine(),
       ctx,
       { snapshotEvery: 100 },
     );
-    await es1.append({ _tag: "effect_applied", key: "run1:v1" });
-    await es1.append({ _tag: "effect_applied", key: "run1:v2" });
+    const first = await run(machine(), { ctx, store: es1.store }).ready;
+    await first.dispatch({ _tag: "effect_applied", key: "run1:v1" });
+    await first.dispatch({ _tag: "effect_applied", key: "run1:v2" });
+    await first.stop();
 
     // — EVICTION — a brand-new store instance folds the SAME log at load.
     const es2 = doEventSourcedStore<Model, Msg, typeof ctx>(

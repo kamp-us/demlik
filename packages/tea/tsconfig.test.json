@@ -91,7 +91,6 @@
     "src/update-form-tag.test.ts",
     "src/internal/resilience/with-telemetry/with-telemetry.test.ts",
     "src/internal/flow/workflow/compensation.test.ts",
-    "src/internal/flow/workflow/do.test.ts",
     "src/internal/flow/workflow/workflow.test.ts",
     "src/wrap-detached.test.ts"
   ]

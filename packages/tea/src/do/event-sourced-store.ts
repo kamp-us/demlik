@@ -10,12 +10,17 @@
  * checkpointing the latest state, it:
  *
  *   1. APPENDS each applied `Msg` to an append-only log in `DurableObjectStorage`
- *      (one cell per event, monotonically keyed).
+ *      (one cell per event, monotonically keyed), from `store.save(state, msg)`.
+ *      The engine awaits that save before it starts the transition's Cmds, so
+ *      the event is durable before any effect runs: the log is write-ahead. An
+ *      activation lost inside a model call finds that call's input in the log.
  *   2. Takes a PERIODIC SNAPSHOT every `snapshotEvery` events (count-based
  *      retention — mirrors Akka `RetentionCriteria.snapshotEvery`) so the log
- *      that must replay on the next activation is bounded. A grain that needs
- *      replay bounded by ELAPSED TIME/TICKS rather than raw event count drives
- *      `snapshotNow()` instead (or alongside) — see that method.
+ *      that must replay on the next activation is bounded. The event, its meta
+ *      cell and the snapshot, when one is due, are written in ONE storage
+ *      transaction. A grain that needs replay bounded by ELAPSED TIME/TICKS
+ *      rather than raw event count drives `snapshotNow()` instead (or
+ *      alongside) — see that method.
  *   3. On activation REBUILDS state by FOLDING the log on top of the latest
  *      snapshot. The fold starts directly from a snapshot; without one it
  *      starts from fresh init. One reducer step per logged Msg follows, with
@@ -37,10 +42,11 @@
  *     onReady: (state) => { ... }, // optional, idempotent end-of-recovery hook
  *   });
  *   const runtime = run(machine, { ctx, store: es.store });
- *   // Append every applied Msg to the log. `observe` delivers only applied
- *   // Msgs now (#47) — boot has no event, so there is no `null` arm to skip.
- *   runtime.observe((msg) => { es.append(msg); });
  *   await runtime.ready; // store.load() has folded; onReady has fired once.
+ *
+ * Nothing else feeds the log: do not append from `runtime.observe`, which
+ * fires after the Cmds, and do not append a Msg by hand before dispatching it,
+ * which would record it twice.
  *
  * A time/tick-driven grain (e.g. one that derives simulation ticks between
  * sparse intents) bounds its cold-wake replay by ELAPSED TIME rather than event
@@ -48,8 +54,14 @@
  * or on a wall-clock interval — so a quiet span that never trips `snapshotEvery`
  * is still snapshotted before its replay tail grows unbounded (#190):
  *
- *   // in the grain's tick loop, after the turn's appends have settled:
+ *   // in the grain's tick loop, after the turn's dispatches have settled:
  *   if (tick % SNAPSHOT_EVERY_TICKS === 0) await es.snapshotNow();
+ *
+ * This is a legacy-replay store: it journals each APPLIED message after the
+ * reducer ran and before its effects start, and recovers by folding the
+ * reducer again. A `LoggedStore` (`logged: true`, ADR 0038) instead admits a
+ * message before reduction and keeps committed State and owed deliveries, and
+ * its recovery never runs a committed reducer again. Do not give one run both.
  */
 
 import type { Cmd, Machine, Store, Sub } from "../index";
@@ -152,21 +164,20 @@ export interface EventLogRange {
 
 /**
  * The handle returned by {@link doEventSourcedStore}: a `Store<S>` to hand to
- * `run(...)`, plus the append + recovery surface the cooperating DO drives.
+ * `run(...)`, plus the snapshot and read surface the cooperating DO drives.
  */
 export interface EventSourcedStore<S, M> {
   /**
-   * The `Store<S>` to pass as `run(machine, { ctx, store })`. Its `load()`
-   * performs the fold (snapshot + log replay); its `save(state)` is the
-   * count-based snapshot writer. `migrate` forwards to `parse`.
+   * The `Store<S>` to pass as `run(machine, { ctx, store })`, and the only way
+   * the log grows. Its `load()` performs the fold (snapshot + log replay). Its
+   * `save(state, msg)` appends the applied `msg`, advances the meta cell and,
+   * when `snapshotEvery` events have accumulated, writes the snapshot, all in
+   * one storage transaction that settles before the engine starts the
+   * transition's Cmds. A save without a Msg (the boot save, the flush at
+   * `stop()`) appends nothing. A write that fails rejects the save and leaves
+   * the stored bytes as they were. `migrate` forwards to `parse`.
    */
   readonly store: Store<S>;
-  /**
-   * Append one applied `Msg` to the log. Call from `runtime.observe` for every
-   * non-null msg. Resolves once the event is durably written. Triggers a
-   * snapshot when the event count crosses a `snapshotEvery` boundary.
-   */
-  append(msg: M): Promise<void>;
   /**
    * Take a snapshot NOW, independent of the count-based `snapshotEvery` trigger
    * (a time/tick-based retention trigger, #190). The count-based trigger bounds
@@ -177,17 +188,16 @@ export interface EventSourcedStore<S, M> {
    * checkpoint the current folded state without injecting filler events purely
    * to advance the counter.
    *
-   * It checkpoints the latest state the substrate handed `save()` at the current
-   * highest sequence, then advances the count-based baseline (`snapshotEvery`
-   * counts afresh from here, so a manual snapshot defers the next automatic one).
+   * It checkpoints the State of the highest event the store has durably
+   * written, at that event's sequence, then advances the count-based baseline
+   * (`snapshotEvery` counts afresh from here, so a manual snapshot defers the
+   * next automatic one).
    *
    * Returns `true` if a snapshot was written, `false` on a no-op: nothing has
    * been applied yet (fresh actor), or no new event exists since the last
-   * snapshot (already current). Like the count-based path, it pairs the held
-   * state with the highest sequence, so the caller MUST invoke it between
-   * settled transitions — after the turn's `append()`s have resolved — never
-   * mid-transition (the same boundary discipline `append`'s own snapshot relies
-   * on). Resolves once the snapshot is durably written.
+   * snapshot (already current). The State and the sequence it pairs move
+   * together, only once an event is durable, so a transition whose save failed
+   * is never checkpointed. Resolves once the snapshot is durably written.
    */
   snapshotNow(): Promise<boolean>;
   /**
@@ -228,9 +238,9 @@ const defaultParseEvent = <M>(raw: unknown): M | null =>
  * Build an event-sourced `Store<S>` over `DurableObjectStorage`.
  *
  * The substrate calls `store.load()` once at boot — that is where the fold
- * happens — and `store.save(state)` after every transition — that is where the
- * count-based snapshot is taken. The cooperating DO additionally calls
- * `append(msg)` from `runtime.observe` to grow the log.
+ * happens — and `store.save(state, msg)` after every transition, before that
+ * transition's Cmds start — that is where the event is appended and the
+ * count-based snapshot is taken. No other call grows the log.
  *
  * Snapshot recovery folds update directly from the captured State; it does
  * not initialize that State again. With no snapshot, `ctx` supplies the fresh
@@ -275,21 +285,23 @@ export function doEventSourcedStore<
   const metaKey = opts.keys?.meta ?? DEFAULT_META_KEY;
   const eventPrefix = opts.keys?.eventPrefix ?? DEFAULT_EVENT_PREFIX;
 
-  // In-memory mirror of the durable seq counter, set during load() and kept in
-  // step by append(). Before load() it is unknown; append() lazily reads it.
+  // In-memory mirror of the durable seq counter, set during load() and moved
+  // only once a write has been acknowledged. Before load() it is unknown;
+  // `ensureLastSeq()` lazily reads it.
   let lastSeq: number | null = null;
   // The seq the latest snapshot already folds (so we know the replay tail).
   let snapshotSeq = 0;
-  // The latest state the substrate handed us via save(). The substrate calls
-  // save(state) BEFORE the observer fires append(msg) for the same transition
-  // (run()'s order: state=next → save → reconcile → interpret → observers), so
-  // at append(N) time this holds the post-event-N state. The snapshot is taken
-  // from the append path (not save) so its recorded `seq` and its `state` agree
-  // on the same event boundary — recording seq at save time would lag the state
-  // by one event and re-apply that event on recovery.
+  // The State that folds events 1..lastSeq: what load() recovered, then the
+  // State of each event once its write is acknowledged. A snapshot pairs it
+  // with `lastSeq`, so a snapshot's `seq` and `state` always agree on one event
+  // boundary. A save without a Msg, and a transition whose write failed, never
+  // replace it.
   let latestState: S | null = null;
   // Idempotency latch for onReady within a single activation.
   let readyFired = false;
+  // One write at a time: `snapshotNow()` is called by the host, outside the
+  // engine's serial tail, and must not interleave with a save.
+  let writing: Promise<unknown> = Promise.resolve();
 
   async function readMeta(): Promise<number> {
     const raw = await storage.get<string>(metaKey);
@@ -300,9 +312,9 @@ export function doEventSourcedStore<
 
   /**
    * Return the durable `lastSeq`, lazily learning it from meta if a write
-   * (`append`/`snapshotNow`) fires before any `load()` in this isolate
+   * (`save`/`snapshotNow`) fires before any `load()` in this isolate
    * (defensive; the documented flow loads first). The guard lives here once so
-   * `append` and `snapshotNow` can't drift on the append-before-load path.
+   * `save` and `snapshotNow` can't drift on the write-before-load path.
    */
   async function ensureLastSeq(): Promise<number> {
     if (lastSeq === null) lastSeq = await readMeta();
@@ -374,6 +386,9 @@ export function doEventSourcedStore<
         snapshot === null
           ? replay(machine, { msgs: events, ctx }).state
           : foldMsgs(machine, snapshot, events);
+      // The folded State is the State of event `lastSeq`: the pair a snapshot
+      // records until the next event is written.
+      latestState = state;
 
       // RecoveryCompleted: fire once per activation, AFTER the fold, even when
       // the log + snapshot were both empty (fresh actor). Idempotent within the
@@ -389,13 +404,27 @@ export function doEventSourcedStore<
       return state;
     },
 
-    async save(state: S): Promise<void> {
-      // The substrate calls save() after every transition, BEFORE the observer
-      // fires append() for that same transition. We don't snapshot here — we
-      // only hold the latest state so the append path can pair it with the
-      // freshly-advanced seq (see `latestState`). Holding (not snapshotting)
-      // here is what keeps the snapshot's seq and state on the same boundary.
-      latestState = state;
+    async save(state: S, msg?: unknown): Promise<void> {
+      // Boot and the final flush at `stop()` carry no Msg: there is no event to
+      // write, and their State is not one an event produced.
+      if (msg === undefined) return;
+      await exclusive(async () => {
+        const seq = (await ensureLastSeq()) + 1;
+        // Count-based retention (Akka `RetentionCriteria.snapshotEvery`). When
+        // the events since the last snapshot reach `snapshotEvery`, checkpoint
+        // the post-this-event State under THIS seq, in the same transaction as
+        // the event, so the snapshot's `seq` and `state` agree and the recovery
+        // fold replays only events strictly after `seq`. A snapshot bounds
+        // replay length; it never changes the fold's result (snapshotting.md).
+        const snapshotDue = seq - snapshotSeq >= snapshotEvery;
+        await persist({
+          event: { seq, json: JSON.stringify(msg) },
+          snapshot: snapshotDue ? { seq, state } : null,
+        });
+        lastSeq = seq;
+        latestState = state;
+        if (snapshotDue) snapshotSeq = seq;
+      });
     },
 
     migrate(raw: unknown): S | null {
@@ -403,57 +432,61 @@ export function doEventSourcedStore<
     },
   };
 
-  /**
-   * Durably write the snapshot cell pairing `seq` with `state`, then advance the
-   * in-memory `snapshotSeq` so the recovery fold replays only events strictly
-   * after `seq`. Shared by the count-based path (in `append`) and the
-   * time/tick-based path (`snapshotNow`) so both record the boundary the one,
-   * identical way — a snapshot bounds replay length; it never changes the fold's
-   * result (snapshotting.md).
-   */
-  async function writeSnapshot(seq: number, state: S): Promise<void> {
-    const cell: SnapshotCell<S> = { seq, state };
-    await storage.put(snapshotKey, JSON.stringify(cell));
-    snapshotSeq = seq;
+  /** Run `task` once every earlier write has settled, whether or not it succeeded. */
+  function exclusive<T>(task: () => Promise<T>): Promise<T> {
+    const result = writing.then(task);
+    writing = result.catch(() => undefined);
+    return result;
   }
 
-  async function append(msg: M): Promise<void> {
-    const seq = (await ensureLastSeq()) + 1;
-    lastSeq = seq;
-    // Write the event then advance the meta cell. DO storage is transactional
-    // within a single `alarm`/fetch turn; both puts land together.
-    await storage.put(eventKey(eventPrefix, seq), JSON.stringify(msg));
-    await storage.put(
-      metaKey,
-      JSON.stringify({ lastSeq: seq } satisfies MetaCell),
-    );
-
-    // Count-based retention (Akka `RetentionCriteria.snapshotEvery`). When the
-    // events since the last snapshot reach `snapshotEvery`, checkpoint the
-    // post-this-event state under THIS seq. `latestState` was set by the
-    // save(state) that ran earlier in this same transition, so its state folds
-    // exactly events 1..seq — recording `seq` here is consistent, and the
-    // recovery fold replays only events strictly after `seq`. A snapshot bounds
-    // replay length; it never changes the fold's result (snapshotting.md).
-    if (seq - snapshotSeq >= snapshotEvery && latestState !== null) {
-      await writeSnapshot(seq, latestState);
+  /**
+   * The one private write: the event, the meta cell that counts it and, when one
+   * is due, the snapshot that pairs the same seq with its State, in ONE storage
+   * transaction. Every value is serialized before the transaction opens, so a
+   * value that cannot be serialized refuses before any cell is touched, and a
+   * put that fails undoes the others. The in-memory counters move only after
+   * this resolves.
+   */
+  async function persist(write: {
+    readonly event?: { readonly seq: number; readonly json: string };
+    readonly snapshot: { readonly seq: number; readonly state: S } | null;
+  }): Promise<void> {
+    const cells: [string, string][] = [];
+    if (write.event !== undefined) {
+      cells.push(
+        [eventKey(eventPrefix, write.event.seq), write.event.json],
+        [
+          metaKey,
+          JSON.stringify({ lastSeq: write.event.seq } satisfies MetaCell),
+        ],
+      );
     }
+    if (write.snapshot !== null) {
+      const cell: SnapshotCell<S> = write.snapshot;
+      cells.push([snapshotKey, JSON.stringify(cell)]);
+    }
+    await storage.transaction(async (txn) => {
+      for (const [key, value] of cells) await txn.put(key, value);
+    });
   }
 
   /**
    * Time/tick-based snapshot trigger (#190) — checkpoint NOW, independent of the
    * count-based `snapshotEvery`. See {@link EventSourcedStore.snapshotNow}.
    */
-  async function snapshotNow(): Promise<boolean> {
-    const seq = await ensureLastSeq();
-    // No-op when there is nothing new to checkpoint: a fresh actor with no
-    // applied state yet (`latestState === null`), or no event appended since the
-    // last snapshot (`seq <= snapshotSeq`). Both keep the snapshot's `seq`
-    // and `state` paired on the same boundary the count-based path guarantees.
-    if (latestState === null || seq <= snapshotSeq) return false;
-    await writeSnapshot(seq, latestState);
-    return true;
+  function snapshotNow(): Promise<boolean> {
+    return exclusive(async () => {
+      const seq = await ensureLastSeq();
+      // No-op when there is nothing new to checkpoint: a fresh actor with no
+      // recovered State yet (`latestState === null`), or no event written since
+      // the last snapshot (`seq <= snapshotSeq`). Both keep the snapshot's `seq`
+      // and `state` paired on the same boundary the count-based path guarantees.
+      if (latestState === null || seq <= snapshotSeq) return false;
+      await persist({ snapshot: { seq, state: latestState } });
+      snapshotSeq = seq;
+      return true;
+    });
   }
 
-  return { store, append, snapshotNow, readEvents };
+  return { store, snapshotNow, readEvents };
 }

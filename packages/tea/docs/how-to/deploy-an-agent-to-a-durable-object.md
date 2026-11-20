@@ -114,6 +114,29 @@ Call it from the request or alarm that wakes the object, once the stop below has
 been read: `host.runtime()` is the point where a restored run starts working
 again.
 
+To keep the run's messages as a log as well as its State, give the host the store
+`doEventSourcedStore` builds in place of `doStore`:
+
+```ts
+const wired = agent.toMachine<object>({ toolInterpret });
+const events = doEventSourcedStore(this.ctx.storage, wired.machine, {}, { snapshotEvery: 50 });
+
+const host = createAgentHost({
+  run,
+  buildMachine: () => wired,
+  store: events.store,
+  ctx: {},
+  toSseFrame: () => null,
+});
+```
+
+The store appends each applied message from `save`, before the command it starts
+runs, and takes a snapshot every 50 events, all in one transaction. A run lost
+inside a model call wakes `running` with that call's input already in the log,
+and `host.runtime()` issues the call again. Nothing in your host appends: do not
+write the log from `runtime.observe`, which fires after the commands, and do not
+append a message before you dispatch it, or the run records it twice.
+
 ### Stop: answer the pull before any work resumes
 
 A stop your application recorded has to be read before `host.runtime()` runs,

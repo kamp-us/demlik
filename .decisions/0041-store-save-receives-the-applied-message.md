@@ -32,7 +32,8 @@ A host that fed its message log from `runtime.observe` wrote each Msg after the 
 ## Consequences
 
 - A store written before this change keeps compiling and behaving as it did. It gains nothing until its author reads the second argument.
-- A store that records the Msg turns the engine's save-before-effects order into a write-ahead log.
+- A store that records the Msg turns the engine's save-before-effects order into a write-ahead log. `doEventSourcedStore` does so: it writes the event, its meta cell and any due snapshot in one transaction inside `save`. Its public `append`, and the `runtime.observe` wiring that fed it, are removed in the same change, because keeping both would record a Msg twice.
+- That store is still replay of an applied-message log. Its logs, meta cells and snapshots keep their bytes and read unchanged. A `LoggedStore` keeps admission before reduction and committed State, and is not combined with it.
 - The `Store` contract in ADR 0017 point 1 ("`Store<S>` is untouched") is amended only by this optional argument. Everything else in 0017 stands.
 
 ## Records

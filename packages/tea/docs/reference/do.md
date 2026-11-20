@@ -63,7 +63,7 @@ import { … } from "@demlik/tea/do";
 | [`emptyLedger`](#emptyLedger) | Function | stable | The empty ledger — the fold's starting value (a fresh actor owes nothing). |
 | [`EventLogRange`](#EventLogRange) | Interface | stable | Optional inclusive bounds for EventSourcedStore.readEvents. |
 | [`EventSourcedOptions`](#EventSourcedOptions) | Interface | stable | Options for doEventSourcedStore. |
-| [`EventSourcedStore`](#EventSourcedStore) | Interface | stable | The handle returned by doEventSourcedStore: a `Store<S>` to hand to `run(...)`, plus the append + recovery surface the cooperating DO drives. |
+| [`EventSourcedStore`](#EventSourcedStore) | Interface | stable | The handle returned by doEventSourcedStore: a `Store<S>` to hand to `run(...)`, plus the snapshot and read surface the cooperating DO drives. |
 | [`ExecutedStep`](#ExecutedStep) | Interface | stable | What ExecutedSteps holds for a step that ran. |
 | [`ExecutedSteps`](#ExecutedSteps) | Interface | stable | The hands' memory of the steps they already ran, keyed by `callId`. |
 | [`ExecuteStep`](#ExecuteStep) | Type | stable | Execute one tool call and produce its result (the consumer's hands). |
@@ -914,17 +914,16 @@ interface EventSourcedOptions<S, M> {
 ```ts
 interface EventSourcedStore<S, M> {
   /**
-   * The `Store<S>` to pass as `run(machine, { ctx, store })`. Its `load()`
-   * performs the fold (snapshot + log replay); its `save(state)` is the
-   * count-based snapshot writer. `migrate` forwards to `parse`.
+   * The `Store<S>` to pass as `run(machine, { ctx, store })`, and the only way
+   * the log grows. Its `load()` performs the fold (snapshot + log replay). Its
+   * `save(state, msg)` appends the applied `msg`, advances the meta cell and,
+   * when `snapshotEvery` events have accumulated, writes the snapshot, all in
+   * one storage transaction that settles before the engine starts the
+   * transition's Cmds. A save without a Msg (the boot save, the flush at
+   * `stop()`) appends nothing. A write that fails rejects the save and leaves
+   * the stored bytes as they were. `migrate` forwards to `parse`.
    */
   readonly store: Store<S>;
-  /**
-   * Append one applied `Msg` to the log. Call from `runtime.observe` for every
-   * non-null msg. Resolves once the event is durably written. Triggers a
-   * snapshot when the event count crosses a `snapshotEvery` boundary.
-   */
-  append(msg: M): Promise<void>;
   /**
    * Stream the persisted event log in `seq` order, optionally bounded by an
    * inclusive EventLogRange. This is the PUBLIC read side of the
@@ -954,17 +953,16 @@ interface EventSourcedStore<S, M> {
    * checkpoint the current folded state without injecting filler events purely
    * to advance the counter.
    *
-   * It checkpoints the latest state the substrate handed `save()` at the current
-   * highest sequence, then advances the count-based baseline (`snapshotEvery`
-   * counts afresh from here, so a manual snapshot defers the next automatic one).
+   * It checkpoints the State of the highest event the store has durably
+   * written, at that event's sequence, then advances the count-based baseline
+   * (`snapshotEvery` counts afresh from here, so a manual snapshot defers the
+   * next automatic one).
    *
    * Returns `true` if a snapshot was written, `false` on a no-op: nothing has
    * been applied yet (fresh actor), or no new event exists since the last
-   * snapshot (already current). Like the count-based path, it pairs the held
-   * state with the highest sequence, so the caller MUST invoke it between
-   * settled transitions — after the turn's `append()`s have resolved — never
-   * mid-transition (the same boundary discipline `append`'s own snapshot relies
-   * on). Resolves once the snapshot is durably written.
+   * snapshot (already current). The State and the sequence it pairs move
+   * together, only once an event is durable, so a transition whose save failed
+   * is never checkpointed. Resolves once the snapshot is durably written.
    */
   snapshotNow(): Promise<boolean>;
 }

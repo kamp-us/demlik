@@ -7,7 +7,6 @@ import {
   replay,
   type Store,
 } from "../index";
-import { memoryJournal } from "../internal/journal";
 import { memoryStore } from "../mem";
 import { driveToDone, run } from "../promise";
 import {
@@ -68,6 +67,23 @@ const search = tool(
 type LidMsg =
   | AgentMachineMsg<"act", { act: AgentTurn }, { snippet: string }>
   | WiredToolMsg<typeof search>;
+
+/**
+ * A Store that keeps no State and remembers each Msg the engine saved a State
+ * for, in order: the applied-message log a durable host writes from `save`.
+ * Each Msg is kept as the JSON a log would hold.
+ */
+function recordedMsgs() {
+  const msgs: LidMsg[] = [];
+  const store: Store<DefinedAgentState<typeof search>> = {
+    load: async () => null,
+    save: async (_state, msg) => {
+      if (msg !== undefined) msgs.push(JSON.parse(JSON.stringify(msg)));
+    },
+    migrate: () => null,
+  };
+  return { store, msgs };
+}
 
 const INSTRUCTIONS = "You answer with one sentence, citing a search.";
 const INPUT = "What is TEA?";
@@ -502,25 +518,23 @@ describe("instructions live in the durable Model (ADR 0004)", () => {
     });
     const { machine, interpret, subscribe } = agent.machine(INPUT);
 
-    // Record every applied Msg to a journal, the way a durable host would.
-    const journal = memoryJournal();
-    const handle = run(machine, { ctx: { kb }, interpret, subscribe });
-    const runtime = await handle.ready;
-    const off = runtime.observe((msg) => {
-      void journal.append("run-1", [JSON.stringify(msg)]);
+    // Record every applied Msg through the store, the way a durable host would.
+    const { store, msgs } = recordedMsgs();
+    const handle = run(machine, {
+      ctx: { kb },
+      interpret,
+      subscribe,
+      store,
     });
     await driveToDone(
       handle,
       { _tag: "agent_start", runId: "run-1", at: 0 },
       (s) => s.run.phase === "done",
     );
-    off();
 
-    // Replay the journal through the machine, pure: the first `resilient_run`
-    // Cmd is the first model call, and its payload is the prompt that ran.
-    const source = await journal.read("run-1", 0);
-    if (source._tag !== "read") throw new Error(source.message);
-    const msgs = source.entries.map((e): LidMsg => JSON.parse(e.record));
+    // Replay the recorded Msgs through the machine, pure: the first
+    // `resilient_run` Cmd is the first model call, and its payload is the
+    // prompt that ran.
     const { state, cmds } = replay(machine, { msgs, ctx: { kb } });
     const first = cmds.find(
       (c) => c._tag === "resilient_run",
@@ -1043,25 +1057,22 @@ describe("onChunk — the streaming model port (#123)", () => {
       instructions: INSTRUCTIONS,
     });
     const { machine, interpret, subscribe } = agent.machine(INPUT);
-    const journal = memoryJournal();
-    const handle = run(machine, { ctx: { kb }, interpret, subscribe });
-    const runtime = await handle.ready;
-    const off = runtime.observe((msg) => {
-      void journal.append("run-1", [JSON.stringify(msg)]);
+    const { store, msgs } = recordedMsgs();
+    const handle = run(machine, {
+      ctx: { kb },
+      interpret,
+      subscribe,
+      store,
     });
     const live = await driveToDone(
       handle,
       { _tag: "agent_start", runId: "run-1", at: 0 },
       (s) => s.run.phase === "done",
     );
-    off();
 
     // Re-fold the recorded Msgs, purely. The replay makes no model call, so it
-    // produces no chunk — and it does not need one, because the journal records
+    // produces no chunk — and it does not need one, because the log records
     // the settled turns and a chunk was never a Msg to record.
-    const source = await journal.read("run-1", 0);
-    if (source._tag !== "read") throw new Error(source.message);
-    const msgs = source.entries.map((e): LidMsg => JSON.parse(e.record));
     const { state } = replay(machine, { msgs, ctx: { kb } });
     expect(state.conversation).toEqual(live.conversation);
     expect(state.output).toEqual(live.output);
@@ -1473,26 +1484,23 @@ describe("defineAgent(...).with — the one wrap point over the built machine", 
     }).with({ interpret: { search: tracing(trace, "search") } });
 
     const { machine, interpret, subscribe } = agent.machine(INPUT);
-    const journal = memoryJournal();
-    const handle = run(machine, { ctx: { kb }, interpret, subscribe });
-    const runtime = await handle.ready;
-    const off = runtime.observe((msg) => {
-      void journal.append("run-1", [JSON.stringify(msg)]);
+    const { store, msgs } = recordedMsgs();
+    const handle = run(machine, {
+      ctx: { kb },
+      interpret,
+      subscribe,
+      store,
     });
     const live = await driveToDone(
       handle,
       { _tag: "agent_start", runId: "run-1", at: 0 },
       (s) => s.run.phase === "done",
     );
-    off();
 
     expect(trace).toEqual(["search"]);
     expect(live.run.phase).toBe("done");
-    // The wrapper returned `next`'s Msg, so the journal holds the tool's own
+    // The wrapper returned `next`'s Msg, so the log holds the tool's own
     // `search_ok` and re-folding it purely lands on the same Model.
-    const source = await journal.read("run-1", 0);
-    if (source._tag !== "read") throw new Error(source.message);
-    const msgs = source.entries.map((e): LidMsg => JSON.parse(e.record));
     expect(msgs.map((m) => m._tag)).toContain("search_ok");
     const { state } = replay(machine, { msgs, ctx: { kb } });
     expect(state.conversation).toEqual(live.conversation);

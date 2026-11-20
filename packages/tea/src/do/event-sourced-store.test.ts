@@ -14,7 +14,13 @@
 
 import fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
-import { defineMachine, type Reducer, replay } from "../index";
+import { fakeDoStorage as fakeStorage } from "../__fixtures__/do-storage";
+import {
+  defineMachine,
+  type Reducer,
+  replay,
+  type Transitions,
+} from "../index";
 import { arbMsg, arbMsgSequence, type MsgArbitraryTable } from "../pbt";
 import { run } from "../promise";
 import { doEventSourcedStore } from "./event-sourced-store";
@@ -86,37 +92,9 @@ it("restores snapshot plus log before calling active init once at runtime boot",
   }
 });
 
-// ── In-memory `DurableObjectStorage` fake. ──────────────────────────────────
-// Backs the three methods the store touches (get/put/list). The backing Map is
-// returned so a test can build a SECOND store over the SAME bytes — that is the
+// The `DurableObjectStorage` fake is `src/__fixtures__/do-storage.ts`. Its
+// backing Map is the retained storage: a SECOND store over the SAME bytes is the
 // eviction/rehydrate simulation (the isolate dies, the storage survives).
-
-function fakeStorage(backing: Map<string, string> = new Map()) {
-  const storage = {
-    async get<T = unknown>(key: string): Promise<T | undefined> {
-      return backing.get(key) as T | undefined;
-    },
-    async put<T>(key: string, value: T): Promise<void> {
-      backing.set(key, value as unknown as string);
-    },
-    async list<T = unknown>(options?: {
-      prefix?: string;
-    }): Promise<Map<string, T>> {
-      const prefix = options?.prefix ?? "";
-      const out = new Map<string, T>();
-      // Real DO list() returns keys in lexicographic order.
-      for (const key of [...backing.keys()].sort()) {
-        if (key.startsWith(prefix)) out.set(key, backing.get(key) as T);
-      }
-      return out;
-    },
-  };
-  // Only get/put/list are exercised; cast through unknown for the rest.
-  return {
-    backing,
-    storage: storage as unknown as DurableObjectStorage,
-  };
-}
 
 // Drive a fresh runtime with an event-sourced store over `backing`, dispatch
 // every msg, return the live final state. `onReady` counts are captured.
@@ -134,18 +112,8 @@ async function liveRun(
     { snapshotEvery, onReady: () => readyCalls++ },
   );
   const runtime = await run(counter(), { ctx, store: es.store }).ready;
-  // Append every applied (non-null) msg to the log — the documented wiring.
-  // The runtime's observe is sync (it can't await us), so we collect the
-  // append promises and await them after dispatch to make the test
-  // deterministic. In production the DO turn keeps the isolate alive until
-  // these settle; here we make that explicit.
-  const appends: Promise<void>[] = [];
-  runtime.observe((msg) => {
-    if (msg !== null) appends.push(es.append(msg));
-  });
-  await runtime.ready;
+  // The store appends each applied msg from `save`, before the dispatch settles.
   for (const m of msgs) await runtime.dispatch(m);
-  await Promise.all(appends);
   const state = runtime.getState();
   await runtime.stop();
   return { state, readyCalls };
@@ -196,19 +164,10 @@ async function liveRunTickSnapshots(
     { snapshotEvery: 1_000_000 },
   );
   const runtime = await run(counter(), { ctx, store: es.store }).ready;
-  const appends: Promise<void>[] = [];
-  runtime.observe((msg) => {
-    if (msg !== null) appends.push(es.append(msg));
-  });
-  await runtime.ready;
   let snapshotsWritten = 0;
   let applied = 0;
   for (const m of msgs) {
     await runtime.dispatch(m);
-    // Settle THIS turn's append before snapshotting — snapshotNow() pairs the
-    // held state with the highest seq, so it must run between settled
-    // transitions (the documented contract).
-    await Promise.all(appends.splice(0));
     applied++;
     if (applied % tickEvery === 0 && (await es.snapshotNow())) {
       snapshotsWritten++;
@@ -650,11 +609,6 @@ describe("doEventSourcedStore — time/tick-based snapshot trigger (snapshotNow)
       { snapshotEvery: 1_000_000 },
     );
     const runtime = await run(counter(), { ctx, store: es.store }).ready;
-    const appends: Promise<void>[] = [];
-    runtime.observe((msg) => {
-      if (msg !== null) appends.push(es.append(msg));
-    });
-    await runtime.ready;
 
     // Fresh actor: nothing applied → no-op, no snapshot cell written.
     expect(await es.snapshotNow()).toBe(false);
@@ -662,7 +616,6 @@ describe("doEventSourcedStore — time/tick-based snapshot trigger (snapshotNow)
 
     // Apply one event, then snapshotNow() writes at seq 1.
     await runtime.dispatch({ _tag: "inc", by: 5 });
-    await Promise.all(appends.splice(0));
     expect(await es.snapshotNow()).toBe(true);
     const snap = JSON.parse(backing.get("@@es/snapshot") as string) as {
       seq: number;
@@ -688,16 +641,10 @@ describe("doEventSourcedStore — time/tick-based snapshot trigger (snapshotNow)
       { snapshotEvery: 5 },
     );
     const runtime = await run(counter(), { ctx, store: es.store }).ready;
-    const appends: Promise<void>[] = [];
-    runtime.observe((msg) => {
-      if (msg !== null) appends.push(es.append(msg));
-    });
-    await runtime.ready;
 
     const dispatch = async (n: number) => {
       for (let i = 0; i < n; i++) {
         await runtime.dispatch({ _tag: "inc", by: 1 });
-        await Promise.all(appends.splice(0));
       }
     };
 
@@ -730,5 +677,434 @@ describe("doEventSourcedStore — time/tick-based snapshot trigger (snapshotNow)
     expect(rebuilt.state?.count).toBe(8);
 
     await runtime.stop();
+  });
+});
+
+// ── The log is write-ahead: `save(state, msg)` writes before the Cmds run. ──
+// The engine awaits `store.save` before it starts a transition's Cmds, so the
+// event, its meta cell and any snapshot are in storage when the first handler
+// is entered, and nothing but the engine feeds the log.
+
+type WorkCmd = { readonly _tag: "act"; readonly by: number };
+
+// The counter, with an `act` Cmd on every `inc`, so a test can look at storage
+// from inside the handler the Msg started.
+function worker() {
+  return defineMachine({
+    types: {
+      model: {} as State,
+      msg: {} as Msg,
+      cmd: {} as WorkCmd,
+      ctx: {} as Record<string, never>,
+    },
+    init: (loaded) => [loaded ?? { _tag: "counting", count: 0, log: [] }, []],
+    update: {
+      ...update,
+      inc: (s, m) => [
+        { ...s, count: s.count + m.by },
+        [{ _tag: "act", by: m.by }],
+      ],
+    },
+  });
+}
+
+const EVENT_PREFIX = "@@es/evt/";
+const rowKey = (seq: number, prefix = EVENT_PREFIX) =>
+  prefix + String(seq).padStart(16, "0");
+const eventRows = (backing: Map<string, string>, prefix = EVENT_PREFIX) =>
+  [...backing.keys()].filter((key) => key.startsWith(prefix));
+const snapshotCell = (backing: Map<string, string>, key = "@@es/snapshot") =>
+  JSON.parse(backing.get(key) ?? "null") as {
+    seq: number;
+    state: State;
+  } | null;
+
+describe("doEventSourcedStore — write-ahead log", () => {
+  it("has the Msg, its meta cell and its snapshot in storage when the Cmd handler starts", async () => {
+    const backing = new Map<string, string>();
+    const { storage } = fakeStorage(backing);
+    const es = doEventSourcedStore(storage, worker(), ctx, {
+      snapshotEvery: 1,
+    });
+    const atEntry: {
+      rows: string[];
+      meta: string | undefined;
+      snapshot: ReturnType<typeof snapshotCell>;
+    }[] = [];
+    const rt = await run(worker(), {
+      ctx,
+      store: es.store,
+      interpret: {
+        act: async () => {
+          atEntry.push({
+            rows: eventRows(backing).map((key) => backing.get(key) as string),
+            meta: backing.get("@@es/meta"),
+            snapshot: snapshotCell(backing),
+          });
+        },
+      },
+    }).ready;
+
+    await rt.dispatch({ _tag: "inc", by: 2 });
+    await rt.dispatch({ _tag: "inc", by: 3 });
+    await rt.stop();
+
+    expect(atEntry).toEqual([
+      {
+        rows: ['{"_tag":"inc","by":2}'],
+        meta: '{"lastSeq":1}',
+        snapshot: { seq: 1, state: { _tag: "counting", count: 2, log: [] } },
+      },
+      {
+        rows: ['{"_tag":"inc","by":2}', '{"_tag":"inc","by":3}'],
+        meta: '{"lastSeq":2}',
+        snapshot: { seq: 2, state: { _tag: "counting", count: 5, log: [] } },
+      },
+    ]);
+  });
+
+  it("finds a Msg whose Cmd never returned in the log of the next activation", async () => {
+    const backing = new Map<string, string>();
+    const es = doEventSourcedStore(fakeStorage(backing).storage, worker(), ctx);
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const rt = await run(worker(), {
+      ctx,
+      store: es.store,
+      onError: () => {},
+      disposeTimeoutMs: 0,
+      interpret: {
+        act: () => {
+          entered();
+          return new Promise<never>(() => {});
+        },
+      },
+    }).ready;
+    void rt.dispatch({ _tag: "inc", by: 7 }).catch(() => {});
+    await started;
+
+    // The activation is lost here, inside the handler: only the bytes remain.
+    const next = await rehydrate(new Map(backing), 100);
+    expect(next.state).toEqual({ _tag: "counting", count: 7, log: [] });
+    await rt.stop();
+  });
+
+  it.each([
+    [1, 5],
+    [2, 4],
+    [100, null],
+  ])("snapshotEvery %i leaves the snapshot at seq %s after five events, and a new activation rebuilds the live State", async (snapshotEvery, snapshotAt) => {
+    const backing = new Map<string, string>();
+    const msgs: Msg[] = [1, 2, 3, 4, 5].map((by) => ({ _tag: "inc", by }));
+    const live = await liveRun(backing, msgs, snapshotEvery);
+
+    expect(snapshotCell(backing)?.seq ?? null).toBe(snapshotAt);
+    expect(eventRows(backing)).toHaveLength(5);
+    expect((await rehydrate(backing, snapshotEvery)).state).toEqual(live.state);
+  });
+
+  it("numbers three concurrent distinct dispatches 1, 2 and 3, in the order they were queued", async () => {
+    const backing = new Map<string, string>();
+    const { storage } = fakeStorage(backing);
+    const es = doEventSourcedStore(storage, counter(), ctx);
+    const rt = await run(counter(), { ctx, store: es.store }).ready;
+    const msgs: Msg[] = [
+      { _tag: "inc", by: 1 },
+      { _tag: "note", text: "b" },
+      { _tag: "dec", by: 4 },
+    ];
+
+    await Promise.all(msgs.map((m) => rt.dispatch(m)));
+    await rt.dispatch({ _tag: "reset" });
+    await rt.stop();
+
+    expect(await collect(es.readEvents())).toEqual([
+      { seq: 1, event: msgs[0] },
+      { seq: 2, event: msgs[1] },
+      { seq: 3, event: msgs[2] },
+      { seq: 4, event: { _tag: "reset" } },
+    ]);
+    expect(backing.get("@@es/meta")).toBe('{"lastSeq":4}');
+  });
+
+  it("writes nothing at boot or at stop, however many activations come and go", async () => {
+    const backing = new Map<string, string>();
+    const idle = await run(counter(), {
+      ctx,
+      store: doEventSourcedStore(fakeStorage(backing).storage, counter(), ctx)
+        .store,
+    }).ready;
+    await idle.stop();
+    expect([...backing]).toEqual([]);
+
+    await liveRun(backing, [{ _tag: "inc", by: 4 }], 100);
+    const retained = new Map(backing);
+    for (let activation = 0; activation < 3; activation++) {
+      const es = doEventSourcedStore(
+        fakeStorage(backing).storage,
+        counter(),
+        ctx,
+      );
+      const rt = await run(counter(), { ctx, store: es.store }).ready;
+      await rt.stop();
+    }
+    expect(backing).toEqual(retained);
+  });
+
+  it("logs an applied Msg that leaves the State unchanged, and never one the State refused", async () => {
+    type Gate = { readonly _tag: "closed" } | { readonly _tag: "open" };
+    type GateMsg = { readonly _tag: "open" } | { readonly _tag: "close" };
+    const transitions: Transitions<Gate, GateMsg, never> = {
+      closed: { open: () => [{ _tag: "open" }, []] },
+      open: { close: () => [{ _tag: "closed" }, []], open: (s) => [s, []] },
+    };
+    const gate = defineMachine({
+      types: { model: {} as Gate, msg: {} as GateMsg },
+      init: (loaded) => [loaded ?? { _tag: "closed" }, []],
+      update: transitions,
+    });
+    const backing = new Map<string, string>();
+    const es = doEventSourcedStore<Gate, GateMsg, Record<string, never>>(
+      fakeStorage(backing).storage,
+      gate,
+      ctx,
+    );
+    const rt = await run(gate, { ctx, store: es.store }).ready;
+
+    await expect(rt.dispatch({ _tag: "close" })).rejects.toThrow();
+    await rt.dispatch({ _tag: "open" });
+    await rt.dispatch({ _tag: "open" });
+    await expect(rt.dispatch({ _tag: "close" })).resolves.toBeUndefined();
+    await expect(rt.dispatch({ _tag: "close" })).rejects.toThrow();
+    await rt.stop();
+
+    expect(
+      (await collect(es.readEvents())).map((row) => row.event._tag),
+    ).toEqual(["open", "open", "close"]);
+  });
+});
+
+// ── A write that fails leaves the bytes it started from. ────────────────────
+
+describe("doEventSourcedStore — a refused write", () => {
+  const unchanged = async () => {
+    const backing = new Map<string, string>();
+    const faults = fakeStorage(backing);
+    const es = doEventSourcedStore(faults.storage, worker(), ctx, {
+      snapshotEvery: 1,
+    });
+    const acted: number[] = [];
+    const rt = await run(worker(), {
+      ctx,
+      store: es.store,
+      interpret: { act: async (cmd) => void acted.push(cmd.by) },
+    }).ready;
+    await rt.dispatch({ _tag: "inc", by: 1 });
+    return { backing, faults, es, rt, acted, before: new Map(backing) };
+  };
+
+  it.each([
+    ["event", (key: string) => key.startsWith(EVENT_PREFIX)],
+    ["meta", (key: string) => key === "@@es/meta"],
+    ["snapshot", (key: string) => key === "@@es/snapshot"],
+  ])("a refused %s write rejects the save, runs no Cmd, rolls back, and a new activation recovers from the bytes it left", async (_cell, refuses) => {
+    const { backing, faults, es, rt, acted, before } = await unchanged();
+    faults.failPut(refuses);
+
+    await expect(rt.dispatch({ _tag: "inc", by: 2 })).rejects.toThrow(
+      "storage refused the write",
+    );
+
+    expect(backing).toEqual(before);
+    expect(acted).toEqual([1]);
+
+    faults.healPut();
+    const next = await rehydrate(new Map(backing), 1);
+    expect(next.state).toEqual({ _tag: "counting", count: 1, log: [] });
+    expect((await collect(es.readEvents())).map((row) => row.seq)).toEqual([1]);
+
+    // The failed write did not use up its seq: the next event takes it.
+    await es.store.save(
+      { _tag: "counting", count: 6, log: [] },
+      { _tag: "inc", by: 5 },
+    );
+    expect((await collect(es.readEvents())).map((row) => row.seq)).toEqual([
+      1, 2,
+    ]);
+    await rt.stop();
+  });
+
+  it("checkpoints the State of the last event that was written, never a transition whose write failed", async () => {
+    const backing = new Map<string, string>();
+    const faults = fakeStorage(backing);
+    const es = doEventSourcedStore(faults.storage, counter(), ctx, {
+      snapshotEvery: 1_000_000,
+    });
+    const rt = await run(counter(), { ctx, store: es.store }).ready;
+    await rt.dispatch({ _tag: "inc", by: 1 });
+    await rt.dispatch({ _tag: "inc", by: 2 });
+
+    faults.failPut((key) => key.startsWith(EVENT_PREFIX));
+    await expect(rt.dispatch({ _tag: "inc", by: 4 })).rejects.toThrow();
+    faults.healPut();
+
+    expect(await es.snapshotNow()).toBe(true);
+    expect(snapshotCell(backing)).toEqual({
+      seq: 2,
+      state: { _tag: "counting", count: 3, log: [] },
+    });
+    await rt.stop();
+    expect(snapshotCell(backing)?.seq).toBe(2);
+    expect((await rehydrate(backing, 100)).state).toEqual({
+      _tag: "counting",
+      count: 3,
+      log: [],
+    });
+  });
+});
+
+// ── Logs written before the save carried a Msg still read, unchanged. ───────
+// The cells below are the bytes the observer-fed store wrote, typed out
+// literally: raw JSON per event under a sixteen-digit key, `{lastSeq}` meta and
+// a `{seq,state}` snapshot. They are seeded directly, never through the writer.
+
+describe("doEventSourcedStore — logs written by the observer-fed store", () => {
+  const oldRows = [
+    '{"_tag":"inc","by":1}',
+    '{"_tag":"inc","by":2}',
+    '{"_tag":"note","text":"x"}',
+    '{"_tag":"inc","by":5}',
+  ];
+  const seeded = (cells: Record<string, string>) =>
+    new Map<string, string>(Object.entries(cells));
+  const fullLog = () =>
+    seeded({
+      ...Object.fromEntries(oldRows.map((row, i) => [rowKey(i + 1), row])),
+      "@@es/meta": '{"lastSeq":4}',
+    });
+  const folded: State = { _tag: "counting", count: 8, log: ["x"] };
+
+  it("reads a full log with no snapshot, rewrites nothing, and numbers the next event after the old ones", async () => {
+    const backing = fullLog();
+    const old = new Map(backing);
+    const es = doEventSourcedStore(
+      fakeStorage(backing).storage,
+      counter(),
+      ctx,
+    );
+
+    expect(await es.store.load()).toEqual(folded);
+    expect(backing).toEqual(old);
+
+    const rt = await run(counter(), { ctx, store: es.store }).ready;
+    await rt.dispatch({ _tag: "inc", by: 10 });
+    await rt.stop();
+
+    for (const [key, bytes] of old) {
+      if (key !== "@@es/meta") expect(backing.get(key)).toBe(bytes);
+    }
+    expect(backing.get(rowKey(5))).toBe('{"_tag":"inc","by":10}');
+    expect(backing.get("@@es/meta")).toBe('{"lastSeq":5}');
+    expect((await rehydrate(backing, 100)).state?.count).toBe(18);
+  });
+
+  it("reads a snapshot and its tail, rewrites nothing, and keeps counting from the meta cell", async () => {
+    const backing = fullLog();
+    backing.set(
+      "@@es/snapshot",
+      '{"seq":2,"state":{"_tag":"counting","count":3,"log":[]}}',
+    );
+    const old = new Map(backing);
+    const es = doEventSourcedStore(
+      fakeStorage(backing).storage,
+      counter(),
+      ctx,
+      { snapshotEvery: 3 },
+    );
+
+    expect(await es.store.load()).toEqual(folded);
+    expect(backing).toEqual(old);
+    expect((await collect(es.readEvents())).map((row) => row.seq)).toEqual([
+      1, 2, 3, 4,
+    ]);
+
+    const rt = await run(counter(), { ctx, store: es.store }).ready;
+    await rt.dispatch({ _tag: "inc", by: 1 });
+    await rt.stop();
+
+    expect(backing.get(rowKey(5))).toBe('{"_tag":"inc","by":1}');
+    expect(snapshotCell(backing)).toEqual({
+      seq: 5,
+      state: { _tag: "counting", count: 9, log: ["x"] },
+    });
+  });
+
+  it("reads a log under custom keys and a host parseEvent that renames the old tag", async () => {
+    const keys = {
+      snapshot: "run-a/snapshot",
+      meta: "run-a/meta",
+      eventPrefix: "run-a/event/",
+    };
+    const backing = seeded({
+      [rowKey(1, keys.eventPrefix)]: '{"type":"inc","by":2}',
+      [rowKey(2, keys.eventPrefix)]: '{"_tag":"inc","by":3}',
+      [keys.meta]: '{"lastSeq":2}',
+    });
+    const old = new Map(backing);
+    const es = doEventSourcedStore<State, Msg, typeof ctx>(
+      fakeStorage(backing).storage,
+      counter(),
+      ctx,
+      {
+        keys,
+        parseEvent: (raw) => {
+          const { type, ...rest } = raw as { type?: unknown };
+          const row = type === undefined ? rest : { _tag: type, ...rest };
+          return typeof (row as { _tag?: unknown })._tag === "string"
+            ? (row as Msg)
+            : null;
+        },
+      },
+    );
+
+    expect(await es.store.load()).toEqual({
+      _tag: "counting",
+      count: 5,
+      log: [],
+    });
+    expect(backing).toEqual(old);
+
+    const rt = await run(counter(), { ctx, store: es.store }).ready;
+    await rt.dispatch({ _tag: "inc", by: 1 });
+    await rt.stop();
+
+    expect(backing.get(rowKey(3, keys.eventPrefix))).toBe(
+      '{"_tag":"inc","by":1}',
+    );
+    expect(backing.get(keys.meta)).toBe('{"lastSeq":3}');
+    expect(eventRows(backing)).toEqual([]);
+  });
+
+  it("decodes a log that recorded the same start twice exactly as it was written", async () => {
+    const start = '{"_tag":"agent_start","runId":"run","at":0}';
+    const backing = seeded({
+      [rowKey(1)]: start,
+      [rowKey(2)]: start,
+      "@@es/meta": '{"lastSeq":2}',
+    });
+    const old = new Map(backing);
+    const es = doEventSourcedStore(
+      fakeStorage(backing).storage,
+      counter(),
+      ctx,
+    );
+
+    expect(await collect(es.readEvents())).toEqual([
+      { seq: 1, event: { _tag: "agent_start", runId: "run", at: 0 } },
+      { seq: 2, event: { _tag: "agent_start", runId: "run", at: 0 } },
+    ]);
+    expect(backing).toEqual(old);
   });
 });

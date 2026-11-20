@@ -55,8 +55,9 @@
  * Cross to saga when you want the type system to enforce that every step can
  * be undone; stay here when the transaction includes steps that can't be.
  *
- * This module is the pure reducer only — like `../raft/index.ts` is the pure
- * Raft reducer with the DO grain deferred to its `./do` sibling (here #126).
+ * This module is the pure reducer only. A host that runs one on a Durable
+ * Object gives `run` the store `doEventSourcedStore` builds, whose `save` records
+ * each applied Msg before its effects.
  *
  * Generic over three opaque payloads, like raft's command generic: the activity
  * descriptor `A` (what a step asks to do — the consumer's interpret cell knows
@@ -127,8 +128,8 @@ export interface WorkflowStep<A> {
  * with nothing to do reaches `completed` only by carrying a final result, and an
  * empty sequence produces none, so "≥ 1 step" is a precondition. Encoding it as
  * `readonly [WorkflowStep<A>, ...WorkflowStep<A>[]]` makes the empty case a
- * COMPILE error at every construction boundary (`init`, `foldWorkflow`,
- * `workflowGrain`) — parse-don't-validate, so the reducer never needs a runtime
+ * COMPILE error at every construction boundary (`init`, `foldWorkflow`) —
+ * parse-don't-validate, so the reducer never needs a runtime
  * throw to reject a resultless workflow.
  */
 export type WorkflowSteps<A> = readonly [WorkflowStep<A>, ...WorkflowStep<A>[]];
@@ -1102,7 +1103,7 @@ export {
   emptyLedger,
 };
 // The ONE WorkflowMsg → verb routing table, exported because a consumer driving
-// a workflow from its own host — rather than through `./do`'s grain — otherwise
-// has to re-derive the same four-way mapping by hand, and a fifth Msg variant
-// would then break it silently instead of at compile time.
+// a workflow from its own host otherwise has to re-derive the same four-way
+// mapping by hand, and a fifth Msg variant would then break it silently instead
+// of at compile time.
 export { routeWorkflowMsg } from "./route";

@@ -70,8 +70,23 @@ snapshot. With no snapshot it starts from fresh init. Commands produced during
 the fold are data; their handlers are not executed.
 Pending work still needs the resume path after recovery.
 
-This mode requires applied-message append wiring as well as the store. Changing
-the store alone does not record the message log.
+The store writes the log itself. Each applied message reaches `Store.save` with
+its new State, and the store appends the message, advances its counter and takes
+a due snapshot in one transaction before `save` resolves. The engine saves before
+it starts that transition's commands, so the message is durable before any effect
+runs: a run lost in the middle of a model call finds that call's input in the
+log, and its wake sees the run `running`, not `idle`. Hand `run` the store and
+nothing else. Do not feed the log from `runtime.observe`, which fires after the
+commands, and do not append a message by hand before you dispatch it, or it is
+recorded twice. The boot save and the flush at `stop()` carry no message and
+write no row. A log written by the earlier observer-fed store reads unchanged.
+
+This is replay of an applied-message log. A store with a durable log
+(`logged: true`,
+[ADR 0038](https://github.com/kamp-us/demlik/blob/main/.decisions/0038-engine-owned-durable-log.md))
+works the other way: it admits a message before the reducer runs, keeps committed
+State and the deliveries still owed, and on a wake never runs a committed reducer
+again. Give a run one or the other, not both.
 
 [`replay` and `replayTrace`](../how-to/replay-in-a-test.md) also fold messages
 without effects. They support tests and debugging; normal snapshot restore does
