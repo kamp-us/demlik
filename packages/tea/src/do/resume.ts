@@ -70,6 +70,10 @@ export async function bootResume<
  * barrel: `bootResume` waits for `finished`, and `createAgentHost` does not, so
  * a host can hand out the run's handle while the re-fired work is still waiting
  * on a tool the driver has not answered.
+ *
+ * A `signal` that is aborted when the boot gate opens ends the call with the
+ * signal's reason and dispatches nothing: the host stopped this runtime while it
+ * was still loading, and a Msg into it would only be refused.
  */
 export async function beginResume<
   S,
@@ -79,8 +83,10 @@ export async function beginResume<
   booting: RunHandle<S, M, E>,
   port: ResumePort<S, M>,
   now: () => number = Date.now,
+  signal?: AbortSignal,
 ): Promise<{ readonly finished: Promise<void> } | null> {
   const runtime = await booting.ready;
+  signal?.throwIfAborted();
   if (!port.isResumable(runtime.getState())) return null;
   return { finished: runtime.dispatch(port.resumeMsg(now())) };
 }

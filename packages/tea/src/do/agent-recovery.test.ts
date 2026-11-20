@@ -42,8 +42,10 @@ import {
   type ToolCall,
 } from "../agent/index";
 import type { Cmd, Interpret, Migrated, Store, Wired } from "../index";
+import { RuntimeStoppedError } from "../internal/engine/loop";
 import type { DeadlinesSub } from "../internal/resilience/deadline";
 import { run } from "../promise";
+import { DispatchDiscardedError } from "../runtime-types";
 import { createAgentHost } from "./agent-host";
 import { doStore } from "./index";
 import {
@@ -827,16 +829,22 @@ describe.each([
   });
 });
 
+type Booting = {
+  dispatch(msg: AgentMachineMsg<Purpose, Outputs, string>): Promise<void>;
+  stop(): Promise<void>;
+};
+
 // A host whose every report reaches `onError`, and which tells the test the
-// moment each runtime has booted.
+// moment each runtime has booted, and each time `run` is about to hand one to
+// the host.
 function hostReporting<C extends Cmd>(
   wired: AgentWired<C>,
   store: Store<S>,
   onError: (error: unknown, context: { readonly phase: string }) => void,
-  booted: (handle: {
-    dispatch(msg: AgentMachineMsg<Purpose, Outputs, string>): Promise<void>;
-  }) => void,
+  booted: (handle: Booting) => void,
+  built: (handle: Booting, index: number) => void = noop,
 ) {
+  let builds = 0;
   return createAgentHost<
     Stage,
     Purpose,
@@ -850,6 +858,7 @@ function hostReporting<C extends Cmd>(
     run: (machine, options) => {
       const booting = run(machine, { ...options, disposeTimeoutMs: 0 });
       void booting.ready.then(() => booted(booting));
+      built(booting, builds++);
       return booting;
     },
     onError,
@@ -930,71 +939,126 @@ describe("a restored run whose agent_boot fails to save", () => {
   });
 });
 
-// What the detached `agent_boot` chain tells `onError`, decided by the error it
-// rejects with and never by whether a `reset()` is in flight. `held` parks the
-// first save until the test settles it. `ahead` dispatches a second `agent_boot`
-// before the host's own, so the host's is still queued when `stop()` gives up on
-// it and is refused at its turn.
-interface BootChainRow {
-  readonly save: "fails" | "held" | "passes";
+// Where `reset()` can arrive in a build's life, and what the build then owes.
+// Each row holds the build at its point with a controllable store: `load` parks
+// the cold load, `save` parks the first save after boot (or fails it), and
+// `ahead` queues a second `agent_boot` before the host's own. `ends` is how the
+// first runtime is ended while held; `release` is what unparks it afterwards.
+interface LifecycleRow {
+  readonly load: "held" | "free";
+  readonly save: "fails" | "held" | "free";
   readonly ahead: boolean;
-  readonly reset: boolean;
-  readonly reports: readonly "boot"[];
+  readonly ends: "reset inside run" | "reset" | "stop" | "never";
+  readonly first: "rejects" | "resolves";
+  readonly dispatches: number;
+  readonly reported: "nothing" | "the save failure" | "RuntimeStoppedError";
 }
 
-const BOOT_CHAIN = {
-  "an ordinary failure, no reset in flight": {
-    save: "fails",
+const LIFECYCLE = {
+  "reset before run() returns the handle": {
+    load: "free",
+    save: "free",
     ahead: false,
-    reset: false,
-    reports: ["boot"],
+    ends: "reset inside run",
+    first: "rejects",
+    dispatches: 0,
+    reported: "nothing",
   },
-  "an ordinary failure while reset() is in flight": {
-    save: "held",
+  "reset while the cold load is pending": {
+    load: "held",
+    save: "free",
     ahead: false,
-    reset: true,
-    reports: ["boot"],
+    ends: "reset",
+    first: "rejects",
+    dispatches: 0,
+    reported: "nothing",
   },
-  "the teardown stop() rejects a pending dispatch with": {
+  "reset after ready, with the chain queued behind a pending save": {
+    load: "free",
     save: "held",
     ahead: true,
-    reset: true,
-    reports: [],
+    ends: "reset",
+    first: "resolves",
+    dispatches: 2,
+    reported: "nothing",
   },
-  "no rejection at all": {
-    save: "passes",
+  "reset after ready, and the pending save then rejects": {
+    load: "free",
+    save: "held",
     ahead: false,
-    reset: false,
-    reports: [],
+    ends: "reset",
+    first: "resolves",
+    dispatches: 1,
+    reported: "the save failure",
   },
-} as const satisfies Record<string, BootChainRow>;
+  "no reset, and the save rejects": {
+    load: "free",
+    save: "fails",
+    ahead: false,
+    ends: "never",
+    first: "resolves",
+    dispatches: 1,
+    reported: "the save failure",
+  },
+  "no reset, and the runtime is stopped under the boot": {
+    load: "held",
+    save: "free",
+    ahead: false,
+    ends: "stop",
+    first: "resolves",
+    dispatches: 1,
+    reported: "RuntimeStoppedError",
+  },
+  "no reset, and the chain resolves": {
+    load: "free",
+    save: "free",
+    ahead: false,
+    ends: "never",
+    first: "resolves",
+    dispatches: 1,
+    reported: "nothing",
+  },
+} as const satisfies Record<string, LifecycleRow>;
 
 describe.each(
-  Object.entries(BOOT_CHAIN),
-)("the detached agent_boot chain: %s", (_name, row: BootChainRow) => {
+  Object.entries(LIFECYCLE),
+)("a build against reset: %s", (_name, row: LifecycleRow) => {
   it.each(
     REPEATS,
-  )("reports exactly the boot failures its error kind owes (repeat %i)", async () => {
+  )("reports, dispatches and boots again as the table says (repeat %i)", async () => {
     const { checkpoint, completed } = await lostDuring("model");
     const failure = new Error("save failed on agent_boot");
     const reports: Array<{ error: unknown; phase: string }> = [];
-    let rejectHeld: (error: Error) => void = noop;
-    const held = new Promise<void>((_resolve, reject) => {
-      rejectHeld = reject;
+    const dispatches: number[] = [];
+    const stops: number[] = [];
+    const handles: Booting[] = [];
+    const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 5));
+    let releaseLoad: () => void = noop;
+    const loadHeld = new Promise<void>((resolve) => {
+      releaseLoad = resolve;
     });
+    let rejectSave: (error: Error) => void = noop;
+    const saveHeld = new Promise<void>((_resolve, reject) => {
+      rejectSave = reject;
+    });
+    let loads = 0;
     let booted = false;
     let saves = 0;
+    let attempts = DOCUMENTS - 1;
     const persisted = storage(checkpoint);
     const store: Store<S> = {
       ...persisted.store,
+      load: async () => {
+        if (loads++ === 0 && row.load === "held") await loadHeld;
+        return persisted.store.load();
+      },
       save: async (state) => {
         const first = booted && ++saves === 1;
         if (first && row.save === "fails") throw failure;
-        if (first && row.save === "held") await held;
+        if (first && row.save === "held") await saveHeld;
         await persisted.store.save(state);
       },
     };
-    let attempts = DOCUMENTS - 1;
     const wired = wirePlain(
       plainAgent(async () => turn(++attempts)),
       async (cmd) => {
@@ -1002,7 +1066,7 @@ describe.each(
         return settled(cmd);
       },
     );
-    const host = hostReporting(
+    const host: ReturnType<typeof hostReporting> = hostReporting(
       wired,
       store,
       (error, context) => reports.push({ error, phase: context.phase }),
@@ -1010,22 +1074,82 @@ describe.each(
         booted = true;
         if (row.ahead) handle.dispatch(agentBootMsg(NOW)).catch(noop);
       },
+      (handle, index) => {
+        const { dispatch, stop } = handle;
+        Object.assign(handle, {
+          stop: () => {
+            stops[index] = (stops[index] ?? 0) + 1;
+            return stop();
+          },
+          dispatch: (msg: AgentMachineMsg<Purpose, Outputs, string>) => {
+            dispatches[index] = (dispatches[index] ?? 0) + 1;
+            return dispatch(msg);
+          },
+        });
+        handles[index] = handle;
+        if (index === 0 && row.ends === "reset inside run") void host.reset();
+      },
     );
 
-    const runtime = await host.runtime();
-    if (row.reset) {
-      const resetting = host.reset();
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
-      rejectHeld(failure);
-      await resetting;
-    } else if (row.save === "passes") {
-      await reaches(runtime, (now) => now.kind === "done");
+    const first = host.runtime();
+    const outcome = first.then(
+      () => "resolves",
+      () => "rejects",
+    );
+    await tick();
+    if (row.ends === "reset") {
+      if (row.load === "held") {
+        await host.reset();
+        releaseLoad();
+      } else {
+        await first;
+        const resetting = host.reset();
+        await tick();
+        rejectSave(failure);
+        await resetting;
+      }
+    } else if (row.ends === "stop") {
+      await handles[0]?.stop();
+      releaseLoad();
+    } else {
+      releaseLoad();
+      if (row.save === "free") await tick();
     }
-    await new Promise<void>((resolve) => setTimeout(resolve, 10));
+    await tick();
 
+    expect(await outcome).toBe(row.first);
+    if (row.first === "rejects")
+      await expect(first).rejects.toBeInstanceOf(DispatchDiscardedError);
+    expect(dispatches[0] ?? 0).toBe(row.dispatches);
+    expect(stops[0] ?? 0).toBe(row.ends === "never" ? 0 : 1);
+    const owed = {
+      nothing: [],
+      "the save failure": [{ error: failure, phase: "boot" }],
+      RuntimeStoppedError: [
+        { error: expect.any(RuntimeStoppedError), phase: "boot" },
+      ],
+    } satisfies Record<LifecycleRow["reported"], unknown[]>;
     expect(reports.filter((report) => report.phase === "boot")).toEqual(
-      row.reports.map((phase) => ({ error: failure, phase })),
+      owed[row.reported],
     );
+    expect(
+      reports.every(
+        (report) => report.phase === "boot" || report.phase === "discard",
+      ),
+    ).toBe(true);
+
+    await host.reset();
+    const next = await host.runtime();
+    expect(await reaches(next, (now) => now.kind === "done")).toMatchObject({
+      kind: "done",
+      output: ANSWER,
+    });
+    expect(completed).toEqual([
+      "document-1",
+      "document-2",
+      "document-3",
+      "document-4",
+    ]);
     await host.reset();
   });
 });
