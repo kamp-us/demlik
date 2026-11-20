@@ -1581,9 +1581,10 @@ interface StepCtx {
 interface StepEngine<R, I, O> {
   /**
    * Optional admission check, run for EVERY authenticated pull — the first pull,
-   * a result post, a duplicate — after the token is accepted and the give-up
-   * alarm is re-armed, and BEFORE the settle, the deferred readiness probe and
-   * enqueue, nextStep and terminalOutput. Return `null` to
+   * a result post, a duplicate — after the token is accepted, the run's earlier
+   * requests have settled and the give-up alarm is re-armed, and BEFORE the
+   * settle, the deferred readiness probe and enqueue, nextStep and
+   * terminalOutput. Return `null` to
    * continue exactly as a host without the hook does. Return the terminal
    * `{ done: true, output }` response to end the pull there: `stepHost` sends
    * it and does no further work for this request.
@@ -1595,7 +1596,9 @@ interface StepEngine<R, I, O> {
    * `handle` before the intake is touched, so the same result posted again is
    * still new. It bounds this pull only: a step already started, or a stop that
    * arrives after the hook returned, is outside it, and a worker that runs queued
-   * work later must check again.
+   * work later must check again. It runs inside the run's turn, so it must not
+   * call `handle` for the same run and wait for it: that request queues behind
+   * the turn that is waiting for it.
    */
   beforeResume?(
     runId: string,
@@ -1610,11 +1613,15 @@ interface StepEngine<R, I, O> {
    * Settle the posted tool result into the run, then RESUME from the durable
    * checkpoint: dispatch the settle and run to DISPATCH-QUIESCENCE (e.g.
    * `await runtime.dispatch(settleMsg)` — dispatch drains the follow-up chain
-   * by default, #50). Called at most once per distinct
-   * `callId` — `stepHost` dedupes re-POSTs via `idempotent-intake` BEFORE
-   * calling this, so the side effect runs exactly once. On the first request
-   * (`posted === null`) `stepHost` skips settle and calls nextStep
-   * directly to hand out the first step.
+   * by default, #50). `stepHost` calls it once per distinct `callId` of a run
+   * for as long as this host instance lives, because it runs one request of a
+   * run at a time and dedupes a re-POST through `idempotent-intake` BEFORE
+   * calling this. A resume that throws or rejects does not count: the same
+   * `callId` posted again calls it again, so it must be safe to run twice. A
+   * new host instance (an evicted object waking up) has an empty ledger and
+   * settles a re-POST once more, which the durable checkpoint absorbs. On the
+   * first request (`posted === null`) `stepHost` skips settle and calls
+   * nextStep directly to hand out the first step.
    */
   resume(runId: string, posted: StepResult<R>): void | Promise<void>;
   /**

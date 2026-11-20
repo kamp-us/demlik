@@ -233,9 +233,9 @@ export function constantTimeEqual(a: string, b: string): boolean {
 // The host-layer assembly. The consumer supplies a `StepEngine<R, I, O>` — the
 // run-specific operations the handler orchestrates (token lookup, settle into
 // the runtime, resume to quiescence, read next step / terminal). `stepHost`
-// owns the ORDER (validate → setAlarm → admit → idempotent-settle → resume → return →
-// hibernate), the idempotency, and the HTTP status mapping; the engine owns the
-// run-specific I/O. This is the same dependency-injection shape as
+// owns the ORDER (validate → wait for the run's turn → setAlarm → admit →
+// idempotent-settle → resume → return → hibernate), the idempotency, and the
+// HTTP status mapping; the engine owns the run-specific I/O. This is the same dependency-injection shape as
 // `durableCommandCarrier` (hooks) and `createAgentHost` (mappings).
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -271,11 +271,15 @@ export interface StepEngine<R, I, O> {
    * Settle the posted tool result into the run, then RESUME from the durable
    * checkpoint: dispatch the settle and run to DISPATCH-QUIESCENCE (e.g.
    * `await runtime.dispatch(settleMsg)` — dispatch drains the follow-up chain
-   * by default, #50). Called at most once per distinct
-   * `callId` — `stepHost` dedupes re-POSTs via `idempotent-intake` BEFORE
-   * calling this, so the side effect runs exactly once. On the first request
-   * (`posted === null`) `stepHost` skips settle and calls {@link nextStep}
-   * directly to hand out the first step.
+   * by default, #50). `stepHost` calls it once per distinct `callId` of a run
+   * for as long as this host instance lives, because it runs one request of a
+   * run at a time and dedupes a re-POST through `idempotent-intake` BEFORE
+   * calling this. A resume that throws or rejects does not count: the same
+   * `callId` posted again calls it again, so it must be safe to run twice. A
+   * new host instance (an evicted object waking up) has an empty ledger and
+   * settles a re-POST once more, which the durable checkpoint absorbs. On the
+   * first request (`posted === null`) `stepHost` skips settle and calls
+   * {@link nextStep} directly to hand out the first step.
    */
   resume(runId: string, posted: StepResult<R>): Promise<void> | void;
   /**
@@ -291,9 +295,10 @@ export interface StepEngine<R, I, O> {
   terminalOutput(runId: string): Promise<O> | O;
   /**
    * Optional admission check, run for EVERY authenticated pull — the first pull,
-   * a result post, a duplicate — after the token is accepted and the give-up
-   * alarm is re-armed, and BEFORE the settle, the deferred readiness probe and
-   * enqueue, {@link nextStep} and {@link terminalOutput}. Return `null` to
+   * a result post, a duplicate — after the token is accepted, the run's earlier
+   * requests have settled and the give-up alarm is re-armed, and BEFORE the
+   * settle, the deferred readiness probe and enqueue, {@link nextStep} and
+   * {@link terminalOutput}. Return `null` to
    * continue exactly as a host without the hook does. Return the terminal
    * `{ done: true, output }` response to end the pull there: `stepHost` sends
    * it and does no further work for this request.
@@ -305,7 +310,9 @@ export interface StepEngine<R, I, O> {
    * `handle` before the intake is touched, so the same result posted again is
    * still new. It bounds this pull only: a step already started, or a stop that
    * arrives after the hook returned, is outside it, and a worker that runs queued
-   * work later must check again.
+   * work later must check again. It runs inside the run's turn, so it must not
+   * call `handle` for the same run and wait for it: that request queues behind
+   * the turn that is waiting for it.
    */
   beforeResume?(
     runId: string,
@@ -409,13 +416,25 @@ function workingBody(retryAfterMs?: number): StepWorking {
  * carrier. Returns `handle(request, now)` — call it from the DO's `/step`
  * route, map the `StepOutcome` to a `Response`, and let the DO hibernate.
  *
+ * Requests of ONE run take turns. After the token is accepted, each request
+ * waits for the run's earlier requests to settle, then runs the whole turn: the
+ * alarm re-arm, the admission hook, the settle (or the deferred probe and
+ * enqueue), and the read of the next step or the output. So a duplicate POST that
+ * arrives while the first is still resuming waits, and then reads the State that
+ * resume produced, never one from the middle of it. A turn that throws is
+ * released, and its caller gets that error. Runs do not wait for each other.
+ * This holds for one `stepHost` instance, which is one activation. Two hosts or
+ * two processes over the same run are not ordered by it, and it cannot interrupt
+ * a model call that is already running.
+ *
  * The handler is STATELESS between calls except for its `idempotent-intake`
- * dedupe ledger, which the consumer should itself persist alongside the run's
- * checkpoint if cross-eviction dedupe of an identical re-POST is required; the
- * in-isolate ledger here dedupes re-POSTs within one activation (the common
- * "the hands' POST timed out and got retried" case), and the underlying
- * `resume` is itself idempotent against the durable checkpoint, so a re-POST
- * that crosses an eviction re-settles harmlessly.
+ * dedupe ledger, kept per run and per `callId` (two runs may reuse a `callId`).
+ * The consumer should itself persist it alongside the run's checkpoint if
+ * cross-eviction dedupe of an identical re-POST is required; the in-isolate
+ * ledger here dedupes re-POSTs within one activation (the common "the hands'
+ * POST timed out and got retried" case), and the underlying `resume` is itself
+ * idempotent against the durable checkpoint, so a re-POST that crosses an
+ * eviction re-settles harmlessly.
  *
  * @param ctx    the DO state slice (alarm-bearing storage)
  * @param engine the run-specific operations
@@ -467,11 +486,30 @@ export function stepHost<R, I, O>(
   const intake = createIntake<StepResult<R>, "settled">({
     keyOf: (posted) => posted.callId,
   });
-  // The intake slice lives in the isolate for this activation. It is a plain
-  // serializable value (the consumer MAY persist `intakeState` next to its
+  // One intake slice per run, in the isolate for this activation: a `callId`
+  // only has to be unique inside its run, so two runs share no ledger. Each is
+  // a plain serializable value (the consumer MAY persist it next to its
   // checkpoint for cross-eviction dedupe); within one activation it absorbs the
-  // duplicate POST so `resume` fires at most once per callId here.
-  let intakeState = intake.init();
+  // duplicate POST so `resume` fires at most once per callId of a run here.
+  const intakes = new Map<string, ReturnType<typeof intake.init>>();
+
+  // The tail of each run's queue, private to this instance. A tail never
+  // rejects: a failed turn settles it too, so the next request still runs, while
+  // its own caller gets the failure from the promise `turn` returned. An idle
+  // run's entry is removed once its tail is still the current one.
+  const tails = new Map<string, Promise<void>>();
+  function serialized<T>(runId: string, turn: () => Promise<T>): Promise<T> {
+    const result = (tails.get(runId) ?? Promise.resolve()).then(turn);
+    const tail = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    tails.set(runId, tail);
+    void tail.then(() => {
+      if (tails.get(runId) === tail) tails.delete(runId);
+    });
+    return result;
+  }
 
   async function handle(
     request: StepRequest<R>,
@@ -480,7 +518,9 @@ export function stepHost<R, I, O>(
     // 1 — VALIDATE the capability token (constant-time). A missing run is 404;
     //     a present run with a wrong/missing token is 401. The constant-time
     //     compare runs regardless of whether the stored token exists (compare
-    //     against the empty string) so the 401 path leaks no timing.
+    //     against the empty string) so the 401 path leaks no timing. A request
+    //     that fails here takes no turn in the run's queue, re-arms no alarm and
+    //     runs no hook.
     const stored = await engine.tokenFor(request.runId);
     if (stored === null) {
       return { status: 404, body: { error: "unknown run" } };
@@ -488,7 +528,13 @@ export function stepHost<R, I, O>(
     if (!constantTimeEqual(request.token, stored)) {
       return { status: 401, body: { error: "invalid token" } };
     }
+    return serialized(request.runId, () => runTurn(request, now));
+  }
 
+  async function runTurn(
+    request: StepRequest<R>,
+    now: number,
+  ): Promise<DeferredStepOutcome<I, O>> {
     // 2 — RE-ARM the eviction-safe give-up alarm via the DO-native alarm API.
     //     Every step pushes the deadline out; a run that stops POSTing is
     //     eventually evicted when the alarm fires. (The `do_alarm` Sub was
@@ -518,23 +564,26 @@ export function stepHost<R, I, O>(
         // duplicate replays (no re-settle). Either way step 5 re-reads the next
         // step off the durable checkpoint, so a duplicate POST returns the SAME
         // next step.
-        const [nextIntake, cmds] = intake.receive(
-          intakeState,
+        // The turn holds the run's queue, so no other request of this run reads
+        // the ledger while `resume` is awaited. The ledger takes the result only
+        // once `resume` has returned: a throw leaves the callId new, so the same
+        // post is tried again instead of being treated as settled.
+        const [received, cmds] = intake.receive(
+          intakes.get(request.runId) ?? intake.init(),
           posted,
           now,
           posted.callId,
         );
-        intakeState = nextIntake;
         for (const cmd of cmds) {
           if (cmd._tag === "intake:process") {
             await engine.resume(request.runId, posted);
             const [completed] = intake.complete(
-              intakeState,
+              received,
               cmd.key,
               "settled",
               now,
             );
-            intakeState = completed;
+            intakes.set(request.runId, completed);
           }
           // `intake:replay` (a duplicate) needs no action: `resume` already ran
           // for this callId, and step 5 re-derives the next step below.

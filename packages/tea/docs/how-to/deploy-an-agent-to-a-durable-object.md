@@ -172,7 +172,44 @@ the pull it runs in. A model call that has already started, or a stop that
 arrives after the hook returned, is outside it, and a worker that runs queued
 work later has to check the stop again itself. A throw or a rejection from the
 hook propagates out of `handle`, and the same result posted again is still
-treated as new.
+treated as new. The hook runs inside the run's turn (see the next section), so
+it must not call `handle` for the same run and wait for the answer.
+
+### Requests: one at a time per run
+
+`stepHost` checks the token, then makes each request of a run wait for the run's
+earlier requests to settle before it does anything else: the alarm re-arm, the
+hook, the settle or the deferred enqueue, and the read of the next step or the
+output. So a result posted twice, or a pull that arrives while the first post is
+still resuming, is answered from the State that resume produced, never from a
+State in the middle of it. Your `nextStep` and `terminalOutput` read the State
+as it is and need no wait of their own for a request that is already in flight:
+do not add one with `runtime.idle()`.
+
+```ts
+const steps = stepHost({ storage: owner }, engine);
+// Three requests at once for run "a": a result, the same result posted again,
+// and a pull with nothing posted. They take turns, in the order they passed the
+// token check, each reading the State the one before it left.
+await Promise.all([
+  steps.handle({ runId: "a", token, posted: first }, now),
+  steps.handle({ runId: "a", token, posted: first }, now),
+  steps.handle({ runId: "a", token, posted: null }, now),
+]);
+```
+
+A request that fails the token check returns at once and takes no turn, so it
+does not re-arm the alarm or reach the hook. A turn that throws releases the run:
+its caller gets the error, the next request runs, and a `resume` that threw leaves
+its `callId` open, so the same post is tried again. Runs do not wait for each
+other, and two runs may use the same `callId`.
+
+The queue belongs to one `stepHost`, which is one activation. It does not order
+two hosts or two processes over the same run, and it cannot interrupt a model
+call that is already running: a stop that arrives then is read on the run's next
+turn, as in the section above. After an eviction the new host starts with an
+empty ledger, and a repeated post settles again against the durable State, which
+`resume` has to accept. Effects stay at least once.
 
 ### Deadline: arm it when the run is created
 
