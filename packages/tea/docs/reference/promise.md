@@ -114,6 +114,24 @@ type PromiseRunOptions<
    */
   boot?: "restored";
   /**
+   * Stop the run from outside, for a host that holds the runtime itself. Once
+   * `signal` aborts the runtime queues `cancel`'s Msg, starts no further Cmd and
+   * stops waiting on the handler in flight, which a promise cannot recall; what
+   * that handler returns later reaches no one. A signal that is already aborted,
+   * or aborts while the store is loading, settles the cancel before `ready`
+   * resolves, so a host reading `ready` sees a run that ended and resumes
+   * nothing. `cancel` is chosen off the State, and PURE; it must land a State
+   * the run does not resume from. A `cancel` that throws is reported to
+   * `onError`. A pair, so a signal with no `cancel` cannot be written. Not
+   * available with a store that keeps a log: `run` throws.
+   *
+   * `driveToDone` takes the same pair to stop a run it drives.
+   */
+  cancellation?: {
+    readonly cancel: (state: S) => M;
+    readonly signal: AbortSignal;
+  };
+  /**
    * The clock that stamps `at` on a `Cmd.define`d effect's settled Msg at
    * the interpret edge, and on each `telemetry` event. Defaults to
    * `Date.now`. Inject a fixed one for a deterministic run; a `replay` log
