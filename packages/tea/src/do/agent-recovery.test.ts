@@ -41,6 +41,7 @@ import {
   type AgentMachineMsg,
   type AgentState,
   type AgentTurn,
+  agentBootMsg,
   agentCancelMsg,
   COMPACTION_PURPOSE,
   createAgent,
@@ -49,8 +50,10 @@ import {
   type ToolCall,
 } from "../agent/index";
 import type { Cmd, Interpret, Migrated, Store, Wired } from "../index";
+import { RuntimeStoppedError } from "../internal/engine/loop";
 import type { DeadlinesSub } from "../internal/resilience/deadline";
 import { run } from "../promise";
+import { DispatchDiscardedError } from "../runtime-types";
 import { createAgentHost } from "./agent-host";
 import { doEventSourcedStore, doStore } from "./index";
 import {
@@ -1036,5 +1039,473 @@ describe.each([
     expect(
       warm.teardown.every((name) => INTENTIONAL_TEARDOWN.includes(name)),
     ).toBe(true);
+  });
+});
+
+type Booting = {
+  dispatch(msg: AgentMachineMsg<Purpose, Outputs, string>): Promise<void>;
+  stop(): Promise<void>;
+};
+
+// A host whose every report reaches `onError`, and which tells the test the
+// moment each runtime has booted, and each time `run` is about to hand one to
+// the host.
+function hostReporting<C extends Cmd>(
+  wired: AgentWired<C>,
+  store: Store<S>,
+  onError: (error: unknown, context: { readonly phase: string }) => void,
+  booted: (handle: Booting) => void,
+  built: (handle: Booting, index: number) => void = noop,
+) {
+  let builds = 0;
+  return createAgentHost<
+    Stage,
+    Purpose,
+    Outputs,
+    string,
+    null,
+    C,
+    DeadlinesSub,
+    object
+  >({
+    run: (machine, options) => {
+      const booting = run(machine, { ...options, disposeTimeoutMs: 0 });
+      void booting.ready.then(() => booted(booting));
+      built(booting, builds++);
+      return booting;
+    },
+    onError,
+    buildMachine: () => wired,
+    store,
+    ctx: {},
+    toSseFrame: () => null,
+    now: () => 2,
+  });
+}
+
+describe("a restored run whose agent_boot fails to save", () => {
+  it.each(
+    REPEATS,
+  )("runtime() resolves early, onError hears the boot once, and reset() then runtime() boots again (repeat %i)", async () => {
+    const { checkpoint, completed } = await lostDuring("model");
+    const failure = new Error("save failed on agent_boot");
+    const reports: Array<{ error: unknown; phase: string }> = [];
+    let attempts = DOCUMENTS - 1;
+    let armed = false;
+    let builds = 0;
+    const persisted = storage(checkpoint);
+    const store: Store<S> = {
+      ...persisted.store,
+      save: async (state) => {
+        if (armed) {
+          armed = false;
+          throw failure;
+        }
+        await persisted.store.save(state);
+      },
+    };
+    const wired = wirePlain(
+      plainAgent(async () => turn(++attempts)),
+      async (cmd) => {
+        completed.push(cmd.callId);
+        return settled(cmd);
+      },
+    );
+    const host = hostReporting(
+      wired,
+      store,
+      (error, context) => reports.push({ error, phase: context.phase }),
+      () => {
+        armed = builds++ === 0;
+      },
+    );
+    const boots = () => reports.filter((report) => report.phase === "boot");
+
+    const first = await host.runtime();
+    await new Promise<void>((resolve) => setTimeout(resolve, 10));
+    expect(status(first.getState()).kind).toBe("running");
+    expect(attempts).toBe(DOCUMENTS - 1);
+    expect(boots()).toEqual([{ error: failure, phase: "boot" }]);
+    expect(reports.map((report) => report.phase)).toEqual(["boot"]);
+
+    expect(await host.runtime()).toBe(first);
+    expect(attempts).toBe(DOCUMENTS - 1);
+    expect(boots()).toHaveLength(1);
+
+    await host.reset();
+    expect(boots()).toHaveLength(1);
+    const second = await host.runtime();
+    expect(second).not.toBe(first);
+    expect(await reaches(second, (now) => now.kind === "done")).toMatchObject({
+      kind: "done",
+      output: ANSWER,
+    });
+    expect(attempts).toBe(DOCUMENTS + 1);
+    expect(completed).toEqual([
+      "document-1",
+      "document-2",
+      "document-3",
+      "document-4",
+    ]);
+    expect(boots()).toHaveLength(1);
+    await host.reset();
+  });
+});
+
+// Where `reset()` can arrive in a build's life, and what the build then owes.
+// Each row is named by the lifecycle cell (`./host-lifecycle`) it drives.
+// Each row holds the build at its point with a controllable store: `load` parks
+// the cold load, `save` parks the first save after boot (or fails it), and
+// `ahead` queues a second `agent_boot` before the host's own. `ends` is how the
+// first runtime is ended while held; `release` is what unparks it afterwards.
+interface LifecycleRow {
+  readonly load: "held" | "free";
+  readonly save: "fails" | "held" | "free";
+  readonly ahead: boolean;
+  readonly ends: "reset inside run" | "reset" | "stop" | "never";
+  readonly first: "rejects" | "resolves";
+  readonly dispatches: number;
+  readonly reported: "nothing" | "the save failure" | "RuntimeStoppedError";
+}
+
+const LIFECYCLE = {
+  "building × reset, before run() returns the handle": {
+    load: "free",
+    save: "free",
+    ahead: false,
+    ends: "reset inside run",
+    first: "rejects",
+    dispatches: 0,
+    reported: "nothing",
+  },
+  "building × reset, while the cold load is pending": {
+    load: "held",
+    save: "free",
+    ahead: false,
+    ends: "reset",
+    first: "rejects",
+    dispatches: 0,
+    reported: "nothing",
+  },
+  "live × reset, with the chain queued behind a pending save": {
+    load: "free",
+    save: "held",
+    ahead: true,
+    ends: "reset",
+    first: "resolves",
+    dispatches: 2,
+    reported: "nothing",
+  },
+  "live × reset, and the pending save then rejects": {
+    load: "free",
+    save: "held",
+    ahead: false,
+    ends: "reset",
+    first: "resolves",
+    dispatches: 1,
+    reported: "the save failure",
+  },
+  "live, no reset, and the save rejects": {
+    load: "free",
+    save: "fails",
+    ahead: false,
+    ends: "never",
+    first: "resolves",
+    dispatches: 1,
+    reported: "the save failure",
+  },
+  "building, no reset, and the runtime is stopped under the boot": {
+    load: "held",
+    save: "free",
+    ahead: false,
+    ends: "stop",
+    first: "resolves",
+    dispatches: 1,
+    reported: "RuntimeStoppedError",
+  },
+  "building × built, and the chain resolves": {
+    load: "free",
+    save: "free",
+    ahead: false,
+    ends: "never",
+    first: "resolves",
+    dispatches: 1,
+    reported: "nothing",
+  },
+} as const satisfies Record<string, LifecycleRow>;
+
+describe.each(
+  Object.entries(LIFECYCLE),
+)("a build against reset: %s", (_name, row: LifecycleRow) => {
+  it.each(
+    REPEATS,
+  )("reports, dispatches and boots again as the table says (repeat %i)", async () => {
+    const { checkpoint, completed } = await lostDuring("model");
+    const failure = new Error("save failed on agent_boot");
+    const reports: Array<{ error: unknown; phase: string }> = [];
+    const dispatches: number[] = [];
+    const stops: number[] = [];
+    const handles: Booting[] = [];
+    const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 5));
+    let releaseLoad: () => void = noop;
+    const loadHeld = new Promise<void>((resolve) => {
+      releaseLoad = resolve;
+    });
+    let rejectSave: (error: Error) => void = noop;
+    const saveHeld = new Promise<void>((_resolve, reject) => {
+      rejectSave = reject;
+    });
+    let loads = 0;
+    let booted = false;
+    let saves = 0;
+    let attempts = DOCUMENTS - 1;
+    const persisted = storage(checkpoint);
+    const store: Store<S> = {
+      ...persisted.store,
+      load: async () => {
+        if (loads++ === 0 && row.load === "held") await loadHeld;
+        return persisted.store.load();
+      },
+      save: async (state) => {
+        const first = booted && ++saves === 1;
+        if (first && row.save === "fails") throw failure;
+        if (first && row.save === "held") await saveHeld;
+        await persisted.store.save(state);
+      },
+    };
+    const wired = wirePlain(
+      plainAgent(async () => turn(++attempts)),
+      async (cmd) => {
+        completed.push(cmd.callId);
+        return settled(cmd);
+      },
+    );
+    const host: ReturnType<typeof hostReporting> = hostReporting(
+      wired,
+      store,
+      (error, context) => reports.push({ error, phase: context.phase }),
+      (handle) => {
+        booted = true;
+        if (row.ahead) handle.dispatch(agentBootMsg(NOW)).catch(noop);
+      },
+      (handle, index) => {
+        const { dispatch, stop } = handle;
+        Object.assign(handle, {
+          stop: () => {
+            stops[index] = (stops[index] ?? 0) + 1;
+            return stop();
+          },
+          dispatch: (msg: AgentMachineMsg<Purpose, Outputs, string>) => {
+            dispatches[index] = (dispatches[index] ?? 0) + 1;
+            return dispatch(msg);
+          },
+        });
+        handles[index] = handle;
+        if (index === 0 && row.ends === "reset inside run") void host.reset();
+      },
+    );
+
+    const first = host.runtime();
+    const outcome = first.then(
+      () => "resolves",
+      () => "rejects",
+    );
+    await tick();
+    if (row.ends === "reset") {
+      if (row.load === "held") {
+        await host.reset();
+        releaseLoad();
+      } else {
+        await first;
+        const resetting = host.reset();
+        await tick();
+        rejectSave(failure);
+        await resetting;
+      }
+    } else if (row.ends === "stop") {
+      await handles[0]?.stop();
+      releaseLoad();
+    } else {
+      releaseLoad();
+      if (row.save === "free") await tick();
+    }
+    await tick();
+
+    expect(await outcome).toBe(row.first);
+    if (row.first === "rejects")
+      await expect(first).rejects.toBeInstanceOf(DispatchDiscardedError);
+    expect(dispatches[0] ?? 0).toBe(row.dispatches);
+    expect(stops[0] ?? 0).toBe(row.ends === "never" ? 0 : 1);
+    const owed = {
+      nothing: [],
+      "the save failure": [{ error: failure, phase: "boot" }],
+      RuntimeStoppedError: [
+        { error: expect.any(RuntimeStoppedError), phase: "boot" },
+      ],
+    } satisfies Record<LifecycleRow["reported"], unknown[]>;
+    expect(reports.filter((report) => report.phase === "boot")).toEqual(
+      owed[row.reported],
+    );
+    expect(
+      reports.every(
+        (report) => report.phase === "boot" || report.phase === "discard",
+      ),
+    ).toBe(true);
+
+    await host.reset();
+    const next = await host.runtime();
+    expect(await reaches(next, (now) => now.kind === "done")).toMatchObject({
+      kind: "done",
+      output: ANSWER,
+    });
+    expect(completed).toEqual([
+      "document-1",
+      "document-2",
+      "document-3",
+      "document-4",
+    ]);
+    await host.reset();
+  });
+});
+
+// The host's lifecycle table (`./host-lifecycle`) driven through a real host
+// over one retained store, for the cells a teardown can overlap. The first
+// build's model call never returns, so the run is still mid-run when `reset()`
+// comes, and the save `stop()` makes on the way out is held: that teardown is
+// in flight while the cell under test arrives.
+function overlapping(checkpoint: S | null) {
+  const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 5));
+  let releaseSave: () => void = noop;
+  const saveHeld = new Promise<void>((resolve) => {
+    releaseSave = resolve;
+  });
+  let saveReached: () => void = noop;
+  const reachedSave = new Promise<void>((resolve) => {
+    saveReached = resolve;
+  });
+  let stopping = false;
+  let holding = true;
+  let builds = 0;
+  let attempts = DOCUMENTS - 1;
+  const persisted = storage(checkpoint);
+  const store: Store<S> = {
+    ...persisted.store,
+    save: async (state) => {
+      if (stopping && holding) {
+        holding = false;
+        saveReached();
+        await saveHeld;
+      }
+      await persisted.store.save(state);
+    },
+  };
+  const invoke = async () =>
+    builds === 1 ? hangs<AgentTurn>() : turn(++attempts);
+  return {
+    tick,
+    store,
+    persisted,
+    invoke,
+    releaseSave,
+    reachedSave,
+    built: () => {
+      builds++;
+    },
+    builds: () => builds,
+    stopping: () => {
+      stopping = true;
+    },
+  };
+}
+
+describe("a teardown in flight: tearingDown × reset, then runtime()", () => {
+  it.each(
+    REPEATS,
+  )("shares the teardown and builds the replacement after the old run's last save (repeat %i)", async () => {
+    const { checkpoint, completed } = await lostDuring("model");
+    const held = overlapping(checkpoint);
+    const reports: Array<{ error: unknown; phase: string }> = [];
+    const wired = wirePlain(plainAgent(held.invoke), async (cmd) => {
+      completed.push(cmd.callId);
+      return settled(cmd);
+    });
+    const host = hostReporting(
+      wired,
+      held.store,
+      (error, context) => reports.push({ error, phase: context.phase }),
+      noop,
+      held.built,
+    );
+
+    const first = await host.runtime();
+    await held.tick();
+    held.stopping();
+    const resetting = host.reset();
+    await held.reachedSave;
+    const overlapped = host.reset();
+    const replacement = host.runtime();
+    for (let i = 0; i < 8; i++) await held.tick();
+    expect(held.builds()).toBe(1);
+    held.releaseSave();
+
+    expect(overlapped).toBe(resetting);
+    await resetting;
+    const second = await replacement;
+    expect(second).not.toBe(first);
+    expect(await reaches(second, (now) => now.kind === "done")).toMatchObject({
+      kind: "done",
+      output: ANSWER,
+    });
+    for (let i = 0; i < 4; i++) await held.tick();
+    expect(status(held.persisted.snapshot() as S).kind).toBe("done");
+    expect(completed).toEqual([
+      "document-1",
+      "document-2",
+      "document-3",
+      "document-4",
+    ]);
+    expect(reports.filter((report) => report.phase === "boot")).toEqual([]);
+    await host.reset();
+  });
+});
+
+describe("a teardown in flight: tearingDown × runtime, then reset", () => {
+  it.each(
+    REPEATS,
+  )("discards the waiting runtime() and the next runtime() boots once (repeat %i)", async () => {
+    const { checkpoint, completed } = await lostDuring("model");
+    const held = overlapping(checkpoint);
+    const wired = wirePlain(plainAgent(held.invoke), async (cmd) => {
+      completed.push(cmd.callId);
+      return settled(cmd);
+    });
+    const host = hostReporting(wired, held.store, noop, noop, held.built);
+
+    await host.runtime();
+    await held.tick();
+    held.stopping();
+    const resetting = host.reset();
+    await held.reachedSave;
+    const waiting = host.runtime();
+    const cancelling = host.reset();
+    expect(cancelling).toBe(resetting);
+    await expect(waiting).rejects.toBeInstanceOf(DispatchDiscardedError);
+    held.releaseSave();
+    await resetting;
+    expect(held.builds()).toBe(1);
+
+    const next = await host.runtime();
+    expect(held.builds()).toBe(2);
+    expect(await reaches(next, (now) => now.kind === "done")).toMatchObject({
+      kind: "done",
+      output: ANSWER,
+    });
+    expect(completed).toEqual([
+      "document-1",
+      "document-2",
+      "document-3",
+      "document-4",
+    ]);
+    await host.reset();
   });
 });

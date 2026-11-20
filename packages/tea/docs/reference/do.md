@@ -171,8 +171,13 @@ interface AgentHost<Stage, P extends string, O extends Record<P, AgentTurn>, R, 
    * from storage. A Cmd handler that has not returned by the limit is given up
    * on, so `reset()` returns either way, including while the run is waiting on a
    * tool nobody has answered. It stops the handle the host holds from the moment
-   * `run` returned it, so it also stops a build that has not finished booting.
-   * The framework `settle` test seam, owned once.
+   * `run` returned it, so it also stops a build that has not finished booting:
+   * that build dispatches nothing more, and a `runtime()` still waiting on it
+   * rejects with a `DispatchDiscardedError`. One teardown is in flight at a
+   * time: a `reset()` that overlaps it answers with the same promise, and a
+   * `runtime()` that arrives during it waits for it before it builds, so a new
+   * run never starts beside the old run's last save. The framework `settle`
+   * test seam, owned once.
    */
   reset(): Promise<void>;
   /**
