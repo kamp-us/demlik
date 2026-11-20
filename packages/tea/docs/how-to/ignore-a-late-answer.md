@@ -129,4 +129,52 @@ for (const request of [3, 2, 1]) {
 The engine and manual host both finish with request 3's results. `foldMsgs`
 and `replay` also leave identity filtering to their caller.
 
+## 4. When the effect is a `Cmd.define`d one
+
+A `Cmd.define`d effect settles as `<name>_ok` or `<name>_err`, and that reply
+carries the Cmd it answers as `cmd`. Put the request number in the Cmd's input
+and read it back from `m.cmd`:
+
+```ts
+import { Cmd as Command } from "@demlik/tea";
+import { z } from "zod";
+
+const find = Command.define("find", {
+  input: z.object({ query: z.string(), request: z.number() }),
+  ok: z.array(z.string()),
+  err: ["unavailable"],
+});
+
+const definedSearch = defineMachine({
+  types: {
+    model: {} as State,
+    msg: {} as { readonly _tag: "search"; readonly query: string },
+  },
+  cmds: [find],
+  init: (loaded) => [loaded ?? { query: "", request: 0, results: [] }, []],
+  update: {
+    search: (s, m) => {
+      const request = s.request + 1;
+      return [
+        { query: m.query, request, results: [] },
+        [find({ query: m.query, request })],
+      ];
+    },
+    find_ok: (s, m) => [{ ...s, results: m.value }, []],
+    find_err: (s) => [{ ...s, results: [] }, []],
+  },
+  // A settled reply carries the Cmd it answers: read the request from `m.cmd`.
+  identity: {
+    ofState: (s) => s.request,
+    ofMsg: (m) => (m._tag === "search" ? undefined : m.cmd.request),
+  },
+});
+
+const latestState = { query: "tea", request: 3, results: [] };
+const oldReply = find.ok(find({ query: "t", request: 1 }), ["result 1"], 0);
+const newReply = find.ok(find({ query: "tea", request: 3 }), ["result 3"], 0);
+matchesIdentity(definedSearch.identity, latestState, oldReply); // false: dropped
+matchesIdentity(definedSearch.identity, latestState, newReply); // true: folded
+```
+
 See the [`matchesIdentity` reference](../reference/tea.md#matchesIdentity).

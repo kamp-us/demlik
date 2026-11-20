@@ -420,6 +420,7 @@ export const PAGE_MIRRORS: readonly PageRow[] = [
       "search",
       "identity",
       "manual",
+      "defined",
     ),
     only: true,
   },
