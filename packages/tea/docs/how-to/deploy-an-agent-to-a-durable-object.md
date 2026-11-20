@@ -112,6 +112,14 @@ Call it from the request or alarm that wakes the object, once the stop below has
 been read: `host.runtime()` is the point where a restored run starts working
 again.
 
+`host.runtime()` resolves when the reissued operation has settled. If that
+operation ends parked on a tool that only your driver can answer, it stays
+pending until the driver answers. A `/step` engine therefore starts it without
+awaiting it, and reads the next step and the output from the saved state, which
+every applied transition writes. `host.reset()` waits for a build that is still
+pending in the same way, so read the stop before anything in the activation has
+started the runtime, as the first pull of a wake does.
+
 ### Stop: answer the pull before any work resumes
 
 A stop your application recorded has to be read before `host.runtime()` runs,
