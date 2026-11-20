@@ -30,7 +30,7 @@ One table, keyed by every `AgentStatus` kind and checked with `satisfies Record<
 
 - Do not add a status kind, a second boot Msg, or a host-side read of `awaiting`.
 - Do not pair `agent_boot` with restored-init Cmds for the same work.
-- A `/step` engine reaches the run with `host.runtime()` and stops it with `host.reset()`. Neither waits on a tool nobody has answered, so no engine reads saved state to get around either.
+- A `/step` engine reaches the run with `host.runtime()` and stops it by dispatching `agentCancelMsg` into that runtime, then releasing the tool calls the run is parked on. `runtime()` does not wait on a tool nobody has answered, so no engine reads saved state to get around it. `reset()` stays a test and lifecycle seam for one caller at a time, and an overlapping call throws a `HostOverlapError`.
 - An `idle`, `done`, `failed` or `cancelled` run is not booted.
 
 ## Consequences

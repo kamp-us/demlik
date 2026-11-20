@@ -8,7 +8,7 @@ Tier: `stable`
 import { … } from "@demlik/tea/do";
 ```
 
-## Exports (108)
+## Exports (109)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -70,6 +70,7 @@ import { … } from "@demlik/tea/do";
 | [`foldApplied`](#foldApplied) | Function | stable | THE FOLD. |
 | [`foldLedger`](#foldLedger) | Function | stable | THE FOLD. |
 | [`HibernatableCtx`](#HibernatableCtx) | Interface | stable | The slice of `DurableObjectState` the durable carrier needs: the Hibernation API accept + the registry of hibernatable sockets. |
+| [`HostOverlapError`](#HostOverlapError) | Class | stable | Thrown by `createAgentHost` when a call overlaps a lifecycle step that has to finish first: a `reset()` while another `reset()` is still stopping the run, a `reset()` from inside `run()`, or a `runtime()` while a `reset()` is still stopping the run. |
 | [`idempotentEffect`](#idempotentEffect) | Function | stable | Pair a durable `key` with an external effect `fn` — this module's primary surface. |
 | [`IdempotentEffect`](#IdempotentEffect) | Interface | stable | A keyed external effect. |
 | [`IdempotentOutcome`](#IdempotentOutcome) | Type | stable | The outcome of running a keyed effect through the guard. |
@@ -173,11 +174,12 @@ interface AgentHost<Stage, P extends string, O extends Record<P, AgentTurn>, R, 
    * tool nobody has answered. It stops the handle the host holds from the moment
    * `run` returned it, so it also stops a build that has not finished booting:
    * that build dispatches nothing more, and a `runtime()` still waiting on it
-   * rejects with a `DispatchDiscardedError`. One teardown is in flight at a
-   * time: a `reset()` that overlaps it answers with the same promise, and a
-   * `runtime()` that arrives during it waits for it before it builds, so a new
-   * run never starts beside the old run's last save. The framework `settle`
-   * test seam, owned once.
+   * rejects with a `DispatchDiscardedError`.
+   *
+   * The framework `settle` test seam, owned once: a test and lifecycle seam for
+   * one caller at a time, not the way to stop a run in production. Dispatch
+   * `agentCancelMsg` into `await host.runtime()` for that, and await a
+   * `reset()` before the next `reset()` or `runtime()`.
    */
   reset(): Promise<void>;
   /**
@@ -1034,6 +1036,20 @@ function foldLedger<E>(
 interface HibernatableCtx {
   acceptWebSocket(ws: WebSocket): void;
   getWebSockets(): WebSocket[];
+}
+```
+
+<a id="HostOverlapError"></a>
+
+### `HostOverlapError`
+
+```ts
+class HostOverlapError extends Error {
+  constructor(call: "reset" | "runtime", during: "run" | "teardown");
+  readonly _tag: "HostOverlapError";
+  readonly call: "reset" | "runtime";
+  readonly during: "run" | "teardown";
+  readonly name: "HostOverlapError";
 }
 ```
 

@@ -19,8 +19,9 @@
  * further model call, whether the step host resumes inline or defers. The same
  * stop, recorded after a cold wake has handed out a tool step, reaches a warm
  * host whose boot is parked on that unanswered tool, for a run left `running` and
- * one left `suspended`: the next post is answered `cancelled` in one request and
- * `reset()` resolves.
+ * one left `suspended`: `beforeResume` dispatches `agentCancelMsg` into the run
+ * the host already holds, and the next post is answered `cancelled` in one
+ * request, with no `reset()` and no further model call.
  *
  * Every case runs ten times.
  *
@@ -47,6 +48,7 @@ import type { DeadlinesSub } from "../internal/resilience/deadline";
 import { run } from "../promise";
 import { DispatchDiscardedError } from "../runtime-types";
 import { createAgentHost } from "./agent-host";
+import { HostOverlapError } from "./host-lifecycle";
 import { doStore } from "./index";
 import {
   type DeferredStepOutcome,
@@ -499,51 +501,23 @@ function activation(
     w.compactions.folded++;
     return compacted();
   };
-  const options = (store: Store<S>) => ({
-    store,
-    ctx: {},
-    disposeTimeoutMs: 0,
-    onError: (error: unknown, context: { readonly phase: string }) => {
-      if (context.phase !== "discard") throw error;
-    },
-  });
   if (mode === "compaction") {
     const wired = wireCompacting(compactingAgent(invoke), read, compact);
-    return assemble(wired, r, results, reached.reached, deferred, (store) =>
-      cancelThrough(run(wired.machine, { ...wired, ...options(store) })),
-    );
+    return assemble(wired, r, results, reached.reached, deferred);
   }
   const wired = wirePlain(plainAgent(invoke), read);
-  return assemble(wired, r, results, reached.reached, deferred, (store) =>
-    cancelThrough(run(wired.machine, { ...wired, ...options(store) })),
-  );
-}
-
-// A runtime that boots nothing, so the stop is read before any work resumes:
-// cancel the restored run and report where it ended.
-async function cancelThrough(booting: {
-  readonly ready: Promise<{
-    dispatch(msg: M): Promise<void>;
-    getState(): S;
-    stop(): Promise<void>;
-  }>;
-}): Promise<string> {
-  const stopped = await booting.ready;
-  await stopped.dispatch(agentCancelMsg(NOW));
-  const { kind } = status(stopped.getState());
-  await stopped.stop();
-  return kind;
+  return assemble(wired, r, results, reached.reached, deferred);
 }
 
 // The step engine, over the host exactly as a Durable Object holds it: `runtime()`
-// to reach the run, `reset()` to stop it, `status()` to read the end.
+// to reach the run, a dispatched `agentCancelMsg` to stop it, `status()` to read
+// the end. `reset()` is only the test's way to evict the activation.
 function assemble<C extends Cmd>(
   wired: AgentWired<C>,
   r: Retained,
   results: ReturnType<typeof mailbox>,
   reached: Promise<void>,
   deferred: boolean,
-  cancelOver: (store: Store<S>) => Promise<string>,
 ) {
   const { host, teardown } = hostOver(wired, r.store);
   const calls = { resumes: 0, enqueues: 0 };
@@ -555,8 +529,17 @@ function assemble<C extends Cmd>(
     async beforeResume(runId) {
       order.push("check-stop");
       if ((await r.storage.get<boolean>(`stop:${runId}`)) !== true) return null;
-      await host.reset();
-      return { done: true, output: await cancelOver(r.store) };
+      const runtime = await host.runtime();
+      // The loop runs one transition's tools at a time, so the cancel folds only
+      // once the tool the run is parked on has returned: queue it first, then
+      // release that tool, whose late result the cancelled run drops.
+      const cancelled = runtime.dispatch(agentCancelMsg(NOW));
+      const waiting = status(runtime.getState());
+      if (waiting.kind === "suspended")
+        for (const call of waiting.pending)
+          results.deliver(call.callId, "stopped");
+      await cancelled;
+      return { done: true, output: status(runtime.getState()).kind };
     },
     async resume(_runId, posted) {
       calls.resumes++;
@@ -604,6 +587,7 @@ function assemble<C extends Cmd>(
 
   return {
     handle,
+    host,
     calls,
     order,
     teardown,
@@ -783,7 +767,7 @@ describe.each([
 ] as const)("a stop recorded after cold recovery handed out a tool step, run left %s", (left) => {
   it.each(
     REPEATS,
-  )("the next post cancels the run in one request and reset resolves (repeat %i)", async () => {
+  )("the next post cancels the run through the held runtime in one request (repeat %i)", async () => {
     const r = retained();
     const w = world();
     const lost = activation("model", r, w, left === "running" ? "model" : null);
@@ -811,6 +795,7 @@ describe.each([
     });
     const calls = w.invocations;
     const resumes = warm.calls.resumes;
+    const held = await warm.host.runtime();
 
     await r.storage.put(`stop:${RUN}`, true);
     expect(await warm.handle(post(step), NOW)).toEqual({
@@ -821,6 +806,8 @@ describe.each([
     expect(w.invocations).toBe(calls);
     expect(warm.calls.resumes).toBe(resumes);
     expect(warm.order.at(-1)).toBe("check-stop");
+    expect(await warm.host.runtime()).toBe(held);
+    expect(status(held.getState()).kind).toBe("cancelled");
     expect(status(await r.saved()).kind).toBe("cancelled");
     await warm.evict();
     expect(
@@ -950,28 +937,35 @@ interface LifecycleRow {
   readonly save: "fails" | "held" | "free";
   readonly ahead: boolean;
   readonly ends: "reset inside run" | "reset" | "stop" | "never";
-  readonly first: "rejects" | "resolves";
+  readonly first:
+    | "resolves"
+    | typeof DispatchDiscardedError
+    | typeof HostOverlapError;
   readonly dispatches: number;
+  readonly stops: number;
   readonly reported: "nothing" | "the save failure" | "RuntimeStoppedError";
 }
 
 const LIFECYCLE = {
-  "building × reset, before run() returns the handle": {
-    load: "free",
-    save: "free",
-    ahead: false,
-    ends: "reset inside run",
-    first: "rejects",
-    dispatches: 0,
-    reported: "nothing",
-  },
+  "building × reset, from inside run() before it returns the handle (refused)":
+    {
+      load: "free",
+      save: "free",
+      ahead: false,
+      ends: "reset inside run",
+      first: HostOverlapError,
+      dispatches: 0,
+      stops: 0,
+      reported: "nothing",
+    },
   "building × reset, while the cold load is pending": {
     load: "held",
     save: "free",
     ahead: false,
     ends: "reset",
-    first: "rejects",
+    first: DispatchDiscardedError,
     dispatches: 0,
+    stops: 1,
     reported: "nothing",
   },
   "live × reset, with the chain queued behind a pending save": {
@@ -981,6 +975,7 @@ const LIFECYCLE = {
     ends: "reset",
     first: "resolves",
     dispatches: 2,
+    stops: 1,
     reported: "nothing",
   },
   "live × reset, and the pending save then rejects": {
@@ -990,6 +985,7 @@ const LIFECYCLE = {
     ends: "reset",
     first: "resolves",
     dispatches: 1,
+    stops: 1,
     reported: "the save failure",
   },
   "live, no reset, and the save rejects": {
@@ -999,6 +995,7 @@ const LIFECYCLE = {
     ends: "never",
     first: "resolves",
     dispatches: 1,
+    stops: 0,
     reported: "the save failure",
   },
   "building, no reset, and the runtime is stopped under the boot": {
@@ -1008,6 +1005,7 @@ const LIFECYCLE = {
     ends: "stop",
     first: "resolves",
     dispatches: 1,
+    stops: 1,
     reported: "RuntimeStoppedError",
   },
   "building × built, and the chain resolves": {
@@ -1017,6 +1015,7 @@ const LIFECYCLE = {
     ends: "never",
     first: "resolves",
     dispatches: 1,
+    stops: 0,
     reported: "nothing",
   },
 } as const satisfies Record<string, LifecycleRow>;
@@ -1093,10 +1092,7 @@ describe.each(
     );
 
     const first = host.runtime();
-    const outcome = first.then(
-      () => "resolves",
-      () => "rejects",
-    );
+    first.catch(noop);
     await tick();
     if (row.ends === "reset") {
       if (row.load === "held") {
@@ -1118,11 +1114,10 @@ describe.each(
     }
     await tick();
 
-    expect(await outcome).toBe(row.first);
-    if (row.first === "rejects")
-      await expect(first).rejects.toBeInstanceOf(DispatchDiscardedError);
+    if (row.first === "resolves") await first;
+    else await expect(first).rejects.toBeInstanceOf(row.first);
     expect(dispatches[0] ?? 0).toBe(row.dispatches);
-    expect(stops[0] ?? 0).toBe(row.ends === "never" ? 0 : 1);
+    expect(stops[0] ?? 0).toBe(row.stops);
     const owed = {
       nothing: [],
       "the save failure": [{ error: failure, phase: "boot" }],
@@ -1152,6 +1147,7 @@ describe.each(
       "document-4",
     ]);
     await host.reset();
+    await handles[0]?.stop();
   });
 });
 
@@ -1205,10 +1201,10 @@ function overlapping(checkpoint: S | null) {
   };
 }
 
-describe("a teardown in flight: tearingDown × reset, then runtime()", () => {
+describe("a teardown in flight: tearingDown × reset", () => {
   it.each(
     REPEATS,
-  )("shares the teardown and builds the replacement after the old run's last save (repeat %i)", async () => {
+  )("the second reset() throws, and the replacement run is not built beside the old run's last save (repeat %i)", async () => {
     const { checkpoint, completed } = await lostDuring("model");
     const held = overlapping(checkpoint);
     const reports: Array<{ error: unknown; phase: string }> = [];
@@ -1229,15 +1225,13 @@ describe("a teardown in flight: tearingDown × reset, then runtime()", () => {
     held.stopping();
     const resetting = host.reset();
     await held.reachedSave;
-    const overlapped = host.reset();
-    const replacement = host.runtime();
-    for (let i = 0; i < 8; i++) await held.tick();
+    expect(() => host.reset()).toThrow(HostOverlapError);
+    for (let i = 0; i < 4; i++) await held.tick();
     expect(held.builds()).toBe(1);
     held.releaseSave();
-
-    expect(overlapped).toBe(resetting);
     await resetting;
-    const second = await replacement;
+
+    const second = await host.runtime();
     expect(second).not.toBe(first);
     expect(await reaches(second, (now) => now.kind === "done")).toMatchObject({
       kind: "done",
@@ -1256,10 +1250,10 @@ describe("a teardown in flight: tearingDown × reset, then runtime()", () => {
   });
 });
 
-describe("a teardown in flight: tearingDown × runtime, then reset", () => {
+describe("a teardown in flight: tearingDown × runtime", () => {
   it.each(
     REPEATS,
-  )("discards the waiting runtime() and the next runtime() boots once (repeat %i)", async () => {
+  )("runtime() throws, and the next runtime() after the teardown boots once (repeat %i)", async () => {
     const { checkpoint, completed } = await lostDuring("model");
     const held = overlapping(checkpoint);
     const wired = wirePlain(plainAgent(held.invoke), async (cmd) => {
@@ -1273,13 +1267,10 @@ describe("a teardown in flight: tearingDown × runtime, then reset", () => {
     held.stopping();
     const resetting = host.reset();
     await held.reachedSave;
-    const waiting = host.runtime();
-    const cancelling = host.reset();
-    expect(cancelling).toBe(resetting);
-    await expect(waiting).rejects.toBeInstanceOf(DispatchDiscardedError);
+    expect(() => host.runtime()).toThrow(HostOverlapError);
+    expect(held.builds()).toBe(1);
     held.releaseSave();
     await resetting;
-    expect(held.builds()).toBe(1);
 
     const next = await host.runtime();
     expect(held.builds()).toBe(2);

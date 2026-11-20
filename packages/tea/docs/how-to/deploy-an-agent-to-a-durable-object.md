@@ -110,46 +110,52 @@ const host = createAgentHost({
 const runtime = await host.runtime();
 ```
 
-Call it from the request or alarm that wakes the object, once the stop below has
-been read: `host.runtime()` is the point where a restored run starts working
-again.
+Call it from the request or alarm that wakes the object: `host.runtime()` is the
+point where a restored run starts working again.
 
-### Stop: answer the pull before any work resumes
+### Stop: cancel the run you already hold
 
-A stop your application recorded has to be read before `host.runtime()` runs,
-because that call reissues the outstanding operation, and that may be a model
-call. Give `stepHost` an engine whose `beforeResume` reads the stop from your own
-storage, cancels the run through a runtime that boots nothing, and returns the
-terminal response. `stepHost` calls it for every authenticated pull, including
-the first pull and a repeated post, after the token check and before it settles
-a posted result, defers it, or reads the next step. Returning `null` continues as
-a host without the hook does.
+A stop your application recorded ends the run by dispatching `agentCancelMsg`
+into the run the host already holds. Give `stepHost` an engine whose
+`beforeResume` reads the stop from your own storage, cancels through
+`await host.runtime()`, and returns the terminal response. `stepHost` calls it
+for every authenticated pull, including the first pull and a repeated post,
+after the token check and before it settles a posted result, defers it, or reads
+the next step. Returning `null` continues as a host without the hook does.
 
 ```ts
-const store = doStore(this.ctx.storage, parse);
-
 const admit = async (runId: string) => {
   if (!(await this.ctx.storage.get<boolean>(`stop:${runId}`))) return null;
-  await host.reset();
-  const wired = agent.toMachine<object>({ toolInterpret });
-  const stopped = await run(wired.machine, { ...wired, store, ctx: {} }).ready;
-  await stopped.dispatch(agentCancelMsg(Date.now()));
-  const { kind } = status(stopped.getState());
-  await stopped.stop();
-  return { done: true as const, output: kind };
+  const runtime = await host.runtime();
+  const cancelled = runtime.dispatch(agentCancelMsg(Date.now()));
+  for (const callId of gateway.inFlight()) gateway.fail(callId, "stopped");
+  await cancelled;
+  return { done: true as const, output: status(runtime.getState()).kind };
 };
 
 const steps = stepHost({ storage: owner }, { ...engine, beforeResume: admit });
 ```
 
-`engine` is the `StepEngine` you already pass; `host.reset()` stops the runtime
-an earlier pull started, even one waiting on a tool, so only one runtime writes
-the run. `beforeResume` bounds
-the pull it runs in. A model call that has already started, or a stop that
-arrives after the hook returned, is outside it, and a worker that runs queued
-work later has to check the stop again itself. A throw or a rejection from the
-hook propagates out of `handle`, and the same result posted again is still
-treated as new.
+`host.runtime()` resolves once `agent_boot` is queued, so it does not wait on a
+tool nobody has answered. The run folds one transition's tool calls at a time, so
+the cancel is applied only after the tool calls the run is parked on have
+returned. Dispatch the cancel first, then release those calls: with a
+`deferredGateway`, `gateway.fail` settles each call in flight, and the run drops
+a tool result that reaches a cancelled run. Waiting for the dispatch before you
+release them never returns.
+
+Do not stop the run with `host.reset()`. It is the test and lifecycle seam, for
+one caller at a time: a second `reset()` while one is stopping the run, a
+`reset()` from inside `run()`, and a `runtime()` while a `reset()` is stopping
+the run each throw a `HostOverlapError`. `engine` is the `StepEngine` you already
+pass.
+
+`beforeResume` bounds the pull it runs in. A model call that has already started,
+including the one `host.runtime()` reissued on a cold wake, finishes first and the
+cancelled run drops its answer. A stop that arrives after the hook returned is
+outside it, and a worker that runs queued work later has to check the stop again
+itself. A throw or a rejection from the hook propagates out of `handle`, and the
+same result posted again is still treated as new.
 
 ### Deadline: arm it when the run is created
 

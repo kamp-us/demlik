@@ -38,6 +38,7 @@ import {
   deferred,
   type HostCmd,
   type HostMsg,
+  HostOverlapError,
   type HostPhase,
   hostLifecycle,
   stepLifecycle,
@@ -185,6 +186,8 @@ export interface AgentHost<
    * posted yet, and the driver reaches the run through this call, so waiting for
    * it would deadlock. Read how far the run got from `getState()`, `subscribe` or
    * `status()`.
+   *
+   * @throws {HostOverlapError} While a `reset()` is still stopping the run.
    */
   runtime(): Promise<
     BootedRunHandle<
@@ -222,11 +225,16 @@ export interface AgentHost<
    * tool nobody has answered. It stops the handle the host holds from the moment
    * `run` returned it, so it also stops a build that has not finished booting:
    * that build dispatches nothing more, and a `runtime()` still waiting on it
-   * rejects with a `DispatchDiscardedError`. One teardown is in flight at a
-   * time: a `reset()` that overlaps it answers with the same promise, and a
-   * `runtime()` that arrives during it waits for it before it builds, so a new
-   * run never starts beside the old run's last save. The framework `settle`
-   * test seam, owned once.
+   * rejects with a `DispatchDiscardedError`.
+   *
+   * The framework `settle` test seam, owned once: a test and lifecycle seam for
+   * one caller at a time, not the way to stop a run in production. Dispatch
+   * `agentCancelMsg` into `await host.runtime()` for that, and await a
+   * `reset()` before the next `reset()` or `runtime()`.
+   *
+   * @throws {HostOverlapError} A `reset()` while another `reset()` is still
+   * stopping the run, or from inside `run()`, and a `runtime()` while a
+   * `reset()` is still stopping the run.
    */
   reset(): Promise<void>;
 }
@@ -316,16 +324,15 @@ export function createAgentHost<
       s.run.phase === "cancelled");
 
   type Booted = BootedRunHandle<S, M, E>;
-  // One build's record, made before the build runs, so a `reset()` that comes
-  // while `run` is still building the handle already finds the controller to
-  // abort. The handle lands the moment `run` returns it.
+  // One build's record, made before the build runs. The handle lands the moment
+  // `run` returns it, and until then the table refuses a `reset()`.
   interface Build {
     readonly abort: AbortController;
     handle: RunHandle<S, M, E> | null;
     readonly result: Deferred<Booted>;
   }
-  const lifecycle = hostLifecycle<Build, Booted>();
-  let phase: HostPhase<Build, Booted> = { _tag: "empty" };
+  const lifecycle = hostLifecycle<Build>();
+  let phase: HostPhase<Build> = { _tag: "empty" };
   const fresh = (): Build => ({
     abort: new AbortController(),
     handle: null,
@@ -334,10 +341,10 @@ export function createAgentHost<
   const discarded = () =>
     new DispatchDiscardedError(agentBootPort().resumeMsg(now())._tag);
 
-  // The answer to a call is read off the phase its cell chose, before the
-  // Cmds run: a Cmd can reenter (a `reset()` from inside `run`), and the call
+  // The phase is set before the Cmds run, so a Cmd that reenters the host (a
+  // `reset()` from inside `run`) meets the phase the call chose, and the call
   // that started a build still answers from that build.
-  function send(msg: HostMsg<Build, Booted>): HostPhase<Build, Booted> {
+  function send(msg: HostMsg<Build>): HostPhase<Build> {
     const [next, cmds] = stepLifecycle(lifecycle, phase, msg);
     phase = next;
     for (const cmd of cmds) perform(cmd);
@@ -352,14 +359,10 @@ export function createAgentHost<
     );
   }
 
-  function perform(cmd: HostCmd<Build, Booted>): void {
+  function perform(cmd: HostCmd<Build>): void {
     switch (cmd._tag) {
       case "begin":
         begin(cmd.build);
-        return;
-      case "beginFor":
-        begin(cmd.build);
-        cmd.build.result.promise.then(cmd.queued.resolve, cmd.queued.reject);
         return;
       case "tearDown": {
         // Abort first: the stop makes the engine refuse the build's pending
@@ -370,13 +373,12 @@ export function createAgentHost<
           cmd.done.resolve,
           cmd.done.reject,
         );
-        const settled = () => send({ _tag: "tornDown", fresh: fresh() });
+        const settled = () => send({ _tag: "tornDown" });
         cmd.done.promise.then(settled, settled);
         return;
       }
-      case "discard":
-        cmd.queued.reject(discarded());
-        return;
+      case "refuse":
+        throw new HostOverlapError(cmd.call, cmd.during);
       default:
         cmd satisfies never;
     }
@@ -403,13 +405,9 @@ export function createAgentHost<
       events: agentEvents<Stage, P, O, R>(),
     } as RunOptions<S, M, C, U, Ctx, E>);
     // Held from the moment `run` returns it, before any await, so `reset()`
-    // can stop this run whatever its boot is waiting on. A `reset()` that came
-    // first found no handle to stop, so this build stops it and ends.
+    // can stop this run whatever its boot is waiting on. Until then the table
+    // refuses a `reset()`: it came from inside `run`.
     mine.handle = booting;
-    if (signal.aborted) {
-      await booting.stop();
-      signal.throwIfAborted();
-    }
 
     // SSE off the semantic stream. Subscriptions attach on the booting handle
     // (total before boot), so the hub catches every event from the first
@@ -444,28 +442,14 @@ export function createAgentHost<
     return ready;
   }
 
-  // Every `runtime()` call offers the table a fresh record and a deferred
-  // answer; the cell keeps them only when it starts a build or a wait. Two
-  // calls in one wake share the one build (#313), and a call during a teardown
-  // waits for it, so a replacement never runs beside an old run's last save.
+  // Every `runtime()` call offers the table a fresh record; the cell keeps it
+  // only when it starts a build. Two calls in one wake share the one build
+  // (#313). A call during a teardown is refused: it throws a `HostOverlapError`.
   function runtime(): Promise<Booted> {
-    const chosen = send({ _tag: "runtime", fresh: fresh(), queue: deferred() });
-    switch (chosen._tag) {
-      case "building":
-      case "live":
-        return chosen.build.result.promise;
-      case "tearingDown":
-        if (chosen.queued !== null) return chosen.queued.promise;
-        return Promise.reject(
-          new Error("host lifecycle: runtime() found no build to wait for"),
-        );
-      case "empty":
-        return Promise.reject(
-          new Error("host lifecycle: runtime() left the host empty"),
-        );
-      default:
-        return chosen satisfies never;
-    }
+    const chosen = send({ _tag: "runtime", fresh: fresh() });
+    if (chosen._tag === "building" || chosen._tag === "live")
+      return chosen.build.result.promise;
+    throw new Error(`host lifecycle: runtime() left the host ${chosen._tag}`);
   }
 
   return {
@@ -481,12 +465,11 @@ export function createAgentHost<
     },
     sse,
     reset(): Promise<void> {
-      // One teardown in flight: a `reset()` that overlaps another answers
-      // with the same promise, and it discards a `runtime()` waiting on it.
-      const chosen = send({ _tag: "reset", done: deferred() });
-      return chosen._tag === "tearingDown"
-        ? chosen.done.promise
-        : Promise.resolve();
+      // One caller at a time: the table refuses a `reset()` that overlaps a
+      // teardown or comes from inside `run`, and throws it from `send`.
+      const done = deferred<void>();
+      const chosen = send({ _tag: "reset", done });
+      return chosen._tag === "tearingDown" ? done.promise : Promise.resolve();
     },
   };
 }

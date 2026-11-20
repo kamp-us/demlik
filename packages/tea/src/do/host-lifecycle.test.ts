@@ -1,5 +1,7 @@
 /**
- * The agent host's lifecycle table, one case list per (phase × message) cell.
+ * The agent host's lifecycle table, one case list per (phase × message) cell. A
+ * refused overlap is a cell too: its case asserts the `refuse` Cmd the
+ * interpreter throws as a `HostOverlapError`.
  * `CELLS` is typed over every phase and every message, so a cell the table
  * gains without a case here is a compile error, not a reviewer's find.
  *
@@ -17,30 +19,27 @@ import {
 
 interface Record_ {
   readonly id: string;
+  readonly handle: unknown;
 }
-type Phase = HostPhase<Record_, string>;
-type Msg = HostMsg<Record_, string>;
+type Phase = HostPhase<Record_>;
+type Msg = HostMsg<Record_>;
 
 const REPEATS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
 
 interface World {
   readonly a: Record_;
   readonly b: Record_;
+  readonly inRun: Record_;
   readonly fresh: Record_;
   readonly done: Deferred<void>;
-  readonly other: Deferred<void>;
-  readonly queue: Deferred<string>;
-  readonly waiting: Deferred<string>;
 }
 
 const world = (): World => ({
-  a: { id: "a" },
-  b: { id: "b" },
-  fresh: { id: "fresh" },
+  a: { id: "a", handle: {} },
+  b: { id: "b", handle: {} },
+  inRun: { id: "inRun", handle: null },
+  fresh: { id: "fresh", handle: null },
   done: deferred(),
-  other: deferred(),
-  queue: deferred(),
-  waiting: deferred(),
 });
 
 interface Case {
@@ -52,29 +51,34 @@ interface Case {
 }
 
 const empty: Phase = { _tag: "empty" };
-const runtime = (w: World): Msg => ({
-  _tag: "runtime",
-  fresh: w.fresh,
-  queue: w.queue,
-});
+const tearing: Phase = { _tag: "tearingDown" };
+const runtime = (w: World): Msg => ({ _tag: "runtime", fresh: w.fresh });
 const reset = (w: World): Msg => ({ _tag: "reset", done: w.done });
-const tornDown = (w: World): Msg => ({ _tag: "tornDown", fresh: w.fresh });
+const tornDown = (): Msg => ({ _tag: "tornDown" });
 const building = (w: World): Phase => ({ _tag: "building", build: w.a });
+const buildingInRun = (w: World): Phase => ({
+  _tag: "building",
+  build: w.inRun,
+});
 const live = (w: World): Phase => ({ _tag: "live", build: w.a });
-const tearing = (w: World): Phase => ({
-  _tag: "tearingDown",
-  done: w.other,
-  queued: null,
-});
-const tearingQueued = (w: World): Phase => ({
-  _tag: "tearingDown",
-  done: w.other,
-  queued: w.waiting,
-});
 const none = () => [];
 
 const unchanged = (phase: (w: World) => Phase, msg: (w: World) => Msg) =>
   ({ name: "changes nothing", phase, msg, next: phase, cmds: none }) as const;
+
+const refused = (
+  phase: (w: World) => Phase,
+  msg: (w: World) => Msg,
+  call: "reset" | "runtime",
+  during: "teardown" | "run",
+) =>
+  ({
+    name: `refuses: ${call}() during ${during}`,
+    phase,
+    msg,
+    next: phase,
+    cmds: () => [{ _tag: "refuse", call, during }],
+  }) as const;
 
 const CELLS = {
   empty: {
@@ -106,12 +110,13 @@ const CELLS = {
     runtime: [unchanged(building, runtime)],
     reset: [
       {
-        name: "tears the build down with the offered promise",
+        name: "tears the build down once run has returned its handle",
         phase: building,
         msg: reset,
-        next: (w) => ({ _tag: "tearingDown", done: w.done, queued: null }),
+        next: () => tearing,
         cmds: (w) => [{ _tag: "tearDown", build: w.a, done: w.done }],
       },
+      refused(buildingInRun, reset, "reset", "run"),
     ],
     built: [
       {
@@ -145,10 +150,10 @@ const CELLS = {
     runtime: [unchanged(live, runtime)],
     reset: [
       {
-        name: "tears the live build down with the offered promise",
+        name: "tears the live build down",
         phase: live,
         msg: reset,
-        next: (w) => ({ _tag: "tearingDown", done: w.done, queued: null }),
+        next: () => tearing,
         cmds: (w) => [{ _tag: "tearDown", build: w.a, done: w.done }],
       },
     ],
@@ -157,48 +162,27 @@ const CELLS = {
     tornDown: [unchanged(live, tornDown)],
   },
   tearingDown: {
-    runtime: [
-      {
-        name: "keeps the offered answer to wait for the teardown",
-        phase: tearing,
-        msg: runtime,
-        next: (w) => ({ _tag: "tearingDown", done: w.other, queued: w.queue }),
-        cmds: none,
-      },
-      {
-        ...unchanged(tearingQueued, runtime),
-        name: "shares the answer already waiting",
-      },
+    runtime: [refused(() => tearing, runtime, "runtime", "teardown")],
+    reset: [refused(() => tearing, reset, "reset", "teardown")],
+    built: [
+      unchanged(
+        () => tearing,
+        (w) => ({ _tag: "built", build: w.a }),
+      ),
     ],
-    reset: [
-      {
-        ...unchanged(tearing, reset),
-        name: "shares the teardown in flight",
-      },
-      {
-        name: "discards the waiting answer and shares the teardown",
-        phase: tearingQueued,
-        msg: reset,
-        next: (w) => ({ _tag: "tearingDown", done: w.other, queued: null }),
-        cmds: (w) => [{ _tag: "discard", queued: w.waiting }],
-      },
+    failed: [
+      unchanged(
+        () => tearing,
+        (w) => ({ _tag: "failed", build: w.a }),
+      ),
     ],
-    built: [unchanged(tearing, (w) => ({ _tag: "built", build: w.a }))],
-    failed: [unchanged(tearing, (w) => ({ _tag: "failed", build: w.a }))],
     tornDown: [
       {
-        name: "empties when nothing waits",
-        phase: tearing,
+        name: "empties once the teardown settles",
+        phase: () => tearing,
         msg: tornDown,
         next: () => empty,
         cmds: none,
-      },
-      {
-        name: "builds for the waiting answer once the teardown settles",
-        phase: tearingQueued,
-        msg: tornDown,
-        next: (w) => ({ _tag: "building", build: w.fresh }),
-        cmds: (w) => [{ _tag: "beginFor", build: w.fresh, queued: w.waiting }],
       },
     ],
   },
@@ -237,7 +221,7 @@ describe.each(cells)("host lifecycle cell %s", (_name, c) => {
   it.each(REPEATS)("steps as the table says (repeat %i)", () => {
     const w = world();
     const [next, cmds] = stepLifecycle(
-      hostLifecycle<Record_, string>(),
+      hostLifecycle<Record_>(),
       c.phase(w),
       c.msg(w),
     );
