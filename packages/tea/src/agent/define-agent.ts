@@ -18,7 +18,12 @@ import { driveToDone, run } from "../promise";
 import { MsgType } from "../protocol";
 import { cmdEdgeOf, type Interpret } from "../pure/core";
 import type { RetryPolicy } from "../retry-backoff";
-import type { BootingRuntime, CtxArg, StoreAndOnError } from "../runtime-types";
+import {
+  type BootingRuntime,
+  type CtxArg,
+  isLoggedStore,
+  type StoreAndOnError,
+} from "../runtime-types";
 import {
   type AgentCompactOkMsg,
   type AgentCompactRunCmd,
@@ -827,8 +832,15 @@ function definedAgent<T extends AnyToolDef>(
     // The `interpret` table is checked where it is built; over the generic `T`
     // TS defers `run`'s conditional `InterpretArg` and cannot relate the two, so
     // the options are read at `run`'s own parameter type.
+    const clock = opts.clock ?? Date.now;
+    const signal = opts.signal;
     const handle = run(wired.machine, {
       ...opts,
+      cancellation:
+        signal === undefined ||
+        (opts.store !== undefined && isLoggedStore(opts.store))
+          ? undefined
+          : { signal, cancel: () => agentCancelMsg(clock()) },
       interpret: wired.interpret,
       subscribe: wired.subscribe,
       terminal: isEnded,
@@ -843,7 +855,6 @@ function definedAgent<T extends AnyToolDef>(
     if (onToolError !== undefined) {
       forwardLadderErrors(handle, router, onToolError);
     }
-    const clock = opts.clock ?? Date.now;
     const begin = (booted: DefinedAgentState<T>) => {
       const at = clock();
       return isMidRun(booted)
@@ -854,7 +865,6 @@ function definedAgent<T extends AnyToolDef>(
     // reason `AgentCompactionConfig`'s two arms are: the cancellation option is a
     // PAIR, and a conditional spread widens it back to two independent optionals
     // — the signal-with-no-cancel the union exists to refuse.
-    const signal = opts.signal;
     if (signal === undefined) {
       return ended(driveToDone(handle, begin, isEnded, { failed: isFailed }));
     }

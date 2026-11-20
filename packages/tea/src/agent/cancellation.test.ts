@@ -52,6 +52,10 @@ function heldTool() {
     release = resolve;
   });
   const finished: string[] = [];
+  let begin: () => void = () => {};
+  const started = new Promise<void>((resolve) => {
+    begin = resolve;
+  });
   const held = tool(
     "search",
     {
@@ -61,12 +65,13 @@ function heldTool() {
       err: [],
     },
     async ({ q }, _ctx, { ok }) => {
+      begin();
       await parked;
       finished.push(q);
       return ok({ snippet: `about ${q}` });
     },
   );
-  return { held, release: () => release(), finished };
+  return { held, release: () => release(), finished, started };
 }
 
 /** A model that counts its calls and hands back the scripted turns in order. */
@@ -243,7 +248,7 @@ describe("a resumed process reads a cancelled run as already ended", () => {
 
 describe("in-flight tool handlers after a cancellation", () => {
   it("settle to their own end, and their results reach no public channel", async () => {
-    const { held, release, finished } = heldTool();
+    const { held, release, finished, started } = heldTool();
     const controller = new AbortController();
     const { model } = counting([ASK, ANSWER]);
     const events: DefinedAgentEvent<typeof held>[] = [];
@@ -259,7 +264,7 @@ describe("in-flight tool handlers after a cancellation", () => {
 
     // Let the first turn land and the tool go out, then stop the run with the
     // handler still parked.
-    await vitestTick();
+    await started;
     controller.abort();
     // The handler is not recallable — a promise cannot be cancelled — so it runs
     // to its own end. Releasing it is what lets the runtime's teardown drain.
@@ -282,6 +287,45 @@ describe("in-flight tool handlers after a cancellation", () => {
     expect(last?._tag === "RunDone" && last.status.kind).toBe("cancelled");
     // …and the late outcome never reached the Model either.
     expect(final.conversation?.toolRecords ?? []).toHaveLength(0);
+  });
+});
+
+describe.each([
+  1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+])("a tool that never answers does not hold a stop (repeat %i)", () => {
+  it("resolves cancelled while the handler is still parked, and drops its late result", async () => {
+    const { held, release, finished, started } = heldTool();
+    const controller = new AbortController();
+    const { model } = counting([ASK, ANSWER]);
+    const events: DefinedAgentEvent<typeof held>[] = [];
+
+    const running = defineAgent({
+      model,
+      tools: [held],
+      instructions: INSTRUCTIONS,
+    }).run(INPUT, {
+      signal: controller.signal,
+      onEvent: (event) => events.push(event),
+    });
+    await started;
+    controller.abort();
+
+    const settled = await Promise.race([
+      running,
+      new Promise<"timeout">((resolve) =>
+        setTimeout(() => resolve("timeout"), 500),
+      ),
+    ]);
+    expect(settled).not.toBe("timeout");
+    if (settled === "timeout") return;
+    expect(settled.run.phase).toBe("cancelled");
+    expect(finished).toEqual([]);
+
+    release();
+    await vitestTick();
+    expect(finished).toEqual(["tea"]);
+    expect(settled.conversation?.toolRecords ?? []).toHaveLength(0);
+    expect(events.at(-1)?._tag).toBe("RunDone");
   });
 });
 
