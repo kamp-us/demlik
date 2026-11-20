@@ -397,6 +397,37 @@ describe(
   },
 );
 
+it("K5 passes a driver whose append cost grows with its index depth, as SQLite's does", async () => {
+  const clock = { ticks: 0 };
+  const results = await journalConformance(
+    async () => {
+      const fixture = await memoryFixture();
+      return {
+        ...fixture,
+        async open() {
+          const journal = await fixture.open();
+          return {
+            ...journal,
+            // Four times the cost once the stream is deep, as a B-tree pays its depth:
+            // a linear rewrite would pay a thousand times.
+            async append(
+              stream: string,
+              records: readonly [string, ...string[]],
+            ) {
+              const prior = await journal.read(stream, 0);
+              clock.ticks += 1;
+              if (prior._tag === "read" && prior.head >= 1000) clock.ticks += 3;
+              return journal.append(stream, records);
+            },
+          };
+        },
+      };
+    },
+    { records: 64, now: () => clock.ticks, repeats: 1 },
+  );
+  expect(results.find((result) => result.id === "K5")?.status).toBe("passed");
+});
+
 it("refuses a racing expected head on shared memory storage", async () => {
   const journal = memoryJournal({ fenced: true });
   const acks = await Promise.all([
