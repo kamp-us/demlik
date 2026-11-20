@@ -414,6 +414,17 @@ export const PAGE_MIRRORS: readonly PageRow[] = [
     ),
   },
   {
+    page: "docs/how-to/ignore-a-late-answer.md",
+    shows: regions(
+      "src/docs/how-to/ignore-a-late-answer.test.ts",
+      "search",
+      "identity",
+      "manual",
+      "defined",
+    ),
+    only: true,
+  },
+  {
     page: "docs/how-to/make-durable.md",
     shows: [
       { file: "examples/downloader.ts" },

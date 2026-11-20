@@ -26,7 +26,9 @@
   ],
   "files": [
     "dist",
-    "docs"
+    "docs",
+    "AGENTS.md",
+    "CLAUDE.md"
   ],
   "exports": {
     ".": {
@@ -149,6 +151,8 @@
     "docs:reference:strays": "vitest run src/docs/reference/generate-reference.test.ts -t 'holds nothing the generator does not write'",
     "api:ratchet": "node scripts/api-ratchet.mjs",
     "docs:reference:check": "pnpm run docs:reference:strays && pnpm run docs:reference && git diff --exit-code -- docs/reference",
+    "docs:agents": "TEA_DOCS_WRITE=1 vitest run src/docs/agents/generate-agents.test.ts",
+    "docs:agents:check": "pnpm run docs:agents && git diff --exit-code -- AGENTS.md",
     "prepublishOnly": "NODE_OPTIONS=--max-old-space-size=8192 tsup && node scripts/verify-exports.mjs",
     "verify:exports": "node scripts/verify-exports.mjs",
     "verify-optional-peer-install": "node scripts/verify-optional-peer-install.mjs"

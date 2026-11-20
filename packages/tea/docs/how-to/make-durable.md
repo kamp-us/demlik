@@ -1,8 +1,19 @@
 # Make a machine durable and crash-recoverable
 
-Give `run` a persistent `Store`. With `fileStore` or `doStore`, the runtime
-saves the Model before running commands and loads it on the next boot.
-Keep pending work in the Model so a resume handler can reconstruct it.
+Choose the storage seam your database already supports:
+
+- **It can append a batch atomically and read records in order:** write a
+  [`Journal`](../reference/persistence.md#Journal) and pass it to
+  [`eventSourcedStore`](../reference/persistence.md#eventSourcedStore). This gives
+  `run` a crash-safe log; owed work survives and is re-delivered on recovery.
+  A plain journal requires one active writer per stream. For competing writers,
+  supply a `FencedJournal` and `{ fenced: true }` to `eventSourcedStore`.
+  Steps [5](#5-end-each-call-and-return-the-next-alarm) and
+  [6](#6-hand-long-work-to-an-external-owner) show the logged path across calls.
+- **It only keeps the latest State:** give `run` a persistent `Store`. This
+  saves the Model before running commands and loads it on the next boot, with
+  no event log. Keep pending work in the Model so a resume handler can
+  reconstruct it. Steps 1–4 below demonstrate this snapshot path.
 
 The machine saved here is the download from
 [Build and replay your first machine](../tutorial/build-your-first-machine.md).
