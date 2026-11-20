@@ -1,17 +1,24 @@
 /**
- * Cold wake over the agent host: a run restored while its model call or its
- * compaction was in flight finishes, and does not read again what it already
- * read.
+ * Cold wake over the agent host, and over a step host on retained storage.
  *
  * The user's job is four documents, each read through a tool and each result
  * 57,344 characters long. The activation is lost while the model is deciding
  * about the fourth read, or while the history of the first three is being
- * compacted. The persisted checkpoint is larger than 100 KB. A new activation
- * over a clone of that checkpoint, with three `host.runtime()` callers at once,
- * must reach the final answer, with the three finished reads still folded
- * and the outstanding operation reissued once. A stop persisted before the
- * fourth read is posted ends the run with no further model call, whether the
- * step host resumes inline or defers. Every case runs three times.
+ * compacted. The persisted checkpoint is larger than 100 KB.
+ *
+ * First, a new activation over a clone of that checkpoint, with three
+ * `host.runtime()` callers at once, must reach the final answer, with the three
+ * finished reads still folded and the outstanding operation reissued once.
+ *
+ * Second, the same job is driven through `stepHost`'s `handle` on one retained
+ * storage. The hands pull a step, run it and post its result. The activation is
+ * evicted mid call; a fresh host, runtime and step host over the same storage
+ * answer the hands' retried post, and the run reaches `done` with every turn
+ * once. A stop recorded in that storage before the third result is posted is read
+ * by `beforeResume` on a fresh activation and ends the run cancelled, with no
+ * further model call, whether the step host resumes inline or defers.
+ *
+ * Every case runs ten times.
  *
  * Globals are NOT enabled in vitest.config.ts — describe/it/expect are imported.
  */
@@ -29,11 +36,17 @@ import {
   status,
   type ToolCall,
 } from "../agent/index";
-import type { Cmd, Interpret, Store, Wired } from "../index";
+import type { Cmd, Interpret, Migrated, Store, Wired } from "../index";
 import type { DeadlinesSub } from "../internal/resilience/deadline";
 import { run } from "../promise";
 import { createAgentHost } from "./agent-host";
-import { type StepEngine, stepHost } from "./step-host";
+import { doStore } from "./index";
+import {
+  type DeferredStepOutcome,
+  type StepEngine,
+  type StepRequest,
+  stepHost,
+} from "./step-host";
 
 type Stage = "work";
 type Purpose = "turn";
@@ -50,7 +63,7 @@ type AgentWired<C extends Cmd> = Wired<S, M, C, DeadlinesSub, object>;
 const DOCUMENTS = 4;
 const VALUE = "document text ".repeat(4096);
 const ANSWER: AgentTurn = { content: "four documents checked", toolCalls: [] };
-const REPEATS = [1, 2, 3] as const;
+const REPEATS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
 const INTENTIONAL_TEARDOWN = ["RuntimeDiscardedError", "DrainTimeoutNotice"];
 
 const turnSchema: Schema<AgentTurn> = { parse: (v) => v as AgentTurn };
@@ -154,6 +167,7 @@ function storage(seed: S | null = null) {
 // teardown as intentional; any other report fails the test.
 function hostOver<C extends Cmd>(wired: AgentWired<C>, store: Store<S>) {
   const teardown: string[] = [];
+  const stops: Array<() => Promise<void>> = [];
   const host = createAgentHost<
     Stage,
     Purpose,
@@ -164,8 +178,11 @@ function hostOver<C extends Cmd>(wired: AgentWired<C>, store: Store<S>) {
     DeadlinesSub,
     object
   >({
-    run: (machine, options) =>
-      run(machine, { ...options, disposeTimeoutMs: 0 }),
+    run: (machine, options) => {
+      const booting = run(machine, { ...options, disposeTimeoutMs: 0 });
+      stops.push(() => booting.stop());
+      return booting;
+    },
     onError: (error, context) => {
       if (context.phase !== "discard") throw error;
       teardown.push(error instanceof Error ? error.name : String(error));
@@ -176,7 +193,7 @@ function hostOver<C extends Cmd>(wired: AgentWired<C>, store: Store<S>) {
     toSseFrame: () => null,
     now: () => 2,
   });
-  return { host, teardown };
+  return { host, teardown, stops };
 }
 
 const start = (mode: string) =>
@@ -326,157 +343,420 @@ describe("cold wake over a run that is not mid-run", () => {
   });
 });
 
-// A run activation that boots nothing: the stop admission reads persisted
-// control state first and only then needs a runtime to cancel through.
-function passive(wired: ReturnType<typeof wirePlain>, store: Store<S>) {
-  return run(wired.machine, {
-    ...wired,
+// What outlives every activation of one run: the retained storage. It holds the
+// agent's Model, the run capability and the stop a host recorded, as a
+// Durable Object's storage does, so a new activation over it starts from the
+// bytes the old one left, and from nothing else.
+function retained() {
+  const cells = new Map<string, unknown>();
+  const alarms: number[] = [];
+  const backing = {
+    async get<T = unknown>(key: string): Promise<T | undefined> {
+      return structuredClone(cells.get(key)) as T | undefined;
+    },
+    async put<T>(key: string, value: T): Promise<void> {
+      cells.set(key, structuredClone(value));
+    },
+    async delete(keys: string | readonly string[]): Promise<void> {
+      for (const key of typeof keys === "string" ? [keys] : keys)
+        cells.delete(key);
+    },
+    async setAlarm(at: number): Promise<void> {
+      alarms.push(at);
+    },
+  };
+  const storage = backing as unknown as DurableObjectStorage;
+  const store = doStore<S>(storage, (raw): Migrated<S> => raw as S | null);
+  return {
+    storage,
+    store,
+    alarms,
+    state: async () => store.migrate(await store.load()) as S | null,
+    saved: async () => {
+      const state = store.migrate(await store.load()) as S | null;
+      if (state === null) throw new Error("nothing was saved");
+      return state;
+    },
+  };
+}
+type Retained = ReturnType<typeof retained>;
+
+const RUN = "retained-documents";
+const TOKEN = "synthetic-capability";
+const NOW = 4;
+const noop = () => undefined;
+
+type Hands = Readonly<Record<string, unknown>>;
+type Outcome = DeferredStepOutcome<Hands, string>;
+type Request = StepRequest<string>;
+
+const pull: Request = { token: TOKEN, runId: RUN, posted: null };
+const post = (callId: string): Request => ({
+  token: TOKEN,
+  runId: RUN,
+  posted: { callId, result: VALUE },
+});
+
+// Everything paid for or done by the outside world across all activations.
+const world = () => ({
+  invocations: 0,
+  lost: 0,
+  returned: [] as number[],
+  compactions: { started: 0, folded: 0 },
+  executed: [] as string[],
+  sent: [] as Request[],
+});
+type World = ReturnType<typeof world>;
+
+type Mode = "model" | "compaction";
+
+// The hands' results, handed to the tool cell that waits for them. A result that
+// arrives before the cell has been reissued is kept for it.
+function mailbox() {
+  const kept = new Map<string, string>();
+  const waiting = new Map<string, (result: string) => void>();
+  return {
+    deliver(callId: string, result: string) {
+      const wake = waiting.get(callId);
+      if (wake === undefined) return void kept.set(callId, result);
+      waiting.delete(callId);
+      wake(result);
+    },
+    take(callId: string) {
+      const result = kept.get(callId);
+      if (result !== undefined) {
+        kept.delete(callId);
+        return Promise.resolve(result);
+      }
+      return new Promise<string>((resolve) => waiting.set(callId, resolve));
+    },
+  };
+}
+
+// One activation of the Durable Object: a fresh host, a fresh runtime and a
+// fresh step host over `r`. The model and the compaction are the world's. A
+// read parks until the hands post its result, as a tool run outside the
+// object does.
+function activation(
+  mode: Mode,
+  r: Retained,
+  w: World,
+  hangOn: Mode | null,
+  deferred = false,
+) {
+  const reached = gate();
+  const results = mailbox();
+  const invoke = async () => {
+    w.invocations++;
+    const next = w.returned.length + 1;
+    if (hangOn === "model" && next === DOCUMENTS) {
+      w.lost++;
+      reached.release();
+      return hangs<AgentTurn>();
+    }
+    w.returned.push(next);
+    return turn(next);
+  };
+  const read: Read = async (cmd) => ({
+    _tag: "agent_tool_ok",
+    callId: cmd.callId,
+    result: await results.take(cmd.callId),
+    at: 1,
+  });
+  const compact: Compact = async () => {
+    w.compactions.started++;
+    if (hangOn === "compaction") {
+      reached.release();
+      return hangs<AgentCompactOkMsg>();
+    }
+    w.compactions.folded++;
+    return compacted();
+  };
+  const options = (store: Store<S>) => ({
     store,
     ctx: {},
     disposeTimeoutMs: 0,
-    onError: (error, context) => {
+    onError: (error: unknown, context: { readonly phase: string }) => {
       if (context.phase !== "discard") throw error;
     },
   });
+  if (mode === "compaction") {
+    const wired = wireCompacting(compactingAgent(invoke), read, compact);
+    return assemble(wired, r, results, reached.reached, deferred, (store) =>
+      cancelThrough(run(wired.machine, { ...wired, ...options(store) })),
+    );
+  }
+  const wired = wirePlain(plainAgent(invoke), read);
+  return assemble(wired, r, results, reached.reached, deferred, (store) =>
+    cancelThrough(run(wired.machine, { ...wired, ...options(store) })),
+  );
 }
 
-async function suspendedOnFourthRead() {
-  const reached = gate();
-  let attempt = 0;
-  const saved = storage();
-  const old = await passive(
-    wirePlain(
-      plainAgent(async () => turn(++attempt)),
-      async (cmd) => {
-        if (cmd.callId === "document-4") {
-          reached.release();
-          return hangs<M>();
-        }
-        return settled(cmd);
-      },
-    ),
-    saved.store,
-  ).ready;
-  void old.dispatch(start("stopped"));
-  await reached.reached;
-  const checkpoint = saved.snapshot();
-  await old.stop();
-  return checkpoint;
+// A runtime that boots nothing, so the stop is read before any work resumes:
+// cancel the restored run and report where it ended.
+async function cancelThrough(booting: {
+  readonly ready: Promise<{
+    dispatch(msg: M): Promise<void>;
+    getState(): S;
+    stop(): Promise<void>;
+  }>;
+}): Promise<string> {
+  const stopped = await booting.ready;
+  await stopped.dispatch(agentCancelMsg(NOW));
+  const { kind } = status(stopped.getState());
+  await stopped.stop();
+  return kind;
 }
+
+// The step engine reads the run off the retained storage. A reissued operation
+// that parks on a tool keeps `host.runtime()` pending until the hands answer, so
+// the engine starts the runtime and never waits on it: it waits on the saved
+// state, which every applied transition writes.
+function assemble<C extends Cmd>(
+  wired: AgentWired<C>,
+  r: Retained,
+  results: ReturnType<typeof mailbox>,
+  reached: Promise<void>,
+  deferred: boolean,
+  cancelOver: (store: Store<S>) => Promise<string>,
+) {
+  const { host, teardown, stops } = hostOver(wired, r.store);
+  const calls = { resumes: 0, enqueues: 0 };
+  const order: string[] = [];
+  let alive = true;
+  const stopAll = () => Promise.all(stops.splice(0).map((stop) => stop()));
+  const wake = () => void host.runtime().catch(noop);
+
+  const quiet = async (waiting: (s: ReturnType<typeof status>) => boolean) => {
+    for (let polls = 0; polls < 2_000; polls++) {
+      if (!alive) throw new Error("activation was lost");
+      const saved = await r.state();
+      const now = saved === null ? { kind: "idle" as const } : status(saved);
+      if (now.kind !== "running" && !waiting(now)) return now;
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    }
+    throw new Error("run never went quiet");
+  };
+
+  const engine: StepEngine<string, Hands, string> = {
+    tokenFor: async (runId) =>
+      (await r.storage.get<string>(`token:${runId}`)) ?? null,
+    async beforeResume(runId) {
+      order.push("check-stop");
+      if ((await r.storage.get<boolean>(`stop:${runId}`)) !== true) return null;
+      await stopAll();
+      return { done: true, output: await cancelOver(r.store) };
+    },
+    async resume(_runId, posted) {
+      calls.resumes++;
+      order.push("resume");
+      wake();
+      results.deliver(posted.callId, posted.result);
+      await quiet(
+        (s) =>
+          s.kind === "suspended" &&
+          s.pending.some((call) => call.callId === posted.callId),
+      );
+    },
+    async nextStep() {
+      order.push("next-step");
+      wake();
+      const now = await quiet(() => false);
+      const call = now.kind === "suspended" ? now.pending[0] : undefined;
+      return call === undefined
+        ? null
+        : { callId: call.callId, tool: call.name, input: call.args };
+    },
+    async terminalOutput() {
+      const now = status(await r.saved());
+      return now.kind === "done" ? (now.output?.content ?? "") : now.kind;
+    },
+  };
+
+  const ctx = { storage: r.storage };
+  const handle: (request: Request, now: number) => Promise<Outcome> = deferred
+    ? stepHost(ctx, engine, {
+        deferResume: {
+          settled: () => false,
+          enqueue() {
+            calls.enqueues++;
+          },
+        },
+      }).handle
+    : stepHost(ctx, engine).handle;
+
+  return {
+    handle,
+    calls,
+    order,
+    teardown,
+    reached,
+    // The run route: record the capability, start the run, wait for its first
+    // tool call.
+    async launch(runId: string) {
+      await r.storage.put(`token:${runId}`, TOKEN);
+      const runtime = await host.runtime();
+      void runtime.dispatch({ _tag: "agent_start", runId, at: 0 }).catch(noop);
+      await quiet((s) => s.kind === "idle");
+    },
+    async evict() {
+      alive = false;
+      await stopAll();
+    },
+  };
+}
+type Activation = ReturnType<typeof activation>;
+
+// The hands: run each step they are given, post its result, ask again. They
+// stop at `until`, a step they were handed but have not posted yet.
+async function drive(
+  a: Activation,
+  w: World,
+  first: Request,
+  until?: string,
+): Promise<Outcome> {
+  let request = first;
+  for (;;) {
+    w.sent.push(request);
+    const outcome = await a.handle(request, NOW);
+    if (outcome.status !== 200 || !("step" in outcome.body)) return outcome;
+    w.executed.push(outcome.body.step.callId);
+    if (outcome.body.step.callId === until) return outcome;
+    request = post(outcome.body.step.callId);
+  }
+}
+
+const finished: Outcome = {
+  status: 200,
+  body: { done: true, output: ANSWER.content },
+};
+
+describe.each([
+  "model",
+  "compaction",
+] as const)("a step-hosted run evicted during its %s call, on retained storage", (mode) => {
+  it.each(
+    REPEATS,
+  )("the hands retry on a fresh activation and every turn happens once (repeat %i)", async () => {
+    const r = retained();
+    const w = world();
+    const first = activation(mode, r, w, mode);
+    await first.launch(RUN);
+    void drive(first, w, pull).catch(noop);
+    await first.reached;
+
+    const checkpoint = await r.saved();
+    expect(status(checkpoint).kind).toBe("running");
+    expect(checkpoint.conversation?.toolRecords).toHaveLength(DOCUMENTS - 1);
+    expect(JSON.stringify(checkpoint).length).toBeGreaterThan(100_000);
+    const unanswered = w.sent.at(-1);
+    expect(unanswered?.posted?.callId).toBe("document-3");
+    await first.evict();
+
+    const second = activation(mode, r, w, null);
+    expect(await drive(second, w, unanswered ?? pull)).toEqual(finished);
+
+    const third = activation(mode, r, w, null);
+    for (const again of [pull, post("document-4")]) {
+      expect(await third.handle(again, NOW)).toEqual(finished);
+    }
+
+    expect(w.executed).toEqual([
+      "document-1",
+      "document-2",
+      "document-3",
+      "document-4",
+    ]);
+    expect(w.returned).toEqual([1, 2, 3, 4, 5]);
+    expect(w.invocations).toBe(w.returned.length + w.lost);
+    expect(w.lost).toBe(mode === "model" ? 1 : 0);
+    expect(w.compactions).toEqual(
+      mode === "compaction"
+        ? { started: 2, folded: 1 }
+        : { started: 0, folded: 0 },
+    );
+    expect(status(await r.saved())).toMatchObject({
+      kind: "done",
+      output: ANSWER,
+    });
+    expect(r.alarms.length).toBeGreaterThan(0);
+    for (const a of [first, second, third]) {
+      expect(
+        a.teardown.every((name) => INTENTIONAL_TEARDOWN.includes(name)),
+      ).toBe(true);
+    }
+    await second.evict();
+    await third.evict();
+  });
+});
 
 describe.each([
   ["inline", false],
   ["deferred", true],
-] as const)("a stop persisted before the fourth read, %s step host", (_mode, deferred) => {
-  const rig = async (stopRequested: boolean) => {
-    const checkpoint = await suspendedOnFourthRead();
-    let paidCalls = 0;
-    const durable = storage(checkpoint);
-    const runtime = await passive(
-      wirePlain(
-        plainAgent(async () => {
-          paidCalls++;
-          return ANSWER;
-        }),
-        async () => hangs<M>(),
-      ),
-      durable.store,
-    ).ready;
-    const control = { stopRequested };
-    const calls = { resumes: 0, enqueues: 0, nextSteps: 0 };
-    const order: string[] = [];
-    const engine: StepEngine<string, never, string> = {
-      tokenFor: () => "synthetic-capability",
-      async beforeResume() {
-        order.push("check-stop");
-        if (!control.stopRequested) return null;
-        await runtime.dispatch(agentCancelMsg(5));
-        return { done: true, output: status(runtime.getState()).kind };
-      },
-      async resume(_runId, posted) {
-        calls.resumes++;
-        order.push("resume");
-        await runtime.dispatch({
-          _tag: "agent_tool_ok",
-          callId: posted.callId,
-          result: posted.result,
-          at: 4,
-        });
-      },
-      nextStep() {
-        calls.nextSteps++;
-        return null;
-      },
-      terminalOutput: () => status(runtime.getState()).kind,
-    };
-    const ctx = { storage: { setAlarm() {} } };
-    const host = deferred
-      ? stepHost(ctx, engine, {
-          deferResume: {
-            settled: () => false,
-            enqueue() {
-              calls.enqueues++;
-            },
-          },
-        })
-      : stepHost(ctx, engine);
-    const request = {
-      token: "synthetic-capability",
-      runId: "stopped-documents",
-      posted: { callId: "document-4", result: VALUE },
-    };
-    return {
-      host,
-      request,
-      runtime,
-      durable,
-      calls,
-      order,
-      paid: () => paidCalls,
-    };
+] as const)("a stop recorded in retained storage, %s step host", (_label, deferred) => {
+  const rig = async (stop: boolean) => {
+    const r = retained();
+    const w = world();
+    const first = activation("model", r, w, null);
+    await first.launch(RUN);
+    await drive(first, w, pull, "document-3");
+    if (stop) await r.storage.put(`stop:${RUN}`, true);
+    await first.evict();
+    return { r, w, next: activation("model", r, w, null, deferred) };
   };
 
   it.each(
     REPEATS,
-  )("cancels the run and posts no further model call, however often the result is posted (repeat %i)", async () => {
-    const r = await rig(true);
-    try {
-      for (let duplicate = 0; duplicate < 3; duplicate++) {
-        expect(await r.host.handle(r.request, 4)).toEqual({
-          status: 200,
-          body: { done: true, output: "cancelled" },
-        });
-      }
-      expect(r.paid()).toBe(0);
-      expect(r.calls).toEqual({ resumes: 0, enqueues: 0, nextSteps: 0 });
-      expect(r.order[0]).toBe("check-stop");
-      expect(status(r.durable.snapshot() as S).kind).toBe("cancelled");
-    } finally {
-      await r.runtime.stop();
+  )("ends the run cancelled on each pull and pays for no further model call (repeat %i)", async () => {
+    const { r, w, next } = await rig(true);
+    const stopped: Outcome = {
+      status: 200,
+      body: { done: true, output: "cancelled" },
+    };
+
+    for (const again of [post("document-3"), post("document-3"), pull]) {
+      expect(await next.handle(again, NOW)).toEqual(stopped);
     }
+    expect(next.order.filter((step) => step !== "check-stop")).toEqual([]);
+    expect(next.order[0]).toBe("check-stop");
+
+    const cold = activation("model", r, w, null, deferred);
+    expect(await cold.handle(post("document-3"), NOW)).toEqual(stopped);
+
+    for (const a of [next, cold]) {
+      expect(a.calls).toEqual({ resumes: 0, enqueues: 0 });
+    }
+    expect(w.invocations).toBe(3);
+    expect(w.returned).toEqual([1, 2, 3]);
+    expect(w.executed).toEqual(["document-1", "document-2", "document-3"]);
+    expect(status(await r.saved()).kind).toBe("cancelled");
+    expect(await r.storage.get<boolean>(`stop:${RUN}`)).toBe(true);
+    await next.evict();
+    await cold.evict();
   });
 
-  it("resumes the run as before when no stop was persisted", async () => {
-    const r = await rig(false);
-    try {
-      const outcome = await r.host.handle(r.request, 4);
-      if (deferred) {
-        expect(outcome).toEqual({
-          status: 200,
-          body: { done: false, working: true },
-        });
-        expect(r.calls).toEqual({ resumes: 0, enqueues: 1, nextSteps: 0 });
-        expect(r.paid()).toBe(0);
-      } else {
-        expect(outcome).toEqual({
-          status: 200,
-          body: { done: true, output: "done" },
-        });
-        expect(r.calls).toEqual({ resumes: 1, enqueues: 0, nextSteps: 1 });
-        expect(r.paid()).toBe(1);
-      }
-    } finally {
-      await r.runtime.stop();
+  it("resumes the run as before when no stop was recorded", async () => {
+    const { r, w, next } = await rig(false);
+    const outcome = await next.handle(post("document-3"), NOW);
+    if (deferred) {
+      expect(outcome).toEqual({
+        status: 200,
+        body: { done: false, working: true },
+      });
+      expect(next.calls).toEqual({ resumes: 0, enqueues: 1 });
+      expect(w.invocations).toBe(3);
+    } else {
+      expect(outcome).toEqual({
+        status: 200,
+        body: {
+          done: false,
+          step: { callId: "document-4", tool: "read", input: { n: 4 } },
+        },
+      });
+      expect(next.calls).toEqual({ resumes: 1, enqueues: 0 });
+      expect(w.invocations).toBe(4);
     }
+    expect(status(await r.saved()).kind).not.toBe("cancelled");
+    await next.evict();
   });
 });
