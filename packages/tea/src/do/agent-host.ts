@@ -28,7 +28,7 @@ import type {
   Wired,
 } from "../index";
 import { defaultOnError, sinkOrDefault } from "../internal/engine/loop";
-import { RuntimeDiscardNotice } from "../runtime-types";
+import { DispatchDiscardedError } from "../runtime-types";
 import { agentBootPort, beginResume } from "./resume";
 import { type SseHub, sseFromAgentEvents, sseHub } from "./sse";
 
@@ -344,13 +344,14 @@ export function createAgentHost<
     // it re-fired is done: that work can be waiting on a tool the driver has not
     // answered, and the driver reaches the run through this very call. The chain
     // then has no caller to reject at, so its failure goes to `onError` under
-    // `"boot"` (invariant 6) and is never dropped. A rejection from the host's
-    // own `reset()` is teardown, which the engine has already reported.
+    // `"boot"` (invariant 6) and is never dropped, whether or not a `reset()` is
+    // in flight. The error alone decides: only `DispatchDiscardedError`, what
+    // `stop()` rejects a pending dispatch with, is left out, because the engine
+    // already reported that teardown.
     try {
       const resumed = await beginResume(booting, agentBootPort(), now);
       resumed?.finished.catch((error: unknown) => {
-        if (current !== booting || error instanceof RuntimeDiscardNotice)
-          return;
+        if (error instanceof DispatchDiscardedError) return;
         sinkOrDefault(config.onError ?? defaultOnError, error, {
           phase: "boot",
         });

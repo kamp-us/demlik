@@ -33,6 +33,7 @@ import {
   type AgentMachineMsg,
   type AgentState,
   type AgentTurn,
+  agentBootMsg,
   agentCancelMsg,
   COMPACTION_PURPOSE,
   createAgent,
@@ -832,7 +833,9 @@ function hostReporting<C extends Cmd>(
   wired: AgentWired<C>,
   store: Store<S>,
   onError: (error: unknown, context: { readonly phase: string }) => void,
-  booted: () => void,
+  booted: (handle: {
+    dispatch(msg: AgentMachineMsg<Purpose, Outputs, string>): Promise<void>;
+  }) => void,
 ) {
   return createAgentHost<
     Stage,
@@ -846,7 +849,7 @@ function hostReporting<C extends Cmd>(
   >({
     run: (machine, options) => {
       const booting = run(machine, { ...options, disposeTimeoutMs: 0 });
-      void booting.ready.then(booted);
+      void booting.ready.then(() => booted(booting));
       return booting;
     },
     onError,
@@ -923,6 +926,106 @@ describe("a restored run whose agent_boot fails to save", () => {
       "document-4",
     ]);
     expect(boots()).toHaveLength(1);
+    await host.reset();
+  });
+});
+
+// What the detached `agent_boot` chain tells `onError`, decided by the error it
+// rejects with and never by whether a `reset()` is in flight. `held` parks the
+// first save until the test settles it. `ahead` dispatches a second `agent_boot`
+// before the host's own, so the host's is still queued when `stop()` gives up on
+// it and is refused at its turn.
+interface BootChainRow {
+  readonly save: "fails" | "held" | "passes";
+  readonly ahead: boolean;
+  readonly reset: boolean;
+  readonly reports: readonly "boot"[];
+}
+
+const BOOT_CHAIN = {
+  "an ordinary failure, no reset in flight": {
+    save: "fails",
+    ahead: false,
+    reset: false,
+    reports: ["boot"],
+  },
+  "an ordinary failure while reset() is in flight": {
+    save: "held",
+    ahead: false,
+    reset: true,
+    reports: ["boot"],
+  },
+  "the teardown stop() rejects a pending dispatch with": {
+    save: "held",
+    ahead: true,
+    reset: true,
+    reports: [],
+  },
+  "no rejection at all": {
+    save: "passes",
+    ahead: false,
+    reset: false,
+    reports: [],
+  },
+} as const satisfies Record<string, BootChainRow>;
+
+describe.each(
+  Object.entries(BOOT_CHAIN),
+)("the detached agent_boot chain: %s", (_name, row: BootChainRow) => {
+  it.each(
+    REPEATS,
+  )("reports exactly the boot failures its error kind owes (repeat %i)", async () => {
+    const { checkpoint, completed } = await lostDuring("model");
+    const failure = new Error("save failed on agent_boot");
+    const reports: Array<{ error: unknown; phase: string }> = [];
+    let rejectHeld: (error: Error) => void = noop;
+    const held = new Promise<void>((_resolve, reject) => {
+      rejectHeld = reject;
+    });
+    let booted = false;
+    let saves = 0;
+    const persisted = storage(checkpoint);
+    const store: Store<S> = {
+      ...persisted.store,
+      save: async (state) => {
+        const first = booted && ++saves === 1;
+        if (first && row.save === "fails") throw failure;
+        if (first && row.save === "held") await held;
+        await persisted.store.save(state);
+      },
+    };
+    let attempts = DOCUMENTS - 1;
+    const wired = wirePlain(
+      plainAgent(async () => turn(++attempts)),
+      async (cmd) => {
+        completed.push(cmd.callId);
+        return settled(cmd);
+      },
+    );
+    const host = hostReporting(
+      wired,
+      store,
+      (error, context) => reports.push({ error, phase: context.phase }),
+      (handle) => {
+        booted = true;
+        if (row.ahead) handle.dispatch(agentBootMsg(NOW)).catch(noop);
+      },
+    );
+
+    const runtime = await host.runtime();
+    if (row.reset) {
+      const resetting = host.reset();
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      rejectHeld(failure);
+      await resetting;
+    } else if (row.save === "passes") {
+      await reaches(runtime, (now) => now.kind === "done");
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, 10));
+
+    expect(reports.filter((report) => report.phase === "boot")).toEqual(
+      row.reports.map((phase) => ({ error: failure, phase })),
+    );
     await host.reset();
   });
 });
