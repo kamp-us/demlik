@@ -60,7 +60,6 @@
     "src/do/event-sourced-store.test.ts",
     "src/do/idempotent-effect.test.ts",
     "src/do/presence.test.ts",
-    "src/do/step-host.test.ts",
     "src/error-idiom.test.ts",
     "src/internal/flow/fan-out/fan-out.test.ts",
     "src/fold-msgs.test.ts",

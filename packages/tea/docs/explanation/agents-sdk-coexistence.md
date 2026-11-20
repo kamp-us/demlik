@@ -153,7 +153,7 @@ that runtime exists.
 
 **`stepHost` and `runStepLoop` are not.** This is the correction most likely to
 change what you adopt. `stepHost` orchestrates a `StepEngine` — a four-method
-port *you* implement:
+port *you* implement, with one optional admission hook:
 
 ```ts
 interface StepEngine<R, I, O> {
@@ -161,12 +161,14 @@ interface StepEngine<R, I, O> {
   resume(runId: string, posted: StepResult<R>): Promise<void> | void;
   nextStep(runId: string): Promise<NextStep<I> | null> | NextStep<I> | null;
   terminalOutput(runId: string): Promise<O> | O;
+  beforeResume?(runId: string): Promise<Terminal<O> | null> | Terminal<O> | null;
 }
 ```
 
-Nothing in that port names a `@demlik/tea` runtime, and `step-host.ts` imports
-nothing from `../agent`. Implement those four methods against whatever loop you
-already have and you get the `/step` contract — constant-time token check,
+`Terminal<O>` stands for the existing `{ done: true, output }` response. Nothing
+in that port names a `@demlik/tea` runtime, and `step-host.ts` imports nothing
+from `../agent`. Implement those four methods against whatever loop you already
+have and you get the `/step` contract — constant-time token check,
 re-armed give-up alarm, idempotent settle of a re-POSTed result, hibernation
 between steps — without moving your orchestrator.
 

@@ -9,7 +9,9 @@
  * compacted. The persisted checkpoint is larger than 100 KB. A new activation
  * over a clone of that checkpoint, with three `host.runtime()` callers at once,
  * must reach the final answer, with the three finished reads still folded
- * and the outstanding operation reissued once. Every case runs three times.
+ * and the outstanding operation reissued once. A stop persisted before the
+ * fourth read is posted ends the run with no further model call, whether the
+ * step host resumes inline or defers. Every case runs three times.
  *
  * Globals are NOT enabled in vitest.config.ts — describe/it/expect are imported.
  */
@@ -31,6 +33,7 @@ import type { Cmd, Interpret, Store, Wired } from "../index";
 import type { DeadlinesSub } from "../internal/resilience/deadline";
 import { run } from "../promise";
 import { createAgentHost } from "./agent-host";
+import { type StepEngine, stepHost } from "./step-host";
 
 type Stage = "work";
 type Purpose = "turn";
@@ -320,5 +323,160 @@ describe("cold wake over a run that is not mid-run", () => {
     expect(wake.attempts()).toBe(3);
     expect(reads).toEqual([]);
     await wake.host.reset();
+  });
+});
+
+// A run activation that boots nothing: the stop admission reads persisted
+// control state first and only then needs a runtime to cancel through.
+function passive(wired: ReturnType<typeof wirePlain>, store: Store<S>) {
+  return run(wired.machine, {
+    ...wired,
+    store,
+    ctx: {},
+    disposeTimeoutMs: 0,
+    onError: (error, context) => {
+      if (context.phase !== "discard") throw error;
+    },
+  });
+}
+
+async function suspendedOnFourthRead() {
+  const reached = gate();
+  let attempt = 0;
+  const saved = storage();
+  const old = await passive(
+    wirePlain(
+      plainAgent(async () => turn(++attempt)),
+      async (cmd) => {
+        if (cmd.callId === "document-4") {
+          reached.release();
+          return hangs<M>();
+        }
+        return settled(cmd);
+      },
+    ),
+    saved.store,
+  ).ready;
+  void old.dispatch(start("stopped"));
+  await reached.reached;
+  const checkpoint = saved.snapshot();
+  await old.stop();
+  return checkpoint;
+}
+
+describe.each([
+  ["inline", false],
+  ["deferred", true],
+] as const)("a stop persisted before the fourth read, %s step host", (_mode, deferred) => {
+  const rig = async (stopRequested: boolean) => {
+    const checkpoint = await suspendedOnFourthRead();
+    let paidCalls = 0;
+    const durable = storage(checkpoint);
+    const runtime = await passive(
+      wirePlain(
+        plainAgent(async () => {
+          paidCalls++;
+          return ANSWER;
+        }),
+        async () => hangs<M>(),
+      ),
+      durable.store,
+    ).ready;
+    const control = { stopRequested };
+    const calls = { resumes: 0, enqueues: 0, nextSteps: 0 };
+    const order: string[] = [];
+    const engine: StepEngine<string, never, string> = {
+      tokenFor: () => "synthetic-capability",
+      async beforeResume() {
+        order.push("check-stop");
+        if (!control.stopRequested) return null;
+        await runtime.dispatch(agentCancelMsg(5));
+        return { done: true, output: status(runtime.getState()).kind };
+      },
+      async resume(_runId, posted) {
+        calls.resumes++;
+        order.push("resume");
+        await runtime.dispatch({
+          _tag: "agent_tool_ok",
+          callId: posted.callId,
+          result: posted.result,
+          at: 4,
+        });
+      },
+      nextStep() {
+        calls.nextSteps++;
+        return null;
+      },
+      terminalOutput: () => status(runtime.getState()).kind,
+    };
+    const ctx = { storage: { setAlarm() {} } };
+    const host = deferred
+      ? stepHost(ctx, engine, {
+          deferResume: {
+            settled: () => false,
+            enqueue() {
+              calls.enqueues++;
+            },
+          },
+        })
+      : stepHost(ctx, engine);
+    const request = {
+      token: "synthetic-capability",
+      runId: "stopped-documents",
+      posted: { callId: "document-4", result: VALUE },
+    };
+    return {
+      host,
+      request,
+      runtime,
+      durable,
+      calls,
+      order,
+      paid: () => paidCalls,
+    };
+  };
+
+  it.each(
+    REPEATS,
+  )("cancels the run and posts no further model call, however often the result is posted (repeat %i)", async () => {
+    const r = await rig(true);
+    try {
+      for (let duplicate = 0; duplicate < 3; duplicate++) {
+        expect(await r.host.handle(r.request, 4)).toEqual({
+          status: 200,
+          body: { done: true, output: "cancelled" },
+        });
+      }
+      expect(r.paid()).toBe(0);
+      expect(r.calls).toEqual({ resumes: 0, enqueues: 0, nextSteps: 0 });
+      expect(r.order[0]).toBe("check-stop");
+      expect(status(r.durable.snapshot() as S).kind).toBe("cancelled");
+    } finally {
+      await r.runtime.stop();
+    }
+  });
+
+  it("resumes the run as before when no stop was persisted", async () => {
+    const r = await rig(false);
+    try {
+      const outcome = await r.host.handle(r.request, 4);
+      if (deferred) {
+        expect(outcome).toEqual({
+          status: 200,
+          body: { done: false, working: true },
+        });
+        expect(r.calls).toEqual({ resumes: 0, enqueues: 1, nextSteps: 0 });
+        expect(r.paid()).toBe(0);
+      } else {
+        expect(outcome).toEqual({
+          status: 200,
+          body: { done: true, output: "done" },
+        });
+        expect(r.calls).toEqual({ resumes: 1, enqueues: 0, nextSteps: 1 });
+        expect(r.paid()).toBe(1);
+      }
+    } finally {
+      await r.runtime.stop();
+    }
   });
 });

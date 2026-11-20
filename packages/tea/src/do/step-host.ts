@@ -37,13 +37,16 @@
  *   2. **re-arms** the eviction-safe give-up alarm via `ctx.storage.setAlarm`
  *      (the DO-native alarm API — the `do_alarm` Sub was dropped, see the
  *      `host.ts` header; the alarm is a host concern, not a machine Sub),
- *   3. **settles** the posted tool result IDEMPOTENTLY through
+ *   3. **admits** the pull through the engine's optional `beforeResume` — it
+ *      may answer with the terminal response itself, and then nothing below
+ *      runs for this request,
+ *   4. **settles** the posted tool result IDEMPOTENTLY through
  *      `idempotent-intake` — a re-POSTed result is absorbed exactly once and
  *      the duplicate replays the same next step,
- *   4. **resumes** the run from its durable checkpoint (the #68 event-sourced
+ *   5. **resumes** the run from its durable checkpoint (the #68 event-sourced
  *      store / #91 in-flight ledger) by dispatching the settle and running to
  *      DISPATCH-QUIESCENCE,
- *   5. **returns** the next step (the next tool call) — or the terminal output
+ *   6. **returns** the next step (the next tool call) — or the terminal output
  *      read off `runtime.result()` — and lets the DO HIBERNATE.
  *
  * No warm loop is held between responses. The durable checkpoint IS the loop's
@@ -230,7 +233,7 @@ export function constantTimeEqual(a: string, b: string): boolean {
 // The host-layer assembly. The consumer supplies a `StepEngine<R, I, O>` — the
 // run-specific operations the handler orchestrates (token lookup, settle into
 // the runtime, resume to quiescence, read next step / terminal). `stepHost`
-// owns the ORDER (validate → setAlarm → idempotent-settle → resume → return →
+// owns the ORDER (validate → setAlarm → admit → idempotent-settle → resume → return →
 // hibernate), the idempotency, and the HTTP status mapping; the engine owns the
 // run-specific I/O. This is the same dependency-injection shape as
 // `durableCommandCarrier` (hooks) and `createAgentHost` (mappings).
@@ -286,6 +289,30 @@ export interface StepEngine<R, I, O> {
    * {@link nextStep} returned `null`.
    */
   terminalOutput(runId: string): Promise<O> | O;
+  /**
+   * Optional admission check, run for EVERY authenticated pull — the first pull,
+   * a result post, a duplicate — after the token is accepted and the give-up
+   * alarm is re-armed, and BEFORE the settle, the deferred readiness probe and
+   * enqueue, {@link nextStep} and {@link terminalOutput}. Return `null` to
+   * continue exactly as a host without the hook does. Return the terminal
+   * `{ done: true, output }` response to end the pull there: `stepHost` sends
+   * it and does no further work for this request.
+   *
+   * It decides nothing for the host. The engine reads whatever persisted state it
+   * keeps for the run (a stop it recorded, say), acts on it (dispatches the run's
+   * cancel Msg through its own runtime), and answers. `stepHost` owns only the
+   * order and the short-circuit. A throw or a rejection propagates out of
+   * `handle` before the intake is touched, so the same result posted again is
+   * still new. It bounds this pull only: a step already started, or a stop that
+   * arrives after the hook returned, is outside it, and a worker that runs queued
+   * work later must check again.
+   */
+  beforeResume?(
+    runId: string,
+  ):
+    | Promise<Extract<StepResponse<I, O>, { readonly done: true }> | null>
+    | Extract<StepResponse<I, O>, { readonly done: true }>
+    | null;
 }
 
 /** Tuning for `stepHost`'s give-up alarm. */
@@ -469,7 +496,17 @@ export function stepHost<R, I, O>(
     //     not a machine Sub.)
     await ctx.storage.setAlarm(now + giveUpAfterMs);
 
-    // 3 — SETTLE the posted result (skip on the first request, where there is
+    // 3 — ADMIT the pull. The optional engine hook runs for every authenticated
+    //     pull, before any resume work; a terminal answer from it ends the
+    //     request here, with no intake, resume, readiness probe, enqueue or
+    //     step read. A rejection propagates before the intake is touched.
+    const admitted =
+      engine.beforeResume === undefined
+        ? null
+        : await engine.beforeResume(request.runId);
+    if (admitted !== null) return { status: 200, body: admitted };
+
+    // 4 — SETTLE the posted result (skip on the first request, where there is
     //     nothing to settle). Two shapes, chosen by whether the defer-resume
     //     hook is engaged:
     const posted = request.posted;
@@ -478,7 +515,7 @@ export function stepHost<R, I, O>(
         // INLINE (default, unchanged) — settle + resume idempotently INSIDE the
         // held request. `intake.receive` decides new-vs-duplicate and emits the
         // decision as a Cmd; a genuinely-new callId runs `resume` exactly once, a
-        // duplicate replays (no re-settle). Either way step 4 re-reads the next
+        // duplicate replays (no re-settle). Either way step 5 re-reads the next
         // step off the durable checkpoint, so a duplicate POST returns the SAME
         // next step.
         const [nextIntake, cmds] = intake.receive(
@@ -500,12 +537,12 @@ export function stepHost<R, I, O>(
             intakeState = completed;
           }
           // `intake:replay` (a duplicate) needs no action: `resume` already ran
-          // for this callId, and step 4 re-derives the next step below.
+          // for this callId, and step 5 re-derives the next step below.
         }
       } else {
         // DEFER (opt-in) — resume runs OUT of the held request. Readiness is the
         // gate: if the enqueued resume has already landed in the durable
-        // checkpoint, fall through to step 4 and read the next step (identical to
+        // checkpoint, fall through to step 5 and read the next step (identical to
         // the inline tail). If not, (idempotently) enqueue the resume to run in a
         // returning activation and return the WORKING arm — the held request
         // never awaits the step compute (the same production incident). The
@@ -520,7 +557,7 @@ export function stepHost<R, I, O>(
       }
     }
 
-    // 4 — RETURN the next step, or the terminal output. Read off the resumed
+    // 5 — RETURN the next step, or the terminal output. Read off the resumed
     //     run's durable state — NOT off any warm loop. The DO hibernates after
     //     this response; the checkpoint is the continuation.
     const next = await engine.nextStep(request.runId);

@@ -71,6 +71,13 @@ interface Durable {
   settleCount: number;
 }
 
+/** The script entry at `cursor`; a cursor past the script has no step to hand out. */
+function entryAt(cursor: number): (typeof SCRIPT)[number] {
+  const entry = SCRIPT[cursor];
+  if (entry === undefined) throw new Error(`no script entry at ${cursor}`);
+  return entry;
+}
+
 /** The callId for the step at `cursor` — stable, so a re-POST matches. */
 function callIdFor(runId: string, cursor: number): string {
   return `${runId}:${cursor}`;
@@ -106,7 +113,7 @@ function coldWake(
     },
     nextStep(runId): NextStep<ToolInput> | null {
       if (durable.cursor >= SCRIPT.length) return null;
-      const entry = SCRIPT[durable.cursor];
+      const entry = entryAt(durable.cursor);
       return {
         callId: callIdFor(runId, durable.cursor),
         tool: entry.tool,
@@ -446,7 +453,7 @@ describe("stepHost — defer-resume working arm (real host, end to end)", () => 
         },
         nextStep(rid): NextStep<ToolInput> | null {
           if (durable.cursor >= SCRIPT.length) return null;
-          const entry = SCRIPT[durable.cursor];
+          const entry = entryAt(durable.cursor);
           return {
             callId: callIdFor(rid, durable.cursor),
             tool: entry.tool,
@@ -554,7 +561,7 @@ describe("stepHost — defer-resume working arm (real host, end to end)", () => 
     for (let i = 1; i < SCRIPT.length; i++) {
       const posted: StepResult<ToolResult> = {
         callId: pending2.callId,
-        result: pending2.tool[0].toUpperCase(),
+        result: pending2.tool.charAt(0).toUpperCase(),
       };
       now += 100;
       const w = await coldWakeDefer().handle({ token, runId, posted }, now);
@@ -599,7 +606,7 @@ describe("stepHost — defer-resume working arm (real host, end to end)", () => 
         },
         nextStep(rid): NextStep<ToolInput> | null {
           if (durable.cursor >= SCRIPT.length) return null;
-          const entry = SCRIPT[durable.cursor];
+          const entry = entryAt(durable.cursor);
           return {
             callId: callIdFor(rid, durable.cursor),
             tool: entry.tool,
@@ -652,7 +659,7 @@ describe("stepHost — defer-resume working arm (real host, end to end)", () => 
       transport,
       (step) => {
         executed.push(step.tool);
-        return step.tool[0].toUpperCase();
+        return step.tool.charAt(0).toUpperCase();
       },
       {
         deadlineMs: Number.POSITIVE_INFINITY,
@@ -666,5 +673,255 @@ describe("stepHost — defer-resume working arm (real host, end to end)", () => 
     expect(outcome.output).toBe("A|B|G");
     expect(executed).toEqual(["alpha", "beta", "gamma"]);
     expect(durable.cursor).toBe(SCRIPT.length);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// beforeResume — the admission hook that runs before any resume work
+//
+// A host that must refuse more work for a run (a stop it persisted) answers the
+// pull itself: after the token is accepted and the alarm re-armed, and before
+// the settle, the deferred enqueue, or the next-step read. These tests pin the
+// ORDER and the short-circuit with a trace of every engine and hook call.
+// ─────────────────────────────────────────────────────────────────────────────
+
+type Admission = Extract<
+  StepResponse<ToolInput, RunOutput>,
+  { readonly done: true }
+>;
+type Hook = (runId: string) => Promise<Admission | null> | Admission | null;
+
+const STOPPED: Admission = { done: true, output: "stopped" };
+
+function admissionRig(deferred: boolean, beforeResume?: Hook) {
+  const runId = "run-admit";
+  const durable = freshDurable(mintRunToken());
+  const trace: string[] = [];
+  const ctx: StepCtx = {
+    storage: {
+      setAlarm(at) {
+        trace.push("setAlarm");
+        durable.alarmAt = at;
+      },
+    },
+  };
+  const engine: StepEngine<ToolResult, ToolInput, RunOutput> = {
+    tokenFor: () => durable.token,
+    resume(_runId, posted) {
+      trace.push("resume");
+      durable.settleCount += 1;
+      durable.collected.push(posted.result);
+      durable.cursor += 1;
+    },
+    nextStep(rid): NextStep<ToolInput> | null {
+      trace.push("nextStep");
+      if (durable.cursor >= SCRIPT.length) return null;
+      const entry = entryAt(durable.cursor);
+      return {
+        callId: callIdFor(rid, durable.cursor),
+        tool: entry.tool,
+        input: entry.input,
+      };
+    },
+    terminalOutput() {
+      trace.push("terminalOutput");
+      return durable.collected.join("|");
+    },
+    ...(beforeResume === undefined
+      ? {}
+      : {
+          beforeResume(rid: string) {
+            trace.push("beforeResume");
+            return beforeResume(rid);
+          },
+        }),
+  };
+  const deferResume: DeferResumeHook<ToolResult> = {
+    settled() {
+      trace.push("settled");
+      return false;
+    },
+    enqueue() {
+      trace.push("enqueue");
+    },
+  };
+  const host = deferred
+    ? stepHost<ToolResult, ToolInput, RunOutput>(ctx, engine, { deferResume })
+    : stepHost<ToolResult, ToolInput, RunOutput>(ctx, engine);
+  const request = (
+    posted: StepResult<ToolResult> | null,
+  ): StepRequest<ToolResult> => ({
+    token: durable.token,
+    runId,
+    posted,
+  });
+  return { host, durable, trace, request, runId };
+}
+
+const POSTED: StepResult<ToolResult> = { callId: "run-admit:0", result: "A" };
+
+describe.each([
+  ["inline", false],
+  ["deferred", true],
+] as const)("stepHost beforeResume — %s host", (_mode, deferred) => {
+  it("answers a terminal response before intake, resume, readiness, enqueue, step read and output read", async () => {
+    const rig = admissionRig(deferred, () => STOPPED);
+
+    const outcome = await rig.host.handle(rig.request(POSTED), 1_000);
+
+    expect(outcome).toEqual({ status: 200, body: STOPPED });
+    expect(rig.trace).toEqual(["setAlarm", "beforeResume"]);
+    expect(rig.durable.alarmAt).toBe(1_000 + 5 * 60_000);
+    expect(rig.durable.settleCount).toBe(0);
+  });
+
+  it("runs for a first pull with nothing posted", async () => {
+    const rig = admissionRig(deferred, () => STOPPED);
+
+    const outcome = await rig.host.handle(rig.request(null), 0);
+
+    expect(outcome).toEqual({ status: 200, body: STOPPED });
+    expect(rig.trace).toEqual(["setAlarm", "beforeResume"]);
+  });
+
+  it("runs on every duplicate request and never resumes", async () => {
+    const rig = admissionRig(deferred, () => STOPPED);
+
+    for (let duplicate = 0; duplicate < 3; duplicate++) {
+      const outcome = await rig.host.handle(rig.request(POSTED), duplicate);
+      expect(outcome).toEqual({ status: 200, body: STOPPED });
+    }
+
+    expect(rig.trace.filter((call) => call === "beforeResume")).toHaveLength(3);
+    expect(rig.trace).not.toContain("resume");
+    expect(rig.trace).not.toContain("enqueue");
+    expect(rig.durable.settleCount).toBe(0);
+  });
+
+  it("awaits an async hook", async () => {
+    const rig = admissionRig(deferred, async () => {
+      await Promise.resolve();
+      return STOPPED;
+    });
+
+    const outcome = await rig.host.handle(rig.request(POSTED), 0);
+
+    expect(outcome).toEqual({ status: 200, body: STOPPED });
+    expect(rig.trace).toEqual(["setAlarm", "beforeResume"]);
+  });
+
+  it("continues exactly as it did without a hook when the hook answers null", async () => {
+    const withHook = admissionRig(deferred, async () => null);
+    const without = admissionRig(deferred);
+
+    const a = await withHook.host.handle(withHook.request(POSTED), 0);
+    const b = await without.host.handle(without.request(POSTED), 0);
+
+    expect(a).toEqual(b);
+    expect(withHook.trace.filter((call) => call !== "beforeResume")).toEqual(
+      without.trace,
+    );
+    expect(withHook.trace.slice(0, 2)).toEqual(["setAlarm", "beforeResume"]);
+  });
+
+  it.each([
+    [
+      "throws",
+      () => {
+        throw new Error("hook failed");
+      },
+    ],
+    ["rejects", () => Promise.reject(new Error("hook failed"))],
+  ] as const)("a hook that %s propagates before intake is touched", async (_how, failing) => {
+    let failures = 1;
+    const rig = admissionRig(deferred, () =>
+      failures-- > 0 ? failing() : null,
+    );
+
+    await expect(rig.host.handle(rig.request(POSTED), 0)).rejects.toThrow(
+      "hook failed",
+    );
+    expect(rig.trace).toEqual(["setAlarm", "beforeResume"]);
+
+    // The same result posted again is still new: the failed hook marked nothing complete.
+    await rig.host.handle(rig.request(POSTED), 1);
+    expect(rig.trace.slice(2)).toEqual([
+      "setAlarm",
+      "beforeResume",
+      ...(deferred ? ["settled", "enqueue"] : ["resume", "nextStep"]),
+    ]);
+  });
+
+  it("never reaches the hook when the token is refused", async () => {
+    const calls: string[] = [];
+    const rig = admissionRig(deferred, () => {
+      calls.push("hook");
+      return STOPPED;
+    });
+
+    const wrong = await rig.host.handle(
+      { ...rig.request(POSTED), token: mintRunToken() },
+      0,
+    );
+    expect(wrong.status).toBe(401);
+    expect(calls).toEqual([]);
+    expect(rig.trace).toEqual([]);
+    expect(rig.durable.alarmAt).toBeNull();
+  });
+
+  it("never reaches the hook for an unknown run", async () => {
+    const calls: string[] = [];
+    const host = deferred
+      ? stepHost<ToolResult, ToolInput, RunOutput>(
+          {
+            storage: {
+              setAlarm() {
+                calls.push("setAlarm");
+              },
+            },
+          },
+          {
+            tokenFor: () => null,
+            resume() {
+              calls.push("resume");
+            },
+            nextStep: () => null,
+            terminalOutput: () => "",
+            beforeResume: () => {
+              calls.push("hook");
+              return STOPPED;
+            },
+          },
+          { deferResume: { settled: () => false, enqueue: () => {} } },
+        )
+      : stepHost<ToolResult, ToolInput, RunOutput>(
+          {
+            storage: {
+              setAlarm() {
+                calls.push("setAlarm");
+              },
+            },
+          },
+          {
+            tokenFor: () => null,
+            resume() {
+              calls.push("resume");
+            },
+            nextStep: () => null,
+            terminalOutput: () => "",
+            beforeResume: () => {
+              calls.push("hook");
+              return STOPPED;
+            },
+          },
+        );
+
+    const outcome = await host.handle(
+      { token: "any", runId: "missing", posted: POSTED },
+      0,
+    );
+
+    expect(outcome.status).toBe(404);
+    expect(calls).toEqual([]);
   });
 });

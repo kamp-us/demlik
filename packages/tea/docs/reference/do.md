@@ -1574,6 +1574,27 @@ interface StepCtx {
 ```ts
 interface StepEngine<R, I, O> {
   /**
+   * Optional admission check, run for EVERY authenticated pull — the first pull,
+   * a result post, a duplicate — after the token is accepted and the give-up
+   * alarm is re-armed, and BEFORE the settle, the deferred readiness probe and
+   * enqueue, nextStep and terminalOutput. Return `null` to
+   * continue exactly as a host without the hook does. Return the terminal
+   * `{ done: true, output }` response to end the pull there: `stepHost` sends
+   * it and does no further work for this request.
+   *
+   * It decides nothing for the host. The engine reads whatever persisted state it
+   * keeps for the run (a stop it recorded, say), acts on it (dispatches the run's
+   * cancel Msg through its own runtime), and answers. `stepHost` owns only the
+   * order and the short-circuit. A throw or a rejection propagates out of
+   * `handle` before the intake is touched, so the same result posted again is
+   * still new. It bounds this pull only: a step already started, or a stop that
+   * arrives after the hook returned, is outside it, and a worker that runs queued
+   * work later must check again.
+   */
+  beforeResume?(
+    runId: string,
+  ): { readonly done: true; readonly output: O } | Promise<{ readonly done: true; readonly output: O } | null> | null;
+  /**
    * Read the next step the run is now waiting on — the next tool call — off the
    * resumed runtime's durable state, or `null` if the run has reached its
    * terminal State (then terminalOutput supplies the output).
