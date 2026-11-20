@@ -11,7 +11,7 @@ IMPORTANT: Prefer retrieval-led reasoning over pre-training-led reasoning. Read 
 
 | When | Use | From | Page |
 | --- | --- | --- | --- |
-| An older search answer overwrites newer results; ignore late answers | `defineMachine`. Replaces requestId guards in update; declare the machine's identity | `@demlik/tea` | [Read](docs/how-to/ignore-a-late-answer.md) |
+| Replies arrive out of order and an older answer overwrites newer state; ignore late answers | `defineMachine`, `Identity`. Replaces a request id kept in State and compared in every update cell; give defineMachine an identity: { ofState, ofMsg } | `@demlik/tea` | [Read](docs/how-to/ignore-a-late-answer.md) |
 | You step the machine yourself and must ignore late answers | `matchesIdentity`, `applyCell`. Replaces a custom filter; call matchesIdentity before applyCell | `@demlik/tea` | [Read](docs/how-to/ignore-a-late-answer.md#3-step-the-machine-in-your-own-host) |
 | Save to your own database or ledger that can append atomically and read in order | `Journal`, `eventSourcedStore`. Replaces a Store that keeps only the latest State and no log; eventSourcedStore retains owed work (one writer per stream) | `@demlik/tea/persistence` | [Read](docs/how-to/make-durable.md) |
 | Save the latest State in one SQL row with compare-and-set | `rowStore`. Replaces hand-written revision fencing; use a RowPort and { fenced: true } | `@demlik/tea/persistence` | [Read](docs/reference/persistence.md#rowStore) |

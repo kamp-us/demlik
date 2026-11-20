@@ -8,11 +8,12 @@ interface Rule {
 
 export const rules: readonly Rule[] = [
   {
-    when: "An older search answer overwrites newer results; ignore late answers",
-    use: "defineMachine",
+    when: "Replies arrive out of order and an older answer overwrites newer state; ignore late answers",
+    use: "defineMachine, Identity",
     from: "@demlik/tea",
     page: "docs/how-to/ignore-a-late-answer.md",
-    instead: "requestId guards in update; declare the machine's identity",
+    instead:
+      "a request id kept in State and compared in every update cell; give defineMachine an identity: { ofState, ofMsg }",
   },
   {
     when: "You step the machine yourself and must ignore late answers",
