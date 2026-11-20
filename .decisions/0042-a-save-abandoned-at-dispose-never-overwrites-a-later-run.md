@@ -42,6 +42,7 @@ tags: [tea, persistence, engine, stop, fencing]
 - Every `load()` advances the generation, one on the same store included, and a call carries the generation it was called under. So a store a host hands to each run it rebuilds is covered, and a second `load()` refuses the same store's earlier call too.
 - A later `load()` that never saves still refuses an earlier store's late save. The later run has taken the log.
 - A custom plain store that waits between being called and writing is not covered: tea cannot reach into it. It checks at its own write point or is a `FencedStore`. `doStore` builds its `put` inside the call and has no wait to land from.
+- This amends [ADR 0025](./0025-stop-gives-up-on-handlers.md) in part. Its Cost, that on a plain store a save that lands late can overwrite what a newer run saved, no longer holds for `doEventSourcedStore`, which refuses it as above. It still holds for a custom plain store that waits before it writes. A fenced store refuses it ([ADR 0017](./0017-fencing-is-an-optional-store-widening.md)). So a host that starts a new run on the same store after a `stop()` that gave up needs the event store, a fenced store, or its own check at the write point. ADR 0025 keeps its text.
 - The host's lifecycle table does not change: a replacement run still builds after the teardown it waited for, and the fence is what makes that safe when the teardown gave up.
 
 ## Records

@@ -11,8 +11,6 @@ tags: [tea, engine, stop, teardown]
 **What this decides:** when a host stops a run while a Cmd handler is still running, `stop()` waits
 for that handler only up to `disposeTimeoutMs`, then finishes the shutdown without it.
 
-**The Cost about a late save on a plain store is amended by [0042](./0042-a-save-abandoned-at-dispose-never-overwrites-a-later-run.md):** `doEventSourcedStore` now refuses that save at its write point once a newer run has loaded its log. A custom plain store that waits before it writes is still not covered. Everything else here stands.
-
 ## Context
 
 `stop()` waited for the run's queue with no time limit. The queue settles only once the handlers of
@@ -83,13 +81,11 @@ What `stop()` promises on each engine when a Cmd handler never returns:
 - **Cost:** a store call already under way when `stop()` gave up is not cancelled and can finish
   after `stop()` has returned. A store's `load` and `save` are Promises on both engines. tea starts
   no store call after that.
-- **Cost:** on a custom plain store a save that lands late can overwrite what a newer run saved,
-  and nothing reports it. A fenced store refuses it with `StoreConflictError`
-  ([ADR 0017](./0017-fencing-is-an-optional-store-widening.md)), and `doEventSourcedStore` refuses
-  it once a newer run has loaded its log
-  ([ADR 0042](./0042-a-save-abandoned-at-dispose-never-overwrites-a-later-run.md)). So a host that
-  starts a new run on the same store after a `stop()` that gave up needs one of those. No option is
-  added to the store contract for this.
+- **Cost:** on a plain store a save that lands late can overwrite what a newer run saved, and
+  nothing reports it. A fenced store refuses it with `StoreConflictError`
+  ([ADR 0017](./0017-fencing-is-an-optional-store-widening.md)). So a host that starts a new run on
+  the same store after a `stop()` that gave up needs a fenced store. No option is added to the
+  store contract for this.
 - `stop()` makes two waits, one after the other: the queue, then the teardown work that returned a
   Promise. Each is bounded by `disposeTimeoutMs`, so the worst case before the final save is twice
   that limit.
