@@ -825,3 +825,104 @@ describe.each([
     ).toBe(true);
   });
 });
+
+// A host whose every report reaches `onError`, and which tells the test the
+// moment each runtime has booted.
+function hostReporting<C extends Cmd>(
+  wired: AgentWired<C>,
+  store: Store<S>,
+  onError: (error: unknown, context: { readonly phase: string }) => void,
+  booted: () => void,
+) {
+  return createAgentHost<
+    Stage,
+    Purpose,
+    Outputs,
+    string,
+    null,
+    C,
+    DeadlinesSub,
+    object
+  >({
+    run: (machine, options) => {
+      const booting = run(machine, { ...options, disposeTimeoutMs: 0 });
+      void booting.ready.then(booted);
+      return booting;
+    },
+    onError,
+    buildMachine: () => wired,
+    store,
+    ctx: {},
+    toSseFrame: () => null,
+    now: () => 2,
+  });
+}
+
+describe("a restored run whose agent_boot fails to save", () => {
+  it.each(
+    REPEATS,
+  )("runtime() resolves early, onError hears the boot once, and reset() then runtime() boots again (repeat %i)", async () => {
+    const { checkpoint, completed } = await lostDuring("model");
+    const failure = new Error("save failed on agent_boot");
+    const reports: Array<{ error: unknown; phase: string }> = [];
+    let attempts = DOCUMENTS - 1;
+    let armed = false;
+    let builds = 0;
+    const persisted = storage(checkpoint);
+    const store: Store<S> = {
+      ...persisted.store,
+      save: async (state) => {
+        if (armed) {
+          armed = false;
+          throw failure;
+        }
+        await persisted.store.save(state);
+      },
+    };
+    const wired = wirePlain(
+      plainAgent(async () => turn(++attempts)),
+      async (cmd) => {
+        completed.push(cmd.callId);
+        return settled(cmd);
+      },
+    );
+    const host = hostReporting(
+      wired,
+      store,
+      (error, context) => reports.push({ error, phase: context.phase }),
+      () => {
+        armed = builds++ === 0;
+      },
+    );
+    const boots = () => reports.filter((report) => report.phase === "boot");
+
+    const first = await host.runtime();
+    await new Promise<void>((resolve) => setTimeout(resolve, 10));
+    expect(status(first.getState()).kind).toBe("running");
+    expect(attempts).toBe(DOCUMENTS - 1);
+    expect(boots()).toEqual([{ error: failure, phase: "boot" }]);
+    expect(reports.map((report) => report.phase)).toEqual(["boot"]);
+
+    expect(await host.runtime()).toBe(first);
+    expect(attempts).toBe(DOCUMENTS - 1);
+    expect(boots()).toHaveLength(1);
+
+    await host.reset();
+    expect(boots()).toHaveLength(1);
+    const second = await host.runtime();
+    expect(second).not.toBe(first);
+    expect(await reaches(second, (now) => now.kind === "done")).toMatchObject({
+      kind: "done",
+      output: ANSWER,
+    });
+    expect(attempts).toBe(DOCUMENTS + 1);
+    expect(completed).toEqual([
+      "document-1",
+      "document-2",
+      "document-3",
+      "document-4",
+    ]);
+    expect(boots()).toHaveLength(1);
+    await host.reset();
+  });
+});

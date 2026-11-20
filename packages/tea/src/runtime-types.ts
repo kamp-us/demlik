@@ -161,7 +161,9 @@ export function __resetPortRegistry(): void {
  * - `"observer"` — a `runtime.observe(...)` observer threw during fanout, or
  *   the `telemetry` sink threw or rejected.
  * - `"event"` — the `events` projector or an `on(type, ...)` handler threw.
- * - `"boot"` — an `onBoot` handler threw (boot fanout, or a late registration).
+ * - `"boot"` — an `onBoot` handler threw (boot fanout, or a late registration),
+ *   or the `agent_boot` dispatch `createAgentHost` queues for a restored run
+ *   rejected, for example because its save failed.
  * - `"port-emit"` — a `subscribePort` listener threw during a port emission.
  * - `"sub-cleanup"` — a subscription's cleanup threw (reconcile-removal or
  *   `stop()` teardown).

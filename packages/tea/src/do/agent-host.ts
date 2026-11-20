@@ -27,6 +27,8 @@ import type {
   Sub,
   Wired,
 } from "../index";
+import { defaultOnError, sinkOrDefault } from "../internal/engine/loop";
+import { RuntimeDiscardNotice } from "../runtime-types";
 import { agentBootPort, beginResume } from "./resume";
 import { type SseHub, sseFromAgentEvents, sseHub } from "./sse";
 
@@ -340,11 +342,19 @@ export function createAgentHost<
     // effects) IFF this wake rehydrated a running or suspended run (no-op on a
     // fresh DO). The gate opens once `agent_boot` is queued, not when the work
     // it re-fired is done: that work can be waiting on a tool the driver has not
-    // answered, and the driver reaches the run through this very call. Failures
-    // of that work reach `onError`, as any Cmd's do.
+    // answered, and the driver reaches the run through this very call. The chain
+    // then has no caller to reject at, so its failure goes to `onError` under
+    // `"boot"` (invariant 6) and is never dropped. A rejection from the host's
+    // own `reset()` is teardown, which the engine has already reported.
     try {
       const resumed = await beginResume(booting, agentBootPort(), now);
-      resumed?.finished.catch(() => undefined);
+      resumed?.finished.catch((error: unknown) => {
+        if (current !== booting || error instanceof RuntimeDiscardNotice)
+          return;
+        sinkOrDefault(config.onError ?? defaultOnError, error, {
+          phase: "boot",
+        });
+      });
       return await booting.ready;
     } catch (error) {
       if (current === booting) current = null;
