@@ -25,7 +25,9 @@
 
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
+import { durableTimer } from "./durable-timer";
 import {
+  type AlarmStorage,
   constantTimeEqual,
   type DeferResumeHook,
   mintRunToken,
@@ -923,5 +925,135 @@ describe.each([
 
     expect(outcome.status).toBe(404);
     expect(calls).toEqual([]);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// One owner of the Durable Object's single alarm — host composition, not tea API
+//
+// A Durable Object has one native alarm. `stepHost` re-arms an idle give-up on
+// every authenticated pull and `durableTimer` arms whatever deadline the host
+// persisted at run creation. The host puts both behind one `AlarmStorage` that
+// records what each asked for and arms the earliest active deadline, so a pull
+// never postpones an absolute deadline and neither writer overwrites the other.
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface Deadlines {
+  startupBy: number | null;
+  absoluteBy: number;
+  idleBy: number | null;
+  expired: boolean;
+}
+
+const earliest = (deadlines: Deadlines): number | null => {
+  if (deadlines.expired) return null;
+  const active = [
+    deadlines.startupBy,
+    deadlines.absoluteBy,
+    deadlines.idleBy,
+  ].filter((at): at is number => at !== null);
+  return Math.min(...active);
+};
+
+// The platform: what survives an eviction is `persisted`, and every `setAlarm`
+// on the native alarm is recorded.
+function alarmOwner(initial: Deadlines) {
+  let persisted: Deadlines = JSON.parse(JSON.stringify(initial));
+  const native: number[] = [];
+  const alarm: AlarmStorage = {
+    async setAlarm(requestedAt) {
+      persisted.startupBy = null;
+      persisted.idleBy = requestedAt;
+      const at = earliest(persisted);
+      await Promise.resolve();
+      if (at !== null) native.push(at);
+    },
+  };
+  const timer = () =>
+    durableTimer({
+      alarm: {
+        async setAlarm(at) {
+          await Promise.resolve();
+          native.push(at);
+        },
+      },
+      nextDeadline: () => earliest(persisted),
+      onFire() {
+        persisted.expired = true;
+      },
+    });
+  return {
+    alarm,
+    native,
+    timer,
+    deadlines: () => persisted,
+    evict() {
+      persisted = JSON.parse(JSON.stringify(persisted));
+    },
+  };
+}
+
+describe("stepHost + durableTimer — one owner of the single alarm", () => {
+  it.each([
+    1, 2, 3,
+  ])("a run no step request ever reached still expires at its startup deadline (repeat %i)", async () => {
+    const platform = alarmOwner({
+      startupBy: 300_000,
+      absoluteBy: 3_600_000,
+      idleBy: null,
+      expired: false,
+    });
+    // Run creation answers only after the alarm is armed.
+    const launch = async () => {
+      await platform.timer().rearm();
+      return { runId: "run-owned", armedWhenAnswered: [...platform.native] };
+    };
+    expect((await launch()).armedWhenAnswered).toEqual([300_000]);
+
+    // No `/step` request ever arrives. A cold wake rebuilds the timer from the
+    // persisted deadline and the alarm fires.
+    platform.evict();
+    await platform.timer().onAlarm();
+    expect(platform.deadlines().expired).toBe(true);
+    expect(platform.native).toEqual([300_000]);
+  });
+
+  it("a step request cannot postpone an absolute deadline, and an earlier idle deadline still wins", async () => {
+    const platform = alarmOwner({
+      startupBy: 105_000,
+      absoluteBy: 120_000,
+      idleBy: null,
+      expired: false,
+    });
+    const engine: StepEngine<ToolResult, ToolInput, RunOutput> = {
+      tokenFor: () => "token",
+      resume() {},
+      nextStep: () => null,
+      terminalOutput: () => "done",
+    };
+    const request = (posted: StepResult<ToolResult> | null) => ({
+      token: "token",
+      runId: "run-owned",
+      posted,
+    });
+
+    // The first pull ends the startup window, and the default give-up (five
+    // minutes out) is later than the absolute deadline.
+    const lazy = stepHost<ToolResult, ToolInput, RunOutput>(
+      { storage: platform.alarm },
+      engine,
+    );
+    await lazy.handle(request(null), 100_000);
+    await lazy.handle(request(null), 110_000);
+    expect(platform.native).toEqual([120_000, 120_000]);
+
+    // A shorter give-up is earlier, so it is the one armed.
+    const eager = stepHost<ToolResult, ToolInput, RunOutput>(
+      { storage: platform.alarm },
+      engine,
+      { giveUpAfterMs: 5_000 },
+    );
+    await eager.handle(request(null), 100_000);
+    expect(platform.native.at(-1)).toBe(105_000);
   });
 });
