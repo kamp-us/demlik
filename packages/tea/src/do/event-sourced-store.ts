@@ -464,8 +464,9 @@ export function doEventSourcedStore<
    * value that cannot be serialized refuses before any cell is touched, and a
    * put that fails undoes the others. The in-memory counters move only after
    * this resolves. `admit` is the caller's fence check, the first thing inside
-   * the transaction: a write called before a later runtime loaded this log
-   * throws `StoreConflictError` there and touches no cell.
+   * the transaction callback, which the platform may run more than once: a write
+   * called before a later runtime loaded this log throws `StoreConflictError`
+   * there, on any run of the callback, and touches no cell.
    */
   async function persist(
     write: {

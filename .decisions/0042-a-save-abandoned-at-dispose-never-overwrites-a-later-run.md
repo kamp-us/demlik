@@ -12,23 +12,23 @@ tags: [tea, persistence, engine, stop, fencing]
 
 ## Context
 
-[ADR 0025](./0025-stop-gives-up-on-handlers.md) lets `stop()` give up on a stuck handler at `disposeTimeoutMs`, and records that a store call already under way is not cancelled and can land after `stop()` returned. With write-ahead saves ([ADR 0041](./0041-store-save-receives-the-applied-message.md)) a call under way is an event append. A host that resets a durable agent builds the next run on the same storage in the same isolate, and the stopped run's save, waiting behind an earlier write or at the transaction, then lands with a sequence number it computed before the later run loaded. It writes over an event the later run wrote, and the log forks without a word ([#989](https://github.com/kamp-us/demlik/issues/989)). A fenced store already refuses that save ([ADR 0017](./0017-fencing-is-an-optional-store-widening.md)), but the event store is not a `FencedStore`.
+[ADR 0025](./0025-stop-gives-up-on-handlers.md) lets `stop()` give up on a stuck handler at `disposeTimeoutMs`, and records that a store call already under way is not cancelled and can land after `stop()` returned. With write-ahead saves ([ADR 0041](./0041-store-save-receives-the-applied-message.md)) a call under way is an event append. A host that resets a durable agent builds the next run on the same storage in the same isolate, and the stopped run's save, waiting behind an earlier write or at the transaction, then lands with a sequence number it computed before the later run loaded. It writes over an event the later run wrote, and the log forks without a word ([#989](https://github.com/kamp-us/demlik/issues/989)). The write is also not one call: a storage transaction's callback can run more than once, since a conflict retries it ("many developers might not realize that the transaction callback can be called multiple times", [Cloudflare](https://blog.cloudflare.com/durable-objects-easy-fast-correct-choose-three/)). A fenced store already refuses that save ([ADR 0017](./0017-fencing-is-an-optional-store-widening.md)), but the event store is not a `FencedStore`.
 
 ## Decision
 
 **One generation per log, advanced by a load and compared at the write point.** The engine cannot recall a call, and a host-side wait would be a second `stop()` limit. So the store that owns the write asks the one question there.
 
 1. A log is the storage object and the log's meta cell. A `load()` takes the log: it advances the log's generation in this isolate and the loading store holds the new one.
-2. A `save` or `snapshotNow()` carries the generation its store held when it was called. First thing inside the storage transaction, the write compares it with the log's current generation. A later load has moved it, so the write throws `StoreConflictError(issuedUnder, current)` and touches no cell. The in-memory counters do not move, as for any failed write.
+2. A `save` or `snapshotNow()` carries the generation its store held when it was called. First thing inside the storage transaction callback, on every run of that callback, the write compares it with the log's current generation. A later load has moved it, so the write throws `StoreConflictError(issuedUnder, current)` and touches no cell. The in-memory counters do not move, as for any failed write. An attempt that was admitted and rolled back is refused when the callback runs again after a later load.
 3. Whether the engine gave up on the save is not an input. A save with no later load behind it lands, abandoned or not, because it is the newest State.
-4. The decision is the table in `src/do/save-fence.ts`: one state × event table (`issued`, `superseded`, `admitted`, `refused` by `takeOver`, `reach`) and one interpreter. A new case is a row.
+4. The decision is the table in `src/do/save-fence.ts`: one state × event table (`issued`, `superseded`, `admitted`, `refused` by `takeOver`, `attempt`) and one interpreter. A new case is a row.
 
-| state \ event | `takeOver` (a later run loads) | `reach` (the write point) |
+| state \ event | `takeOver` (a later run loads) | `attempt` (the write point is entered) |
 | --- | --- | --- |
 | `issued` | `superseded` | `admitted`, write |
 | `superseded` | `superseded` | `refused`, throw |
-| `admitted` | `admitted` | `admitted` |
-| `refused` | `refused` | `refused` |
+| `admitted` | `superseded` | `admitted`, write |
+| `refused` | `refused` | `refused`, throw |
 
 **Binding constraints.**
 

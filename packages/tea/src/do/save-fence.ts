@@ -7,14 +7,20 @@
  * transaction) can reach the write point after a later runtime has loaded the
  * same storage and saved its own State. The rule the table keeps: **a save
  * lands only if no later runtime has loaded the log since the save was
- * issued.** Whether the engine gave up on it is not an input; a save the engine
- * abandoned with no later run behind it is still the newest State and lands.
+ * issued, judged again on every attempt.** Whether the engine gave up on it is
+ * not an input; a save the engine abandoned with no later run behind it is
+ * still the newest State and lands.
  *
  * The one generation per log (`storage` and the log's meta cell) is the whole
  * check. A load takes the log and advances the generation; a save carries the
  * generation its store held when it was called; the write point compares the
  * two. The table has two events, and a cell is the only place a decision is
- * made: `takeOver` (a later runtime loaded) and `reach` (the write point).
+ * made: `takeOver` (a later runtime loaded) and `attempt` (the write point is
+ * entered). A storage transaction's callback can run more than once, since a
+ * conflict retries it, so a save attempts as often as its callback runs, and a
+ * takeover between two attempts is a cell, not a state the first attempt left
+ * behind.
+ *
  * The generation lives in this isolate only: a Durable Object runs one isolate
  * at a time, and the writes of a dead isolate die with it. No cell is written
  * to storage, so a log written before the fence reads unchanged.
@@ -27,9 +33,10 @@ import {
 } from "../index";
 
 /**
- * Where one save is. `issued` waits for its write point. `superseded` is
- * `issued` after a later runtime loaded the log. `admitted` was allowed to
- * write, and `refused` was not; both end the save.
+ * Where one save is. `issued` has not attempted. `admitted` was allowed to
+ * write at its last attempt. `superseded` has seen a later runtime load the log,
+ * so its next attempt is refused. `refused` was refused at an attempt, and every
+ * attempt after it is refused too.
  */
 export type SavePhase =
   | { readonly _tag: "issued" }
@@ -37,36 +44,37 @@ export type SavePhase =
   | { readonly _tag: "admitted" }
   | { readonly _tag: "refused" };
 
-/** What moves a save: a later runtime took the log, or the save reached its write. */
+/** What moves a save: a later runtime took the log, or the write point is entered. */
 export type SaveEvent =
   | { readonly _tag: "takeOver" }
-  | { readonly _tag: "reach" };
+  | { readonly _tag: "attempt" };
 
 /** What the interpreter does after a cell. */
 export type SaveCmd = { readonly _tag: "write" } | { readonly _tag: "refuse" };
 
 /**
- * The table. A save that reaches its write point in `issued` writes; in
- * `superseded` it is refused; a save that has ended never writes or refuses
- * again, whatever happens next.
+ * The table. An `attempt` always ends in one Cmd: `write` in `issued` and in
+ * `admitted`, `refuse` in `superseded` and in `refused`. A `takeOver` moves
+ * `issued` and `admitted` to `superseded`, so a write that was admitted and
+ * rolled back is refused when its callback runs again.
  */
 export const SAVE_FENCE: ExhaustiveTransitions<SavePhase, SaveEvent, SaveCmd> =
   {
     issued: {
       takeOver: () => [{ _tag: "superseded" }, []],
-      reach: () => [{ _tag: "admitted" }, [{ _tag: "write" }]],
+      attempt: () => [{ _tag: "admitted" }, [{ _tag: "write" }]],
     },
     superseded: {
       takeOver: (state) => [state, []],
-      reach: () => [{ _tag: "refused" }, [{ _tag: "refuse" }]],
+      attempt: () => [{ _tag: "refused" }, [{ _tag: "refuse" }]],
     },
     admitted: {
-      takeOver: (state) => [state, []],
-      reach: (state) => [state, []],
+      takeOver: () => [{ _tag: "superseded" }, []],
+      attempt: (state) => [state, [{ _tag: "write" }]],
     },
     refused: {
       takeOver: (state) => [state, []],
-      reach: (state) => [state, []],
+      attempt: (state) => [state, [{ _tag: "refuse" }]],
     },
   };
 
@@ -88,8 +96,9 @@ export interface SaveFence {
   takeOver(): void;
   /**
    * A save is called. Returns the check the save makes at its write point,
-   * first thing inside the write, which throws {@link StoreConflictError} when
-   * a later runtime has loaded the log since this call.
+   * first thing inside the write, on every run of the transaction callback. It
+   * throws {@link StoreConflictError} when a later runtime has loaded the log
+   * since this call.
    */
   issue(): () => void;
 }
@@ -119,7 +128,7 @@ export function saveFence(storage: object, log: string): SaveFence {
         if (current() !== issuedUnder) {
           phase = stepSave(phase, { _tag: "takeOver" })[0];
         }
-        const [next, cmds] = stepSave(phase, { _tag: "reach" });
+        const [next, cmds] = stepSave(phase, { _tag: "attempt" });
         phase = next;
         for (const cmd of cmds) {
           (

@@ -6,8 +6,10 @@
  * table cell by cell, so a cell with no expectation fails to compile and a cell
  * with no test fails the count. The second drives real runs on one storage with
  * `disposeTimeoutMs: 0`, the repro: the stopped run's save is held at its write
- * point, a later run loads and saves, and the held save is let go. Each path
- * names the cells it walks, ten times over.
+ * point, a later run loads and saves, and the held save is let go. A
+ * transaction callback can run more than once (a conflict retries it), so the
+ * paths also roll a write back and call it again, before and after a later run.
+ * Each path names the cells it walks, ten times over.
  */
 
 import { describe, expect, it } from "vitest";
@@ -33,25 +35,25 @@ type EventTag = SaveEvent["_tag"];
 type CmdTag = SaveCmd["_tag"];
 
 const PHASES = ["issued", "superseded", "admitted", "refused"] as const;
-const EVENTS = ["takeOver", "reach"] as const;
+const EVENTS = ["takeOver", "attempt"] as const;
 
 /** Every cell's answer: the phase it moves to and the Cmds it owes. */
 const EXPECTED = {
   issued: {
     takeOver: ["superseded", []],
-    reach: ["admitted", ["write"]],
+    attempt: ["admitted", ["write"]],
   },
   superseded: {
     takeOver: ["superseded", []],
-    reach: ["refused", ["refuse"]],
+    attempt: ["refused", ["refuse"]],
   },
   admitted: {
-    takeOver: ["admitted", []],
-    reach: ["admitted", []],
+    takeOver: ["superseded", []],
+    attempt: ["admitted", ["write"]],
   },
   refused: {
     takeOver: ["refused", []],
-    reach: ["refused", []],
+    attempt: ["refused", ["refuse"]],
   },
 } satisfies Record<
   PhaseTag,
@@ -113,36 +115,67 @@ const until = async (holds: () => boolean) => {
 };
 
 /**
- * One DO storage in one isolate. `holdNext()` makes the next storage
- * transaction wait, which is where a save waits when an earlier write is still
- * under way: the write point is inside the transaction, after the wait.
+ * What the next storage transaction does before its callback settles. `hold`
+ * waits, which is where a save waits when an earlier write is still under way:
+ * the write point is inside the transaction, after the wait. `retry` runs the
+ * callback, rolls the commit back as a conflict does, waits, and calls the same
+ * callback again. `again` waits, then calls the callback a second time even
+ * when the first call threw.
  */
+interface Plan {
+  readonly kind: "hold" | "retry" | "again";
+  readonly until: Promise<void>;
+}
+
+/** One DO storage in one isolate. */
 function oneStorage() {
   const fake = fakeDoStorage();
-  let waiting: Promise<void> | null = null;
+  let plan: Plan | null = null;
   let entered = 0;
+  let parked = 0;
   const storage = Object.assign(Object.create(fake.storage), {
     async transaction<T>(
       closure: (txn: DurableObjectTransaction) => Promise<T>,
     ): Promise<T> {
       entered++;
-      const wait = waiting;
-      waiting = null;
-      if (wait !== null) await wait;
-      return fake.storage.transaction(closure);
+      const mine = plan;
+      plan = null;
+      if (mine === null) return fake.storage.transaction(closure);
+      if (mine.kind === "retry") {
+        const before = new Map(fake.backing);
+        await closure(fake.storage as unknown as DurableObjectTransaction);
+        fake.backing.clear();
+        for (const [key, value] of before) fake.backing.set(key, value);
+        parked++;
+        await mine.until;
+        return fake.storage.transaction(closure);
+      }
+      await mine.until;
+      if (mine.kind === "hold") return fake.storage.transaction(closure);
+      try {
+        return await fake.storage.transaction(closure);
+      } catch {
+        return fake.storage.transaction(closure);
+      }
     },
   }) as typeof fake.storage;
+  const arm = (kind: Plan["kind"]): (() => void) => {
+    let release: () => void = () => undefined;
+    const until = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    plan = { kind, until };
+    return release;
+  };
   return {
     storage,
     backing: fake.backing,
     entered: () => entered,
-    holdNext(): () => void {
-      let release: () => void = () => undefined;
-      waiting = new Promise<void>((resolve) => {
-        release = resolve;
-      });
-      return release;
-    },
+    /** Transactions whose first callback was rolled back and now wait. */
+    parked: () => parked,
+    holdNext: () => arm("hold"),
+    retryNext: () => arm("retry"),
+    againNext: () => arm("again"),
   };
 }
 type OneStorage = ReturnType<typeof oneStorage>;
@@ -215,8 +248,9 @@ async function laterRunSaves(
 const STALE = 100;
 
 /**
- * Every path through the save table, with the cells it walks. A cell that no
- * path walks must be in `NEVER_IN_A_RUN`, with the reason.
+ * Every path through the save table, with the cells it walks. A path with no
+ * cells is a control. A cell that no path walks must be in `NEVER_IN_A_RUN`,
+ * with the reason.
  */
 const PATHS: readonly {
   readonly name: string;
@@ -225,7 +259,7 @@ const PATHS: readonly {
 }[] = [
   {
     name: "a save the run gave up on, with no later run, still lands",
-    cells: [["issued", "reach"]],
+    cells: [["issued", "attempt"]],
     async check() {
       const held = oneStorage();
       const { first, asked, release } = await stoppedWithSaveHeld(held, 5);
@@ -240,8 +274,7 @@ const PATHS: readonly {
     name: "a later run loads and saves, and the held save is refused when it lands",
     cells: [
       ["issued", "takeOver"],
-      ["superseded", "reach"],
-      ["refused", "takeOver"],
+      ["superseded", "attempt"],
     ],
     async check() {
       const held = oneStorage();
@@ -259,7 +292,7 @@ const PATHS: readonly {
   },
   {
     name: "a second later run loads before the held save lands, and it is still refused",
-    cells: [["superseded", "takeOver"]],
+    cells: [],
     async check() {
       const held = oneStorage();
       const { asked, release } = await stoppedWithSaveHeld(held, STALE);
@@ -276,8 +309,8 @@ const PATHS: readonly {
     },
   },
   {
-    name: "a save that landed is part of what a later run loads",
-    cells: [["admitted", "takeOver"]],
+    name: "a save that landed is part of what a later run loads, and is never attempted again",
+    cells: [],
     async check() {
       const held = oneStorage();
       const first = await activate(held);
@@ -293,7 +326,7 @@ const PATHS: readonly {
     name: "the same store handed to a later run, as a host that rebuilds its run does, refuses it too",
     cells: [
       ["issued", "takeOver"],
-      ["superseded", "reach"],
+      ["superseded", "attempt"],
     ],
     async check() {
       const held = oneStorage();
@@ -314,7 +347,7 @@ const PATHS: readonly {
   },
   {
     name: "a snapshot from a stopped run is refused the same way",
-    cells: [["superseded", "reach"]],
+    cells: [["superseded", "attempt"]],
     async check() {
       const held = oneStorage();
       const first = await activate(held);
@@ -337,12 +370,112 @@ const PATHS: readonly {
       await later.stop();
     },
   },
+  {
+    name: "a transaction rolled back and called again, with no later run, lands",
+    cells: [["admitted", "attempt"]],
+    async check() {
+      const held = oneStorage();
+      const first = await activate(held);
+      const release = held.retryNext();
+      const asked = first.runtime.dispatchOnce({ _tag: "ask", by: 5 }).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      await until(() => held.parked() === 1);
+      release();
+      expect(await asked).toBeUndefined();
+      await first.stop();
+      expect(await foldedTotal(held)).toBe(5);
+    },
+  },
+  {
+    name: "a transaction rolled back and called again after a later run saved is refused on the retry",
+    cells: [
+      ["admitted", "takeOver"],
+      ["superseded", "attempt"],
+    ],
+    async check() {
+      const held = oneStorage();
+      const first = await activate(held);
+      const release = held.retryNext();
+      const asked = first.runtime.dispatchOnce({ _tag: "ask", by: STALE }).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      await until(() => held.parked() === 1);
+      await first.stop();
+      const later = await laterRunSaves(held);
+
+      release();
+      expect(await asked).toBeInstanceOf(StoreConflictError);
+      await settle();
+      expect(await later.es.store.load()).toEqual({ total: 3 });
+      await later.stop();
+      expect(await foldedTotal(held)).toBe(3);
+    },
+  },
+  {
+    name: "a snapshot rolled back and called again after a later run saved is refused on the retry",
+    cells: [
+      ["admitted", "takeOver"],
+      ["superseded", "attempt"],
+    ],
+    async check() {
+      const held = oneStorage();
+      const first = await activate(held);
+      await first.runtime.dispatchOnce({ _tag: "ask", by: STALE });
+      const release = held.retryNext();
+      const snapshotted = first.es.snapshotNow().then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      await until(() => held.parked() === 1);
+      await first.stop();
+      const later = await laterRunSaves(held, STALE);
+
+      release();
+      expect(await snapshotted).toBeInstanceOf(StoreConflictError);
+      await settle();
+      expect(held.backing.has("@@es/snapshot")).toBe(false);
+      expect(await later.es.store.load()).toEqual({ total: STALE + 3 });
+      await later.stop();
+    },
+  },
+  {
+    name: "a refused write called again is refused again",
+    cells: [
+      ["refused", "takeOver"],
+      ["refused", "attempt"],
+    ],
+    async check() {
+      const held = oneStorage();
+      const first = await activate(held);
+      const release = held.againNext();
+      const before = held.entered();
+      const asked = first.runtime.dispatchOnce({ _tag: "ask", by: STALE }).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      await until(() => held.entered() === before + 1);
+      await first.stop();
+      const later = await laterRunSaves(held);
+
+      release();
+      expect(await asked).toBeInstanceOf(StoreConflictError);
+      await settle();
+      expect(await later.es.store.load()).toEqual({ total: 3 });
+      await later.stop();
+      expect(await foldedTotal(held)).toBe(3);
+    },
+  },
 ];
 
-/** Cells no run reaches: a save reaches its write point once. */
+/**
+ * Cells no run reaches: a save is judged for a takeover once, when it attempts,
+ * so no save is `superseded` when the next takeover is judged.
+ */
 const NEVER_IN_A_RUN: readonly (readonly [PhaseTag, EventTag])[] = [
-  ["admitted", "reach"],
-  ["refused", "reach"],
+  ["superseded", "takeOver"],
 ];
 
 describe("a save abandoned at dispose, on a log a later run took over (disposeTimeoutMs: 0)", () => {
