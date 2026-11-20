@@ -132,6 +132,13 @@ jobs:
             exit 1;
           }
 
+      - name: Coding agent docs drift
+        run: |
+          pnpm --filter @demlik/tea run docs:agents:check || {
+            echo "::error::Coding agent docs are stale — run 'pnpm --filter @demlik/tea run docs:agents' and commit packages/tea/AGENTS.md. Drift patch is printed above.";
+            exit 1;
+          }
+
       # Cheap, deterministic, and catches a public-API mistake the tests cannot:
       # a subpath added to the export map with no tier stamp ships with no stated
       # stability promise. Runs before the slower suites.

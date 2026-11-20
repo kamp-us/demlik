@@ -15,6 +15,9 @@ guides use are each defined in the [glossary](../glossary.md).
 
 ## Run a machine somewhere
 
+- [Ignore an answer that arrives too late](./ignore-a-late-answer.md) — keep
+  newer search results when replies arrive out of order with the machine's
+  `identity`, including a host that steps by hand with `matchesIdentity`.
 - [Run a machine on the Promise engine](./run-on-the-promise-engine.md) — hand
   `run` from `@demlik/tea/promise` Promise handlers for a
   [machine](../glossary.md#machine) file that
@@ -26,9 +29,10 @@ guides use are each defined in the [glossary](../glossary.md).
   [child](../glossary.md#child) with `spawn` from the Effect [engine](../glossary.md#engine), keep your own table of live
   children, stop one with `stop`, and tell the parent when one stops with
   `tell`, with no supervisor from tea.
-- [Make a machine durable and crash-recoverable](./make-durable.md) — give `run` a
-  [`Store`](../glossary.md#store) so the [Model](../glossary.md#model) survives a Durable Object eviction and resumes on the next
-  boot.
+- [Make a machine durable and crash-recoverable](./make-durable.md) — if your
+  storage can append atomically and read in order, write a `Journal` and use
+  `eventSourcedStore` for a crash-safe log whose owed work survives. If you only
+  keep the latest State, use a [`Store`](../glossary.md#store).
 - [Reopen an investigation with retained history](./reopen-a-retained-case.md) —
   run a file-journal case, recover settled evidence after completion, and attach
   a client to complete committed views.

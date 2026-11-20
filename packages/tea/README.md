@@ -2,6 +2,12 @@
 
 A TEA / Elm-Architecture TypeScript library for durable, replayable state machines — one pure reducer, every host adapter.
 
+## Using tea with a coding agent
+
+The package ships `AGENTS.md`. Paste this line into your project's `AGENTS.md` or `CLAUDE.md`:
+
+Before writing @demlik/tea code, read node_modules/@demlik/tea/AGENTS.md.
+
 ## Install
 
 ```sh
