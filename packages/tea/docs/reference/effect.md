@@ -345,9 +345,12 @@ type EffectRunOptions<
    *
    * A store call is not interrupted. tea starts none after `stop()` has
    * returned, but one already under way when `stop()` gave up can finish
-   * after it. On a plain store that late save can overwrite what a newer
-   * run saved; a fenced store refuses it. So a host that starts a new run on
-   * the same store after a `stop()` that gave up needs a fenced store.
+   * after it. A fenced store refuses that late save, and so does
+   * `doEventSourcedStore` once a newer run has loaded its log. A custom
+   * plain store that waits before it writes takes it over what a newer run
+   * saved, unless it checks at its own write point. So a host that starts a
+   * new run on the same store after a `stop()` that gave up needs one of the
+   * first two.
    */
   readonly disposeTimeoutMs?: number;
   /** Projects each applied transition to the public events `on` serves. */

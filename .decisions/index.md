@@ -26,7 +26,7 @@ One row per ADR, repo-wide. Read the file for the why.
 | [0022](./0022-no-battery-layer-plain-functions.md) | Reusable logic ships as plain functions and Cmds called from update, never a battery layer | Accepted | 2026-09-23 |
 | [0023](./0023-door-identity-and-process-members.md) | A world door is named for what a use read, and Node's own process judges a declaration | Superseded by [0027](./0027-one-impure-kind-and-one-word-per-concept.md) | 2026-10-01 |
 | [0024](./0024-admins-bypass-code-owner-review.md) | A repo admin may merge a governed-root PR without a second reviewer, never bypass the PR itself | Accepted | 2026-10-01 |
-| [0025](./0025-stop-gives-up-on-handlers.md) | `stop()` gives up on a Cmd handler that has not returned at `disposeTimeoutMs`, never waits for it without limit | Accepted | 2026-10-13 |
+| [0025](./0025-stop-gives-up-on-handlers.md) | `stop()` gives up on a Cmd handler that has not returned at `disposeTimeoutMs`, never waits for it without limit | Amended-in-part by [0042](./0042-a-save-abandoned-at-dispose-never-overwrites-a-later-run.md) | 2026-10-13 |
 | [0026](./0026-tea-owns-typed-ports-and-tell.md) | tea owns typed ports on a machine and a `tell` that never waits, never the program, the route graph or the registry | Amended-in-part by [0029](./0029-ports-live-at-program-layer.md) | 2026-10-13 |
 | [0027](./0027-one-impure-kind-and-one-word-per-concept.md) | code-graph reports one impure kind, and each concept has one word in code-graph and tea | Accepted | 2026-10-16 |
 | [0028](./0028-restored-init-may-resume.md) | Restored initialization may resume work | Accepted | 2026-10-18 |
@@ -43,6 +43,7 @@ One row per ADR, repo-wide. Read the file for the why.
 | [0039](./0039-a-request-is-run-with-an-opt-in-restored-boot.md) | A request-scoped activation is `run` with an opt-in restored boot, never a second engine entry | Accepted | 2026-11-19 |
 | [0040](./0040-running-agents-resume-on-wake.md) | A cold wake resumes a running agent, including one lost during compaction | Accepted | 2026-11-19 |
 | [0041](./0041-store-save-receives-the-applied-message.md) | A store's save receives the applied message, as an optional argument | Accepted | 2026-11-20 |
+| [0042](./0042-a-save-abandoned-at-dispose-never-overwrites-a-later-run.md) | A save abandoned at dispose never overwrites a later run, checked once at the store's write point | Accepted | 2026-11-20 |
 
 Numbers are inherited from the `csirin/monorepo` sequence this package was extracted
 from, and the gaps are real: 0009 (the brain/hand seam) and 0012 (the single-root ADR

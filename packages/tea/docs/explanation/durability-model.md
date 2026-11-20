@@ -137,12 +137,19 @@ store is known to hold it, so it writes nothing at boot or at `stop()`.
 
 A stopped run can be that stale writer. When `stop()` gives up at
 `disposeTimeoutMs`, tea starts no store call after `stop()` has returned, but a
-save already under way is not cancelled and can land later. On a plain store
-that late save can overwrite what a newer run saved, and nothing reports it. A
-fenced store refuses it. So a host that starts a new run on the same store
-after a `stop()` that gave up needs a fenced store.
+save already under way is not cancelled and can land later. A fenced store
+refuses it. So does `doEventSourcedStore`: a `load()` takes the log, and a write
+called before a later run loaded it is refused with `StoreConflictError` at its
+write point, so a stopped run's save never overwrites what the later run saved.
+The check is one generation per log in the isolate. Nothing is written to
+storage, so a log written before the check reads unchanged. A custom plain store
+that waits between being called and writing takes the late save over what a
+newer run saved, and nothing reports it, so it checks at its own write point or
+is fenced.
 [ADR 0025](https://github.com/kamp-us/demlik/blob/main/.decisions/0025-stop-gives-up-on-handlers.md) records
-the limit.
+the limit and
+[ADR 0042](https://github.com/kamp-us/demlik/blob/main/.decisions/0042-a-save-abandoned-at-dispose-never-overwrites-a-later-run.md)
+the check.
 
 `fileStore`, `doStore`, and `memoryStore` support `{ fenced: true }`.
 `chromeStorageStore` has no atomic compare-and-swap and stays unfenced.

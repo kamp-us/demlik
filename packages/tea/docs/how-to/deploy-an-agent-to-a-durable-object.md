@@ -137,6 +137,10 @@ and `host.runtime()` issues the call again. Nothing in your host appends: do not
 write the log from `runtime.observe`, which fires after the commands, and do not
 append a message before you dispatch it, or the run records it twice.
 
+The store takes the log when a run loads it. A `reset()` whose `stop()` gave up
+on a save at `disposeTimeoutMs` cannot then write over the run that replaced it:
+the late save is refused with `StoreConflictError`, and the new run's State stays.
+
 ### Stop: answer the pull before any work resumes
 
 A stop your application recorded has to be read before `host.runtime()` runs,

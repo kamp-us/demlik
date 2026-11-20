@@ -2,8 +2,9 @@
  * What `stop()` promises about the store once it has given up at
  * `disposeTimeoutMs` (ADR 0025, #656): tea starts no store call after `stop()`
  * has returned. A store call already under way is not cancelled and can still
- * land; a fenced store refuses it once a newer run has saved, a plain store
- * takes it.
+ * land; a fenced store refuses it once a newer run has saved, a custom plain
+ * store that holds a call before its own write takes it. The shipped event
+ * store refuses it at its write point (`src/do/save-fence.test.ts`).
  *
  * Both engines run one loop, so every case runs on both. It lives under
  * `src/effect/` because it imports `effect`, which only this entry may do.
@@ -355,7 +356,7 @@ describe.each(
     expect(await inner.load()).toEqual({ asked: 3 });
   });
 
-  it("a plain store takes that late save, over what the newer run saved", async () => {
+  it("a custom plain store that holds a save before its own write takes it, over what the newer run saved", async () => {
     const inner = memoryStore<Model>(null);
     const slow = holdSecondCall(inner.save);
     const stopped = await startStep({ ...inner, save: slow.call }, slow);

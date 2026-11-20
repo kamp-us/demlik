@@ -66,6 +66,7 @@
 
 import type { Cmd, Machine, Store, Sub } from "../index";
 import { foldMsgs, replay } from "../index";
+import { saveFence } from "./save-fence";
 
 /** Default cell prefixes. Chosen to sort log keys lexicographically by seq. */
 const DEFAULT_SNAPSHOT_KEY = "@@es/snapshot";
@@ -176,6 +177,15 @@ export interface EventSourcedStore<S, M> {
    * transition's Cmds. A save without a Msg (the boot save, the flush at
    * `stop()`) appends nothing. A write that fails rejects the save and leaves
    * the stored bytes as they were. `migrate` forwards to `parse`.
+   *
+   * Its `load()` also takes the log for this isolate. A store built earlier on
+   * the same storage can no longer write: a `save` or `snapshotNow()` it called
+   * before the later `load()` is refused with `StoreConflictError` at its write
+   * point, whenever it gets there, so a stopped run's save that lands late never
+   * overwrites what the later run saved. A save with no later `load()` behind it
+   * still lands, whether or not its run was given up on. Every `load()` counts,
+   * this store's own included, so a store a host hands to each run it rebuilds
+   * is covered too.
    */
   readonly store: Store<S>;
   /**
@@ -297,6 +307,9 @@ export function doEventSourcedStore<
   // boundary. A save without a Msg, and a transition whose write failed, never
   // replace it.
   let latestState: S | null = null;
+  // The log's generation in this isolate: a `load()` takes it, and a write that
+  // was called under an older one is refused at its write point (./save-fence).
+  const fence = saveFence(storage, metaKey);
   // Idempotency latch for onReady within a single activation.
   let readyFired = false;
   // One write at a time: `snapshotNow()` is called by the host, outside the
@@ -376,6 +389,7 @@ export function doEventSourcedStore<
 
   const store: Store<S> = {
     async load(): Promise<unknown> {
+      fence.takeOver();
       const { state: snapshot, seq: snapSeq } = await readSnapshot();
       snapshotSeq = snapSeq;
       lastSeq = await readMeta();
@@ -408,6 +422,7 @@ export function doEventSourcedStore<
       // Boot and the final flush at `stop()` carry no Msg: there is no event to
       // write, and their State is not one an event produced.
       if (msg === undefined) return;
+      const admit = fence.issue();
       await exclusive(async () => {
         const seq = (await ensureLastSeq()) + 1;
         // Count-based retention (Akka `RetentionCriteria.snapshotEvery`). When
@@ -417,10 +432,13 @@ export function doEventSourcedStore<
         // fold replays only events strictly after `seq`. A snapshot bounds
         // replay length; it never changes the fold's result (snapshotting.md).
         const snapshotDue = seq - snapshotSeq >= snapshotEvery;
-        await persist({
-          event: { seq, json: JSON.stringify(msg) },
-          snapshot: snapshotDue ? { seq, state } : null,
-        });
+        await persist(
+          {
+            event: { seq, json: JSON.stringify(msg) },
+            snapshot: snapshotDue ? { seq, state } : null,
+          },
+          admit,
+        );
         lastSeq = seq;
         latestState = state;
         if (snapshotDue) snapshotSeq = seq;
@@ -445,12 +463,17 @@ export function doEventSourcedStore<
    * transaction. Every value is serialized before the transaction opens, so a
    * value that cannot be serialized refuses before any cell is touched, and a
    * put that fails undoes the others. The in-memory counters move only after
-   * this resolves.
+   * this resolves. `admit` is the caller's fence check, the first thing inside
+   * the transaction: a write called before a later runtime loaded this log
+   * throws `StoreConflictError` there and touches no cell.
    */
-  async function persist(write: {
-    readonly event?: { readonly seq: number; readonly json: string };
-    readonly snapshot: { readonly seq: number; readonly state: S } | null;
-  }): Promise<void> {
+  async function persist(
+    write: {
+      readonly event?: { readonly seq: number; readonly json: string };
+      readonly snapshot: { readonly seq: number; readonly state: S } | null;
+    },
+    admit: () => void,
+  ): Promise<void> {
     const cells: [string, string][] = [];
     if (write.event !== undefined) {
       cells.push(
@@ -466,6 +489,7 @@ export function doEventSourcedStore<
       cells.push([snapshotKey, JSON.stringify(cell)]);
     }
     await storage.transaction(async (txn) => {
+      admit();
       for (const [key, value] of cells) await txn.put(key, value);
     });
   }
@@ -475,6 +499,7 @@ export function doEventSourcedStore<
    * count-based `snapshotEvery`. See {@link EventSourcedStore.snapshotNow}.
    */
   function snapshotNow(): Promise<boolean> {
+    const admit = fence.issue();
     return exclusive(async () => {
       const seq = await ensureLastSeq();
       // No-op when there is nothing new to checkpoint: a fresh actor with no
@@ -482,7 +507,7 @@ export function doEventSourcedStore<
       // the last snapshot (`seq <= snapshotSeq`). Both keep the snapshot's `seq`
       // and `state` paired on the same boundary the count-based path guarantees.
       if (latestState === null || seq <= snapshotSeq) return false;
-      await persist({ snapshot: { seq, state: latestState } });
+      await persist({ snapshot: { seq, state: latestState } }, admit);
       snapshotSeq = seq;
       return true;
     });

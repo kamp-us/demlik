@@ -927,6 +927,15 @@ interface EventSourcedStore<S, M> {
    * transition's Cmds. A save without a Msg (the boot save, the flush at
    * `stop()`) appends nothing. A write that fails rejects the save and leaves
    * the stored bytes as they were. `migrate` forwards to `parse`.
+   *
+   * Its `load()` also takes the log for this isolate. A store built earlier on
+   * the same storage can no longer write: a `save` or `snapshotNow()` it called
+   * before the later `load()` is refused with `StoreConflictError` at its write
+   * point, whenever it gets there, so a stopped run's save that lands late never
+   * overwrites what the later run saved. A save with no later `load()` behind it
+   * still lands, whether or not its run was given up on. Every `load()` counts,
+   * this store's own included, so a store a host hands to each run it rebuilds
+   * is covered too.
    */
   readonly store: Store<S>;
   /**

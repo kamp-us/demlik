@@ -519,9 +519,10 @@ export class DisposeTimeoutNotice extends RuntimeDiscardNotice {
  * never returns, those promises never settle, and this count is the only word.
  *
  * tea starts no store call after `stop()` has returned. A store call already
- * under way when `stop()` gave up is not cancelled and can finish afterwards;
- * on a plain store that late save can overwrite what a newer run saved, and a
- * fenced store refuses it.
+ * under way when `stop()` gave up is not cancelled and can finish afterwards.
+ * A fenced store refuses that late save, and so does `doEventSourcedStore`
+ * once a newer run has loaded its log; a custom plain store that waits before
+ * it writes takes it over what a newer run saved.
  *
  * `cmdTypes` names the Cmd of each handler call still awaiting, one entry per
  * call. `pendingCmds` counts those plus any detached work, the same count
