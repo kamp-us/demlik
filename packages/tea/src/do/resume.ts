@@ -9,8 +9,8 @@ import {
   type AgentMachineMsg,
   type AgentState,
   agentBootMsg,
-  status,
 } from "../agent/index";
+import { isMidRun } from "../agent/mid-run";
 import type { RunHandle } from "../index";
 import type { DurableCommandCarrier } from "./deferred-gateway";
 
@@ -65,14 +65,18 @@ export async function bootResume<
 }
 
 /**
- * True iff an agent slice loaded from storage is mid-loop (running + awaiting
- * tools) — the resumable case `agent_boot` re-fires.
+ * True iff an agent slice loaded from storage is mid-flight: `running` or
+ * `suspended`. A run lost while its model call or its compaction was in flight
+ * restores as `running`, with that call still owed, and one lost while its tools
+ * were in flight restores as `suspended`. `agent_boot` reissues the one
+ * outstanding operation in each case. Idle and ended runs (`done`, `failed`,
+ * `cancelled`) are false.
  *
- * The resumability question IS "is the run suspended on tools?" — so this
- * delegates to the agent's own typed `status` channel (issue #49) rather than
- * re-deriving the private `run.phase` / `conversation.awaiting` shape by hand.
- * The host no longer leaks the agent's internal slice structure; a change to
- * `Awaiting` surfaces as a compile error in `status`, not a silent break here.
+ * It reads the agent's own typed `status` channel (issue #49), so a failure
+ * annotation on a still-`running` phase reads as `failed`, and a `stale` run
+ * reads as `running`. The host does not inspect the slice's private `awaiting`
+ * shape, and a new status kind is a compile error in the table that answers
+ * this, not a silent `false` here.
  */
 export function agentIsResumable<
   Stage,
@@ -80,7 +84,7 @@ export function agentIsResumable<
   O extends Record<P, unknown>,
   R,
 >(state: AgentState<Stage, P, O, R>): boolean {
-  return status(state).kind === "suspended";
+  return isMidRun(state);
 }
 
 /**

@@ -18,7 +18,7 @@ import { … } from "@demlik/tea/do";
 | [`AgentHost`](#AgentHost) | Interface | stable | The assembled host: the runtime handle + the SSE hub + the framework test seam, owned ONCE. |
 | [`AgentHostConfig`](#AgentHostConfig) | Type | stable | What the consumer supplies to createAgentHost — the domain mappings, nothing of the wiring. |
 | [`AgentHostWiring`](#AgentHostWiring) | Interface | stable | The part of AgentHostConfig that is not the store and its sink. |
-| [`agentIsResumable`](#agentIsResumable) | Function | stable | True iff an agent slice loaded from storage is mid-loop (running + awaiting tools) — the resumable case `agent_boot` re-fires. |
+| [`agentIsResumable`](#agentIsResumable) | Function | stable | True iff an agent slice loaded from storage is mid-flight: `running` or `suspended`. |
 | [`AlarmStorage`](#AlarmStorage) | Interface | stable | The DO-native alarm slice `stepHost` re-arms. |
 | [`appliedEffects`](#appliedEffects) | Function | stable | Build a live guard. |
 | [`AppliedEffects`](#AppliedEffects) | Type | stable | The set of keys whose effect has been applied. |
@@ -182,9 +182,10 @@ interface AgentHost<Stage, P extends string, O extends Record<P, AgentTurn>, R, 
   /**
    * Get (or build) the booted runtime. Build-once-boot-once: the first call
    * builds the machine, wires SSE off the semantic event stream, awaits the boot
-   * gate, runs the `autoBoot` re-fire for a rehydrated suspended run, and caches
-   * the booted handle; subsequent calls return the cached handle. The single
-   * assembly every consumer used to hand-roll in `getRuntime()`.
+   * gate, runs the `autoBoot` re-fire for a rehydrated running or suspended run
+   * (one that was waiting on its model call, its compaction or its tools), and
+   * caches the booted handle; subsequent calls return the cached handle. The
+   * single assembly every consumer used to hand-roll in `getRuntime()`.
    */
   runtime(): Promise<BootedRunHandle<AgentState<Stage, P, O, R>, AgentMachineMsg<P, O, R>, AgentEvent<R>>>;
   /**

@@ -36,6 +36,7 @@ import {
   agentCancelMsg,
   agentEvents,
 } from "./machine";
+import { isMidRun } from "./mid-run";
 import type { MessageLoader, PlainModel } from "./model";
 import {
   type AnyToolDef,
@@ -1406,18 +1407,6 @@ function calledName(cmd: { readonly _tag: string }): string {
 /** The Msg that sets a run in motion. */
 function startMsg(runId: string, at: number) {
   return { _tag: MsgType.AgentStart, runId, at } as const;
-}
-
-/**
- * Whether the boot State is a run the Store handed back mid-flight — live, or
- * suspended on tools — which `agent_boot` resumes at its one outstanding
- * effect. A `start` here would mint a new `runId` and a fresh conversation
- * over the work already done; that is a restart, and the durable half of
- * `defineAgent` is exactly that it never does one. PURE.
- */
-function isMidRun(s: AgentState<string, LidPurpose, LidOutputs, unknown>) {
-  const { kind } = status(s);
-  return kind === "running" || kind === "suspended";
 }
 
 /**

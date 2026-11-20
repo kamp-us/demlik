@@ -1366,32 +1366,55 @@ describe("createAgent — status (the typed lifecycle channel, #49)", () => {
     });
   });
 
-  it("agentIsResumable(s) === (status(s).kind === 'suspended') for representative states", () => {
-    const agent = makeAgent({ maxTurns: 1 });
-    // running (awaiting llm)
+  it("agentIsResumable is true exactly for running and suspended, across every status kind", () => {
+    const agent = makeAgent({ maxTurns: 1, deadlineMs: 1000 });
     const [running] = agent.start(agent.init(), "r", 0);
-    // suspended (awaiting tools)
     const [suspended] = agent.turn(
       running,
       turnWith(tool("c1"), tool("c2")),
       10,
     );
-    // done
+    const stale = <T extends typeof running>(s: T): T => ({
+      ...s,
+      run: { ...s.run, phase: "stale" as const },
+    });
     let [done] = agent.start(makeAgent().init(), "r", 0);
     [done] = makeAgent().turn(done, turnWith(), 10);
     [done] = makeAgent().turn(done, turnWith(), 20);
-    // failed (turn_limit)
-    let [failed] = agent.start(agent.init(), "r", 0);
-    [failed] = agent.turn(failed, turnWith(tool("c9")), 10);
-    [failed] = agent.toolOk(failed, "c9", "x", 20);
+    // A failure annotation on a RAW running phase: turn_limit leaves
+    // `run.phase === "running"` and sets `state.failure`.
+    let [annotated] = agent.start(agent.init(), "r", 0);
+    [annotated] = agent.turn(annotated, turnWith(tool("c9")), 10);
+    [annotated] = agent.toolOk(annotated, "c9", "x", 20);
+    expect(annotated.run.phase).toBe("running");
+    const safety = agent
+      .subs(running)
+      .find((sub) => sub.id.startsWith("monitored:safety:"));
+    const [deadlined] = agent.onTimer(running, {
+      _tag: "deadline_exceeded",
+      id: safety?.id ?? "",
+      atMs: 2000,
+    });
+    const { machine } = agent.toMachine<object>();
+    const [cancelled] = machine.update.agent_cancel(running, {
+      _tag: "agent_cancel",
+      at: 9,
+    });
 
-    for (const s of [running, suspended, done, failed, agent.init()]) {
-      expect(agentIsResumable(s)).toBe(status(s).kind === "suspended");
+    const matrix = [
+      ["idle", agent.init(), "idle", false],
+      ["running", running, "running", true],
+      ["stale, awaiting the model", stale(running), "running", true],
+      ["suspended", suspended, "suspended", true],
+      ["stale, awaiting tools", stale(suspended), "suspended", true],
+      ["done", done, "done", false],
+      ["failure annotation on a running phase", annotated, "failed", false],
+      ["failed by its deadline", deadlined, "failed", false],
+      ["cancelled", cancelled, "cancelled", false],
+    ] as const;
+    for (const [name, state, kind, resumable] of matrix) {
+      expect(status(state).kind, name).toBe(kind);
+      expect(agentIsResumable(state), name).toBe(resumable);
     }
-    // And sanity: exactly the suspended state is resumable.
-    expect(agentIsResumable(suspended)).toBe(true);
-    expect(agentIsResumable(running)).toBe(false);
-    expect(agentIsResumable(done)).toBe(false);
-    expect(agentIsResumable(failed)).toBe(false);
   });
 });

@@ -1,12 +1,17 @@
 ---
 id: 0004
 title: An opt-in context-compaction seam on `createAgent`
-status: accepted
+status: amended-in-part by [0040](0040-running-agents-resume-on-wake.md)
 date: 2026-06-23
 tags: []
 ---
 
 # 0004 — An opt-in context-compaction seam on `createAgent`
+
+**Resumability is amended by [0040](./0040-running-agents-resume-on-wake.md):** the claim
+below that resumability stays exactly "awaiting tools" is historical, because a cold wake now
+resumes a `running` agent too. Compaction still reports `running` and everything else here
+stands.
 
 **Scope:** the `@demlik/tea/agent` subpath — `createAgent`'s config
 (`AgentCompactionConfig` / `CompactionPolicy`), the `Conversation` /

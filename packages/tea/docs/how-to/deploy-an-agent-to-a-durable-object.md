@@ -76,10 +76,11 @@ outstanding effect — same `runId`, the tool outcomes already folded — and
 finishes. A request to an instance whose run is `done` gets the stored answer
 back without a model call; a fresh input needs a fresh instance name.
 
-To wake and resume a suspended run *without* waiting for a request — plus an
-SSE stream of the agent's events — the host assembly is `createAgentHost` from
-`@demlik/tea/do` (see [the reference](../reference/do.md)); it wires the same
-resume path (`autoBoot`) at activation. If the Durable Object also runs
+To wake and resume a run that was waiting on its model call, its compaction or
+a tool *without* waiting for a request — plus an SSE stream of the agent's
+events — the host assembly is `createAgentHost` from `@demlik/tea/do` (see
+[the reference](../reference/do.md)); it wires the same resume path (`autoBoot`)
+at activation. If the Durable Object also runs
 Cloudflare's `agents` SDK, which owns the alarm and a state table of its own,
 the coexistence rules are in
 [Coexisting with Cloudflare's `agents` SDK](../explanation/agents-sdk-coexistence.md);

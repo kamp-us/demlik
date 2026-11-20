@@ -48,7 +48,7 @@ import { type SseHub, sseFromAgentEvents, sseHub } from "./sse";
 //   - the `events: agentEvents()` wiring + `sseFromAgentEvents(runtime, hub, …)`
 //     so SSE is driven off the SEMANTIC `AgentEvent` stream, never the private
 //     Msg firehose,
-//   - the `autoBoot` re-fire on a rehydrated suspended run,
+//   - the `autoBoot` re-fire on a rehydrated running or suspended run,
 //   - the SSE hub (so `host.sse.open()` / `host.sse.register(...)` is the route +
 //     the test seam), and
 //   - the framework test/lifecycle seam ONCE: `status()`, `result()`, `reset()`.
@@ -160,9 +160,10 @@ export interface AgentHost<
   /**
    * Get (or build) the booted runtime. Build-once-boot-once: the first call
    * builds the machine, wires SSE off the semantic event stream, awaits the boot
-   * gate, runs the `autoBoot` re-fire for a rehydrated suspended run, and caches
-   * the booted handle; subsequent calls return the cached handle. The single
-   * assembly every consumer used to hand-roll in `getRuntime()`.
+   * gate, runs the `autoBoot` re-fire for a rehydrated running or suspended run
+   * (one that was waiting on its model call, its compaction or its tools), and
+   * caches the booted handle; subsequent calls return the cached handle. The
+   * single assembly every consumer used to hand-roll in `getRuntime()`.
    */
   runtime(): Promise<
     BootedRunHandle<
@@ -321,8 +322,9 @@ export function createAgentHost<
     // down in `reset()`, dropping every subscription with it.
     sseFromAgentEvents(booting, sse, config.toSseFrame);
 
-    // Re-fire the one outstanding tool effect IFF this wake rehydrated a
-    // suspended run (no-op on a fresh DO). `autoBoot` awaits the same boot gate.
+    // Re-fire the one outstanding operation (model call, compaction or tool
+    // effects) IFF this wake rehydrated a running or suspended run (no-op on a
+    // fresh DO). `autoBoot` awaits the same boot gate.
     await autoBoot(booting, now);
     return booting.ready;
   }
