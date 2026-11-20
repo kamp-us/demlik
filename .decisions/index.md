@@ -18,7 +18,7 @@ One row per ADR, repo-wide. Read the file for the why.
 | [0014](./0014-typed-effect-channels-on-cmd-constructors.md) | Effect's E and R channels are types on Cmd constructors, never Effect values at the core | Amended-in-part by [0020](./0020-tea-owns-no-dependency-injection.md), [0021](./0021-handler-outcome-becomes-the-msg.md) | 2026-09-04 |
 | [0015](./0015-hide-the-wiring-never-the-state.md) | A convenience layer hides the wiring, never the state | Accepted | 2026-09-04 |
 | [0016](./0016-removal-lands-in-a-minor-at-0x.md) | While 0.x, a removal lands in one minor with a changeset callout, never a deprecation lag | Accepted | 2026-09-04 |
-| [0017](./0017-fencing-is-an-optional-store-widening.md) | Fencing is an optional `Store` widening, and a store conflict is a throw | Accepted | 2026-09-09 |
+| [0017](./0017-fencing-is-an-optional-store-widening.md) | Fencing is an optional `Store` widening, and a store conflict is a throw | Amended-in-part by [0041](./0041-store-save-receives-the-applied-message.md) | 2026-09-09 |
 | [0018](./0018-tool-overlap-inside-the-cmd-handler.md) | `runInterpret` stays serial; tool overlap lives inside the tool Cmd handler | Accepted | 2026-09-09 |
 | [0019](./0019-a-host-side-provider-graph-satisfies-r.md) | A host-side provider graph satisfies R, copying Effect's Layer + Scope | Superseded by [0020](./0020-tea-owns-no-dependency-injection.md) | 2026-09-09 |
 | [0020](./0020-tea-owns-no-dependency-injection.md) | Dependencies belong to the handler, never to tea's core or its Cmds | Accepted | 2026-09-22 |
@@ -42,6 +42,7 @@ One row per ADR, repo-wide. Read the file for the why.
 | [0038](./0038-engine-owned-durable-log.md) | The engine owns logged admission, atomic steps and birth/wake recovery; this slice ships a memory log | Accepted | 2026-11-16 |
 | [0039](./0039-a-request-is-run-with-an-opt-in-restored-boot.md) | A request-scoped activation is `run` with an opt-in restored boot, never a second engine entry | Accepted | 2026-11-19 |
 | [0040](./0040-running-agents-resume-on-wake.md) | A cold wake resumes a running agent, including one lost during compaction | Accepted | 2026-11-19 |
+| [0041](./0041-store-save-receives-the-applied-message.md) | A store's save receives the applied message, as an optional argument | Accepted | 2026-11-20 |
 
 Numbers are inherited from the `csirin/monorepo` sequence this package was extracted
 from, and the gaps are real: 0009 (the brain/hand seam) and 0012 (the single-root ADR

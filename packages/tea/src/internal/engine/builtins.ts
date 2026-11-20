@@ -229,8 +229,8 @@ export function fencing<S, M, C>(): AnyExtension<S, M, C> {
           version = read.version;
           return read.raw;
         },
-        async save(state) {
-          version = await store.saveFenced(state, version);
+        async save(state, msg) {
+          version = await store.saveFenced(state, version, msg);
         },
         migrate: (raw) => store.migrate(raw),
       };

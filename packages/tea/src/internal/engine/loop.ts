@@ -1187,7 +1187,7 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
     saveStatus = { _tag: saved ? "saved" : "pending" };
     if (store && gate !== "abandoned" && !saved) {
       try {
-        await store.save(next);
+        await store.save(next, msg);
         persisted = next;
         saveStatus = { _tag: "saved" };
       } catch (error) {

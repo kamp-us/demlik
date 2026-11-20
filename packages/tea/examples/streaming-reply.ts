@@ -34,8 +34,8 @@ export function skipSaving<S>(
 ): Store<S> {
   return {
     load: () => store.load(),
-    save: (state) =>
-      isTransient(state) ? Promise.resolve() : store.save(state),
+    save: (state, msg) =>
+      isTransient(state) ? Promise.resolve() : store.save(state, msg),
     migrate: (raw) => store.migrate(raw),
   };
 }
