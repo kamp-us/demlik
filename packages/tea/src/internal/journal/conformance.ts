@@ -549,6 +549,14 @@ async function flatCost(c: CaseContext) {
   }
   return { at10: times[10], at10000: times[10000] };
 }
+/**
+ * How much more one append may cost at 10,000 records than at 10. A driver that
+ * rewrites or re-reads its whole log pays about 1,000x (10,000 / 10); an indexed
+ * table or a B-tree pays its depth, a few x (SQLite measured 3.5x on CI). 30x sits
+ * between the two with room on both sides, so K5 catches a linear append and not
+ * a logarithmic one, nor sub-millisecond timer noise.
+ */
+const K5_MAX_GROWTH = 30;
 function appendCosts(samples: readonly unknown[]) {
   const measured = samples.slice(5).map((value) => {
     if (
@@ -564,7 +572,8 @@ function appendCosts(samples: readonly unknown[]) {
   });
   const at10 = median(measured.map((pair) => pair.at10));
   const at10000 = median(measured.map((pair) => pair.at10000));
-  if (at10000 > 3 * at10) throw new Error(`K5: ${at10000} > 3 * ${at10} ms`);
+  if (at10000 > K5_MAX_GROWTH * at10)
+    throw new Error(`K5: ${at10000} > ${K5_MAX_GROWTH} * ${at10} ms`);
   return { at10, at10000, ratio: at10000 / at10 };
 }
 async function streams(c: CaseContext) {
