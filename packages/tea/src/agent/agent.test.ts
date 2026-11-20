@@ -10,6 +10,7 @@ import {
   type AgentLlmOkMsg,
   type AgentMachineMsg,
   type AgentTurn,
+  agentEvents,
   agentTurnSchema,
   createAgent,
   type LlmErr,
@@ -212,6 +213,203 @@ describe("createAgent — init + start", () => {
     expect(cmds).toEqual([brainRunCmd("plan_turn")]);
     // The resilient slice tracks it running.
     expect(s.resilience.calls.plan_turn?.phase).toBe("running");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// start — the stored `runId` is the run's identity: a repeated start for it is
+// a no-op, a start for any other run replaces it.
+// ---------------------------------------------------------------------------
+
+describe("createAgent — a repeated start for the stored run", () => {
+  // One State per way a run can stand, each holding the run "r". The agent
+  // folds with maxTurns 1 so one more turn fails it, and a deadline so the
+  // watchdog can fire; a second agent asks for a compaction once two turns exist.
+  function everyStanding() {
+    const agent = makeAgent({ maxTurns: 1, deadlineMs: 1000 });
+    const [running] = agent.start(agent.init(), "r", 0);
+    const [suspended] = agent.turn(running, turnWith(tool("c1")), 10);
+    const stale = <T extends typeof running>(state: T): T => ({
+      ...state,
+      run: { ...state.run, phase: "stale" as const },
+    });
+    const plain = makeAgent();
+    const folds = makeAgent({
+      compaction: { planCompaction: (c) => (c.turns.length >= 2 ? 2 : 0) },
+    });
+    let [compacting] = folds.start(folds.init(), "r", 0);
+    [compacting] = folds.turn(compacting, turnWith(tool("a")), 1);
+    [compacting] = folds.toolOk(compacting, "a", "ra", 2);
+    [compacting] = folds.turn(compacting, turnWith(tool("b")), 3);
+    [compacting] = folds.toolOk(compacting, "b", "rb", 4);
+    let [done] = plain.start(plain.init(), "r", 0);
+    [done] = plain.turn(done, turnWith(), 10);
+    [done] = plain.turn(done, turnWith(), 20);
+    // `turn_limit` leaves `run.phase` running and sets the agent's own failure.
+    let [annotated] = agent.start(agent.init(), "r", 0);
+    [annotated] = agent.turn(annotated, turnWith(tool("c9")), 10);
+    [annotated] = agent.toolOk(annotated, "c9", "x", 20);
+    const safety = agent
+      .subs(running)
+      .find((sub) => sub.id.startsWith("monitored:safety:"));
+    const [deadlined] = agent.onTimer(running, {
+      _tag: "deadline_exceeded",
+      id: safety?.id ?? "",
+      atMs: 2000,
+    });
+    const [cancelled] = agent
+      .toMachine<object>()
+      .machine.update.agent_cancel(running, { _tag: "agent_cancel", at: 9 });
+    return {
+      agent,
+      matrix: [
+        ["running a brain call", running],
+        ["suspended on a tool", suspended],
+        ["stale, awaiting the model", stale(running)],
+        ["stale, awaiting tools", stale(suspended)],
+        ["compacting", compacting],
+        ["done", done],
+        ["failure annotation on a running phase", annotated],
+        ["failed by its deadline", deadlined],
+        ["cancelled", cancelled],
+      ] as const,
+    };
+  }
+
+  it("returns the very State it was given and no Cmd, from every standing of the run", () => {
+    const { agent, matrix } = everyStanding();
+    const { machine } = agent.toMachine<object>();
+
+    for (const [name, state] of matrix) {
+      const [again, cmds] = agent.start(state, "r", 99);
+      expect(again, name).toBe(state);
+      expect(cmds, name).toEqual([]);
+
+      const [viaMsg, msgCmds] = machine.update.agent_start(state, {
+        _tag: "agent_start",
+        runId: "r",
+        at: 99,
+      });
+      expect(viaMsg, name).toBe(state);
+      expect(msgCmds, name).toEqual([]);
+    }
+  });
+
+  it("keeps what the run has done: the conversation, usage, counters, failure, output, deadlines and tool ids", () => {
+    const { agent, matrix } = everyStanding();
+    const kept = Object.fromEntries(matrix);
+    const [suspendedAgain] = agent.start(kept["suspended on a tool"], "r", 99);
+    expect(suspendedAgain.conversation?.turns).toHaveLength(1);
+    expect(suspendedAgain.tools.running.map((c) => c.callId)).toEqual(["c1"]);
+    expect(suspendedAgain.run.startedAt).toBe(0);
+
+    const [doneAgain] = agent.start(kept.done, "r", 99);
+    expect(doneAgain.output).toEqual({ content: "thinking", toolCalls: [] });
+    expect(status(doneAgain).kind).toBe("done");
+
+    const [failedAgain] = agent.start(
+      kept["failure annotation on a running phase"],
+      "r",
+      99,
+    );
+    expect(failedAgain.failure).not.toBeNull();
+    expect(status(failedAgain).kind).toBe("failed");
+
+    const [cancelledAgain] = agent.start(kept.cancelled, "r", 99);
+    expect(status(cancelledAgain)).toEqual({ kind: "cancelled", at: 9 });
+  });
+
+  it("keeps a State's lifecycle notes and projects no event twice, not even RunDone", () => {
+    const agent = makeAgent();
+    const project = agentEvents<string, Purpose, Outputs, string>();
+    let [s] = agent.start(agent.init(), "r", 0);
+    [s] = agent.turn(s, turnWith(), 10);
+    const [done] = agent.turn(s, turnWith(), 20);
+    const first = project({ _tag: "agent_start", runId: "r", at: 0 }, done);
+    expect(first.map((event) => event._tag)).toEqual(["RunDone"]);
+    expect(done.lifecycle?.map((note) => note.kind)).toEqual(["run_ended"]);
+
+    const [again] = agent.start(done, "r", 99);
+    expect(again.lifecycle).toBe(done.lifecycle);
+    expect(project({ _tag: "agent_start", runId: "r", at: 99 }, again)).toEqual(
+      [],
+    );
+  });
+
+  it("through the wired machine, two concurrent starts and a retry call the model once per stage", async () => {
+    const calls: number[] = [];
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let entered!: () => void;
+    const modelCalled = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const agent = makeAgent({
+      model: fakeModel(async () => {
+        calls.push(calls.length + 1);
+        entered();
+        await held;
+        return { content: "thinking", toolCalls: [] };
+      }),
+    });
+    const wired = agent.toMachine<object>();
+    const runtime = await run(wired.machine, {
+      ctx: {},
+      interpret: wired.interpret,
+      subscribe: wired.subscribe,
+      disposeTimeoutMs: 0,
+      onError: () => {},
+    }).ready;
+    const begin = () =>
+      runtime.dispatch({ _tag: "agent_start", runId: "r", at: 0 });
+
+    const first = [begin(), begin()];
+    await modelCalled;
+    const retry = begin();
+    release();
+    await Promise.all([...first, retry]);
+
+    expect(calls).toEqual([1, 2]);
+    expect(status(runtime.getState()).kind).toBe("done");
+    await runtime.stop();
+  });
+
+  it("starts a run on a State with none, and starts a different run over each standing", () => {
+    const { agent, matrix } = everyStanding();
+    const fresh = agent.init();
+    const [begun, begunCmds] = agent.start(fresh, "r", 0);
+    expect(begun.run.phase).toBe("running");
+    expect(begunCmds).toEqual([brainRunCmd("plan_turn")]);
+
+    for (const [name, state] of matrix) {
+      const [next, cmds] = agent.start(state, "other", 100);
+      expect(next, name).not.toBe(state);
+      expect(next.run.phase, name).toBe("running");
+      expect(next.run.runId, name).toBe("other");
+      expect(next.run.startedAt, name).toBe(100);
+      expect(next.usage, name).toEqual({ inputTokens: 0, outputTokens: 0 });
+      expect(next.failure, name).toBeNull();
+      expect(next.output, name).toBeNull();
+      expect(next.conversation?.turns, name).toEqual([]);
+      expect(next.tools.running, name).toEqual([]);
+      expect(cmds, name).toEqual([brainRunCmd("plan_turn")]);
+    }
+  });
+
+  it("treats a run cancelled before it ever started as holding no identity, so any runId starts one", () => {
+    const agent = makeAgent();
+    const { machine } = agent.toMachine<object>();
+    const [cancelled] = machine.update.agent_cancel(agent.init(), {
+      _tag: "agent_cancel",
+      at: 5,
+    });
+    expect(cancelled.run).toMatchObject({ phase: "cancelled", runId: null });
+
+    const [next, cmds] = agent.start(cancelled, "r", 6);
+    expect(next.run).toMatchObject({ phase: "running", runId: "r" });
+    expect(cmds).toEqual([brainRunCmd("plan_turn")]);
   });
 });
 

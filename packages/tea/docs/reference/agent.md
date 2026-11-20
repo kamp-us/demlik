@@ -602,6 +602,14 @@ interface AgentKnob<
   readonly init: () => AgentState<Stage, P, O, R>;
   readonly isSettled: (s: AgentState<Stage, P, O, R>) => boolean;
   readonly onTimer: AgentVerb1<Stage, P, O, R, TC, [msg: LlmTimerMsg]>;
+  /**
+   * Start the run `runId`: seed the pipeline and a fresh conversation, zero the
+   * run's usage, clear its output and failure, and fire the first brain call.
+   * The `runId` is the run's identity, so a start for the run the State already
+   * holds, in any phase, is a repeat: it returns that State itself and no
+   * commands. That is what makes a retried or concurrent start request safe.
+   * Only a State with no run, or a different `runId`, starts a run.
+   */
   readonly start: AgentVerb1<Stage, P, O, R, TC, [runId: string, at: number]>;
   readonly subs: (s: AgentState<Stage, P, O, R>) => readonly DeadlineSub[];
   readonly succeed: AgentVerb1<Stage, P, O, R, TC, [msg: AgentLlmOkMsg<P, O>, at: number]>;
@@ -864,8 +872,9 @@ interface AgentState<Stage, P extends string, O extends Record<P, unknown>, R> {
    * that reported usage, summed field by field. It is what the run cost, so it
    * belongs to the run and not to any one conversation: a compaction fold keeps
    * it, a stage advance keeps it, and the retire to `done` keeps it after the
-   * conversation is cleared — `status(state)`'s `done` arm hands it on. Only
-   * `agent_start` resets it to zero. Read it from `stopWhen` for a token budget.
+   * conversation is cleared — `status(state)`'s `done` arm hands it on. Only a
+   * start for a new run resets it to zero; a repeated start for the stored
+   * `runId` leaves it as it is. Read it from `stopWhen` for a token budget.
    *
    * The one place the total lives. A Model persisted before this field held its
    * total on `conversation.usage`, and one persisted by 0.17.x held none; the

@@ -41,6 +41,14 @@ option for a host message after `ready`, when Subs are already open; combining
 both resume paths for the same work can repeat it.
 An agent's saved retry counters survive too; restarting does not reset its attempt budget.
 
+An agent's `runId` is the identity of its run, and the saved State holds it. A
+start for the `runId` the State already holds, in any phase, returns that State
+and issues no command, so a request retried or sent twice does not issue the
+first model call again, reset the run's usage or clear a finished run's output.
+Only a State with no run, or a start for a different `runId`, begins a new run
+and resets them. A host that wants a second run on the same State passes a new
+`runId`.
+
 A host that sleeps and wakes on its next Msg boots on every wake, so `init`'s
 Cmds run on every wake. Passing `boot: "restored"` to `run` says this start is a
 wake: with a loaded State, `init` still folds it, but none of its Cmds run, and

@@ -185,6 +185,14 @@ export interface AgentKnob<
   Compact extends boolean,
 > {
   readonly init: () => AgentState<Stage, P, O, R>;
+  /**
+   * Start the run `runId`: seed the pipeline and a fresh conversation, zero the
+   * run's usage, clear its output and failure, and fire the first brain call.
+   * The `runId` is the run's identity, so a start for the run the State already
+   * holds, in any phase, is a repeat: it returns that State itself and no
+   * commands. That is what makes a retried or concurrent start request safe.
+   * Only a State with no run, or a different `runId`, starts a run.
+   */
   readonly start: AgentVerb1<Stage, P, O, R, TC, [runId: string, at: number]>;
   readonly turn: AgentVerb1<
     Stage,

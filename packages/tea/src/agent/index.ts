@@ -519,9 +519,11 @@ export function createAgent<
   // === Verb: start =========================================================
 
   /**
-   * Start (or restart) the run for `runId` at `at`, entering the agentic loop:
-   * seed the pipeline (via monitored-run), seed a fresh conversation, and fire
-   * the first brain call. PURE — `at` is the only clock.
+   * Begin the run for `runId` at `at`, entering the agentic loop: seed the
+   * pipeline (via monitored-run), seed a fresh conversation, and fire the first
+   * brain call. It always resets: whether a Model should be reset is decided in
+   * `entering.start` ({@link STARTS}), before this runs. PURE — `at` is the only
+   * clock.
    */
   function start(
     s: State,
@@ -1669,10 +1671,46 @@ export function createAgent<
       : [next, cmds];
   }
 
+  /**
+   * What a start for `runId` means to the Model it meets. The `runId` is the
+   * run's identity, so the stored one decides:
+   *
+   *   - `begin`   — the Model holds no run (`idle`): this is its first.
+   *   - `repeat`  — the Model holds a run with this `runId`, in any phase: a
+   *                 retried or concurrent request for the run it already has.
+   *   - `restart` — the Model holds a run with another `runId` (a cancelled run
+   *                 that never started has none): a new run replaces it.
+   */
+  type StartCase = "begin" | "repeat" | "restart";
+  const startCaseOf = (s: State, runId: string): StartCase =>
+    s.run.phase === "idle"
+      ? "begin"
+      : s.run.runId === runId
+        ? "repeat"
+        : "restart";
+
+  type Entered = readonly [State, readonly AgentCmd<P, TC>[]];
+  const begun = (s: State, runId: string, at: number): Entered =>
+    transition(s, at, (e) => start(e, runId, at));
+  /**
+   * One interpreter for the start decision, one row per {@link StartCase}. A
+   * `repeat` is the Model itself and no Cmd, ahead of `transition`, so it leaves
+   * a Model with lifecycle notes exactly as it found it and a settled run
+   * settled. Only a `begin` or a `restart` runs the one reset, `start`.
+   */
+  const STARTS = {
+    begin: begun,
+    restart: begun,
+    repeat: (s): Entered => [s, []],
+  } satisfies Record<
+    StartCase,
+    (s: State, runId: string, at: number) => Entered
+  >;
+
   /** The verbs as entry points — each one a whole transition. */
   const entering = {
     start: (s: State, runId: string, at: number) =>
-      transition(s, at, (e) => start(e, runId, at)),
+      STARTS[startCaseOf(s, runId)](s, runId, at),
     turn: (s: State, result: AgentTurn, at: number) =>
       transition(s, at, (e) => turn(e, result, at)),
     toolOk: (s: State, callId: string, result: R, at: number) =>
