@@ -27,7 +27,23 @@ import type {
   Sub,
   Wired,
 } from "../index";
-import { autoBoot } from "./resume";
+import {
+  defaultOnError,
+  RuntimeStoppedError,
+  sinkOrDefault,
+} from "../internal/engine/loop";
+import { DispatchDiscardedError } from "../runtime-types";
+import {
+  type Deferred,
+  deferred,
+  type HostCmd,
+  type HostMsg,
+  HostOverlapError,
+  type HostPhase,
+  hostLifecycle,
+  stepLifecycle,
+} from "./host-lifecycle";
+import { agentBootPort, beginResume } from "./resume";
 import { type SseHub, sseFromAgentEvents, sseHub } from "./sse";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -48,7 +64,7 @@ import { type SseHub, sseFromAgentEvents, sseHub } from "./sse";
 //   - the `events: agentEvents()` wiring + `sseFromAgentEvents(runtime, hub, …)`
 //     so SSE is driven off the SEMANTIC `AgentEvent` stream, never the private
 //     Msg firehose,
-//   - the `autoBoot` re-fire on a rehydrated suspended run,
+//   - the `agent_boot` re-fire on a rehydrated running or suspended run,
 //   - the SSE hub (so `host.sse.open()` / `host.sse.register(...)` is the route +
 //     the test seam), and
 //   - the framework test/lifecycle seam ONCE: `status()`, `result()`, `reset()`.
@@ -160,9 +176,18 @@ export interface AgentHost<
   /**
    * Get (or build) the booted runtime. Build-once-boot-once: the first call
    * builds the machine, wires SSE off the semantic event stream, awaits the boot
-   * gate, runs the `autoBoot` re-fire for a rehydrated suspended run, and caches
+   * gate, dispatches `agent_boot` for a rehydrated running or suspended run (one
+   * that was waiting on its model call, its compaction or its tools), and caches
    * the booted handle; subsequent calls return the cached handle. The single
    * assembly every consumer used to hand-roll in `getRuntime()`.
+   *
+   * The call resolves once `agent_boot` is queued, not when the work it
+   * re-fired is done. That work can wait on a tool whose result a driver has not
+   * posted yet, and the driver reaches the run through this call, so waiting for
+   * it would deadlock. Read how far the run got from `getState()`, `subscribe` or
+   * `status()`.
+   *
+   * @throws {HostOverlapError} While a `reset()` is still stopping the run.
    */
   runtime(): Promise<
     BootedRunHandle<
@@ -196,8 +221,20 @@ export interface AgentHost<
    * Tear down the cached runtime (drain its tail via `stop()`, up to
    * `disposeTimeoutMs`, then drop the handle) so the next `runtime()` rebuilds
    * from storage. A Cmd handler that has not returned by the limit is given up
-   * on, so `reset()` returns either way. The framework `settle` test seam,
-   * owned once.
+   * on, so `reset()` returns either way, including while the run is waiting on a
+   * tool nobody has answered. It stops the handle the host holds from the moment
+   * `run` returned it, so it also stops a build that has not finished booting:
+   * that build dispatches nothing more, and a `runtime()` still waiting on it
+   * rejects with a `DispatchDiscardedError`.
+   *
+   * The framework `settle` test seam, owned once: a test and lifecycle seam for
+   * one caller at a time, not the way to stop a run in production. Give `run`
+   * a `cancellation` signal and abort it for that, and await a `reset()` before
+   * the next `reset()` or `runtime()`.
+   *
+   * @throws {HostOverlapError} A `reset()` while another `reset()` is still
+   * stopping the run, or from inside `run()`, and a `runtime()` while a
+   * `reset()` is still stopping the run.
    */
   reset(): Promise<void>;
 }
@@ -286,17 +323,69 @@ export function createAgentHost<
       s.run.phase === "failed" ||
       s.run.phase === "cancelled");
 
-  // The build-once cell memoizes the IN-FLIGHT build (a Promise), not just the
-  // settled runtime (#313). Were it the settled handle, two concurrent
-  // activations — e.g. an `/sse` open and an inbound dispatch arriving in the
-  // same wake — would each pass the fast-path guard (the cell is empty until
-  // after the boot await) and each `run(buildMachine(), …)` + wire SSE + autoBoot
-  // against the same storage: a double boot with duplicate SSE wiring, not the
-  // build-once-boot-once this host promises. Assigning the promise synchronously,
-  // before the first await, means the second caller shares the one build.
-  let cached: Promise<BootedRunHandle<S, M, E>> | null = null;
+  type Booted = BootedRunHandle<S, M, E>;
+  // One build's record, made before the build runs. The handle lands the moment
+  // `run` returns it, and until then the table refuses a `reset()`.
+  interface Build {
+    readonly abort: AbortController;
+    handle: RunHandle<S, M, E> | null;
+    readonly result: Deferred<Booted>;
+  }
+  const lifecycle = hostLifecycle<Build>();
+  let phase: HostPhase<Build> = { _tag: "empty" };
+  const fresh = (): Build => ({
+    abort: new AbortController(),
+    handle: null,
+    result: deferred(),
+  });
+  const discarded = () =>
+    new DispatchDiscardedError(agentBootPort().resumeMsg(now())._tag);
 
-  async function build(): Promise<BootedRunHandle<S, M, E>> {
+  // The phase is set before the Cmds run, so a Cmd that reenters the host (a
+  // `reset()` from inside `run`) meets the phase the call chose, and the call
+  // that started a build still answers from that build.
+  function send(msg: HostMsg<Build>): HostPhase<Build> {
+    const [next, cmds] = stepLifecycle(lifecycle, phase, msg);
+    phase = next;
+    for (const cmd of cmds) perform(cmd);
+    return next;
+  }
+
+  function begin(record: Build): void {
+    build(record).then(record.result.resolve, record.result.reject);
+    record.result.promise.then(
+      () => send({ _tag: "built", build: record }),
+      () => send({ _tag: "failed", build: record }),
+    );
+  }
+
+  function perform(cmd: HostCmd<Build>): void {
+    switch (cmd._tag) {
+      case "begin":
+        begin(cmd.build);
+        return;
+      case "tearDown": {
+        // Abort first: the stop makes the engine refuse the build's pending
+        // work, and the build tells that teardown from a failure by the signal.
+        cmd.build.abort.abort(discarded());
+        const handle = cmd.build.handle;
+        new Promise<void>((resolve) => resolve(handle?.stop())).then(
+          cmd.done.resolve,
+          cmd.done.reject,
+        );
+        const settled = () => send({ _tag: "tornDown" });
+        cmd.done.promise.then(settled, settled);
+        return;
+      }
+      case "refuse":
+        throw new HostOverlapError(cmd.call, cmd.during);
+      default:
+        cmd satisfies never;
+    }
+  }
+
+  async function build(mine: Build): Promise<Booted> {
+    const { signal } = mine.abort;
     // `run()` hands back a `RunHandle` synchronously (#45). Wire the SEMANTIC
     // event projector (#47) so `runtime.on(...)` lights up, then drive the SSE
     // hub off that named stream (never the private-Msg firehose).
@@ -305,8 +394,9 @@ export function createAgentHost<
     // conditional stays deferred, and tsc relates it only to itself, not to an
     // object that spreads the handlers beside it.
     const ctxArg = { ctx: config.ctx } as CtxArg<Ctx>;
-    // Lifted out of `config`, `store` and `onError` no longer read as one member
-    // of its union, so the options are read at `run`'s own parameter type.
+    // Lifted out of `config`, `store` and `onError` no longer read as one
+    // member of its union, so the options are read at `run`'s own parameter
+    // type.
     const booting: RunHandle<S, M, E> = config.run(wired.machine, {
       ...wired,
       ...ctxArg,
@@ -314,6 +404,10 @@ export function createAgentHost<
       onError: config.onError,
       events: agentEvents<Stage, P, O, R>(),
     } as RunOptions<S, M, C, U, Ctx, E>);
+    // Held from the moment `run` returns it, before any await, so `reset()`
+    // can stop this run whatever its boot is waiting on. Until then the table
+    // refuses a `reset()`: it came from inside `run`.
+    mine.handle = booting;
 
     // SSE off the semantic stream. Subscriptions attach on the booting handle
     // (total before boot), so the hub catches every event from the first
@@ -321,23 +415,41 @@ export function createAgentHost<
     // down in `reset()`, dropping every subscription with it.
     sseFromAgentEvents(booting, sse, config.toSseFrame);
 
-    // Re-fire the one outstanding tool effect IFF this wake rehydrated a
-    // suspended run (no-op on a fresh DO). `autoBoot` awaits the same boot gate.
-    await autoBoot(booting, now);
-    return booting.ready;
+    // Re-fire the one outstanding operation (model call, compaction or tool
+    // effects) IFF this wake rehydrated a running or suspended run (no-op on a
+    // fresh DO). The gate opens once `agent_boot` is queued, not when the work
+    // it re-fired is done: that work can be waiting on a tool the driver has
+    // not answered, and the driver reaches the run through this very call.
+    // `beginResume` reads the signal after the load, so a `reset()` during it
+    // dispatches nothing into the stopped runtime. The chain then has no
+    // caller to reject at, so its failure goes to `onError` under `"boot"`
+    // (invariant 6) and is never dropped. It is teardown, and left out, only
+    // when this build was reset AND the engine rejected with one of the values
+    // it refuses work with once stopped: the engine already reported that.
+    const resumed = await beginResume(booting, agentBootPort(), now, signal);
+    resumed?.finished.catch((error: unknown) => {
+      const teardown =
+        signal.aborted &&
+        (error instanceof DispatchDiscardedError ||
+          error instanceof RuntimeStoppedError);
+      if (teardown) return;
+      sinkOrDefault(config.onError ?? defaultOnError, error, {
+        phase: "boot",
+      });
+    });
+    const ready = await booting.ready;
+    signal.throwIfAborted();
+    return ready;
   }
 
-  function runtime(): Promise<BootedRunHandle<S, M, E>> {
-    if (cached !== null) return cached;
-    const building = build();
-    cached = building;
-    // A failed build clears the cell so a later call retries rather than
-    // caching the rejection forever (matches the pre-#313 `cached`-stays-null
-    // semantics). Guard on identity so a reset+rebuild isn't clobbered.
-    building.catch(() => {
-      if (cached === building) cached = null;
-    });
-    return cached;
+  // Every `runtime()` call offers the table a fresh record; the cell keeps it
+  // only when it starts a build. Two calls in one wake share the one build
+  // (#313). A call during a teardown is refused: it throws a `HostOverlapError`.
+  function runtime(): Promise<Booted> {
+    const chosen = send({ _tag: "runtime", fresh: fresh() });
+    if (chosen._tag === "building" || chosen._tag === "live")
+      return chosen.build.result.promise;
+    throw new Error(`host lifecycle: runtime() left the host ${chosen._tag}`);
   }
 
   return {
@@ -352,14 +464,12 @@ export function createAgentHost<
       return isTerminal(state) ? state : undefined;
     },
     sse,
-    async reset(): Promise<void> {
-      if (cached === null) return;
-      // Await the settled build before tearing down — a reset racing an
-      // in-flight build still drains the one runtime rather than orphaning it.
-      // A failed build has no runtime to stop.
-      const built = await cached.catch(() => null);
-      cached = null;
-      await built?.stop();
+    reset(): Promise<void> {
+      // One caller at a time: the table refuses a `reset()` that overlaps a
+      // teardown or comes from inside `run`, and throws it from `send`.
+      const done = deferred<void>();
+      const chosen = send({ _tag: "reset", done });
+      return chosen._tag === "tearingDown" ? done.promise : Promise.resolve();
     },
   };
 }

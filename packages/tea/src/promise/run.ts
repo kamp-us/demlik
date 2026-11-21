@@ -127,6 +127,24 @@ export type PromiseRunOptions<
      */
     disposeTimeoutMs?: number;
     /**
+     * Stop the run from outside, for a host that holds the runtime itself. Once
+     * `signal` aborts the runtime queues `cancel`'s Msg, starts no further Cmd and
+     * stops waiting on the handler in flight, which a promise cannot recall; what
+     * that handler returns later reaches no one. A signal that is already aborted,
+     * or aborts while the store is loading, settles the cancel before `ready`
+     * resolves, so a host reading `ready` sees a run that ended and resumes
+     * nothing. `cancel` is chosen off the State, and PURE; it must land a State
+     * the run does not resume from. A `cancel` that throws is reported to
+     * `onError`. A pair, so a signal with no `cancel` cannot be written. Not
+     * available with a store that keeps a log: `run` throws.
+     *
+     * `driveToDone` takes the same pair to stop a run it drives.
+     */
+    cancellation?: {
+      readonly signal: AbortSignal;
+      readonly cancel: (state: S) => M;
+    };
+    /**
      * How the run starts. Omit it and nothing changes: `init` folds the loaded
      * State, the engine saves what `init` returned, runs `init`'s Cmds, and
      * `stop()` saves the last State once more (ADR 0028).
@@ -262,6 +280,7 @@ export function run<
     onError: opts.onError,
     disposeTimeoutMs: opts.disposeTimeoutMs ?? 5_000,
     idleCap: opts.__idleCap ?? 100_000,
+    cancellation: opts.cancellation,
     extensions: builtinExtensions<S, M, C, E>(machine, opts),
     // A Sub failure and a halting reducer throw stop the run the same way
     // (ADR 0033). Deferred: a runner that throws during a storeless boot fails

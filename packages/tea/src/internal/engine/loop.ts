@@ -213,6 +213,17 @@ export interface LoopConfig<S, M extends { _tag: string }, C, Ctx> {
    */
   readonly boot?: "restored";
   readonly ctx: Ctx;
+  /**
+   * The outside-in stop (`run`'s `cancellation`). Once the signal is
+   * aborted, or is found aborted when boot ends, the loop queues `cancel`'s Msg
+   * as the run's next Msg, starts no further Cmd and stops waiting on the
+   * handler in flight. What that handler returns later reaches no one. Not
+   * available with a store that keeps a log.
+   */
+  readonly cancellation?: {
+    readonly signal: AbortSignal;
+    readonly cancel: (state: S) => M;
+  };
   readonly onError: OnError | undefined;
   readonly disposeTimeoutMs: number;
   readonly idleCap: number;
@@ -484,6 +495,18 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
   //                 A boot whose load returns only now saves nothing either
   //                 (`commit`): no store call starts once `stop()` gave up.
   let gate: "open" | "draining" | "closed" | "abandoned" = "open";
+  // The outside-in stop. `aborted` flips with the signal, and `released` settles
+  // with it, so a step waiting on its handler stops waiting (`runCmds`).
+  const cancellation = config.cancellation;
+  let aborted = false;
+  let release: () => void = () => {};
+  const released =
+    cancellation === undefined
+      ? undefined
+      : new Promise<void>((resolve) => {
+          release = resolve;
+        });
+  let booted = false;
   // The work currently awaiting: one entry per interpret handler call, named by
   // its Cmd type, and one unnamed entry per piece of detached work. Written only
   // by `trackInFlight`, read by `stop()` to make a mid-flight teardown LOUD
@@ -506,6 +529,12 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
     config.store,
     () => gate !== "abandoned" && !storeClosed,
   );
+  if (session !== undefined && config.cancellation !== undefined) {
+    throw new Error(
+      "@demlik/tea: `cancellation` is not available with a store that keeps a " +
+        "log. Dispatch the cancel Msg yourself.",
+    );
+  }
   const consumed = new Set<string>();
   const turns = new Map<
     string,
@@ -918,12 +947,18 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
    * INSIDE one Cmd's handler, never across the Cmds of one transition.
    *
    * Once `stop()` has given up on this step, no further handler starts; what
-   * the stuck one returned is refused at the gate like any other late Msg.
+   * the stuck one returned is refused at the gate like any other late Msg. An
+   * aborted `signal` does the same: the step stops waiting on its handler, and
+   * the cancel Msg queued behind it folds next.
    */
   async function runCmds(cmds: readonly C[]): Promise<void> {
     for (const cmd of cmds) {
-      if (gate === "abandoned") return;
-      const returned = await interpret(cmd, dispatchUnawaited);
+      if (gate === "abandoned" || aborted) return;
+      const call = interpret(cmd, dispatchUnawaited);
+      const returned = await (released === undefined
+        ? call
+        : Promise.race([call, released]));
+      if (aborted) call.catch(reportUndelivered);
       for (const follow of followUps<M>(returned)) dispatchUnawaited(follow);
     }
   }
@@ -1406,6 +1441,38 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
     await drainToQuiescence();
   }
 
+  // The cancel Msg is chosen off the State, so it is built once boot has made
+  // one. A stop that arrived before that is folded by `ready`, ahead of any Msg
+  // the host sends once it resolves; a later one is queued at once.
+  function cancelRun(): Promise<void> {
+    if (cancellation === undefined || gate !== "open") return Promise.resolve();
+    try {
+      return enqueueDispatch(cancellation.cancel(state as S), "loop").catch(
+        reportUndelivered,
+      );
+    } catch (error) {
+      reportUndelivered(error);
+      return Promise.resolve();
+    }
+  }
+
+  function onAbort(): void {
+    aborted = true;
+    release();
+    if (booted) void cancelRun();
+  }
+
+  async function bootedAfterCancel(): Promise<LoopHandle<S, M>> {
+    booted = true;
+    if (aborted) await cancelRun();
+    return handle;
+  }
+
+  // Listening starts before boot does, so a signal that is already aborted
+  // keeps boot's own Cmds from starting.
+  if (cancellation?.signal.aborted === true) onAbort();
+  else cancellation?.signal.addEventListener("abort", onAbort, { once: true });
+
   // `bootPromise` is the un-swallowed promise `ready` chains off (so callers
   // see the boot error directly); `tail` gets the swallowed branch so a failed
   // boot does not poison every later dispatch's chain (each surfaces
@@ -1417,6 +1484,7 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
   });
 
   async function teardown(): Promise<void> {
+    cancellation?.signal.removeEventListener("abort", onAbort);
     // Open the discard window unless the gate is already past it (a halt):
     // the gate only advances.
     if (gate === "open") gate = "draining";
@@ -1459,6 +1527,7 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
       }
     }
     storeClosed = true;
+    release();
   }
 
   // The teardown runs once. A second `stop()` — a host calling it again, or the
@@ -1482,7 +1551,9 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
     },
     // A failed boot never hands out a handle. The forward reference resolves
     // at `.then` time, after `handle` below is built.
-    ready: bootPromise.then(() => handle),
+    ready: bootPromise.then(() =>
+      cancellation === undefined ? handle : bootedAfterCancel(),
+    ),
     idle: drainToQuiescence,
     stop(): Promise<void> {
       stopped ??= teardown();

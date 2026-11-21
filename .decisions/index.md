@@ -7,7 +7,7 @@ One row per ADR, repo-wide. Read the file for the why.
 | [0001](./0001-no-offtheshelf-resilience.md) | Resilience is built in-house, not installed | Amended-in-part by [0022](./0022-no-battery-layer-plain-functions.md) | 2026-06-09 |
 | [0002](./0002-do-host-layer.md) | A Durable-Object host layer, not a DO framework | Accepted | 2026-06-22 |
 | [0003](./0003-do-targets-event-sourced-virtual-actors.md) | The DO host targets event-sourced virtual actors | Accepted | 2026-06-23 |
-| [0004](./0004-agent-context-compaction.md) | An opt-in context-compaction seam on `createAgent` | Accepted | 2026-06-23 |
+| [0004](./0004-agent-context-compaction.md) | An opt-in context-compaction seam on `createAgent` | Amended-in-part by [0040](./0040-running-agents-resume-on-wake.md) | 2026-06-23 |
 | [0005](./0005-web-timeline-player-hosting-and-render-primitive.md) | Web timeline player: hosting + render primitive | Accepted | 2026-06-24 |
 | [0006](./0006-client-prediction-fold-seam-and-pure-boundary.md) | Client-prediction fold seam + runtime-free import boundary | Amended-in-part by [0016](./0016-removal-lands-in-a-minor-at-0x.md), [0028](./0028-restored-init-may-resume.md) | 2026-06-27 |
 | [0007](./0007-source-generated-diataxis-docs-factory.md) | Docs are a source-generated, drift-gated Diátaxis factory | Accepted | 2026-07-17 |
@@ -41,6 +41,7 @@ One row per ADR, repo-wide. Read the file for the why.
 | [0037](./0037-tea-discriminants-are-keyed-tag.md) | Every discriminant tea owns is keyed `_tag`, never `type` | Accepted | 2026-11-15 |
 | [0038](./0038-engine-owned-durable-log.md) | The engine owns logged admission, atomic steps and birth/wake recovery; this slice ships a memory log | Accepted | 2026-11-16 |
 | [0039](./0039-a-request-is-run-with-an-opt-in-restored-boot.md) | A request-scoped activation is `run` with an opt-in restored boot, never a second engine entry | Accepted | 2026-11-19 |
+| [0040](./0040-running-agents-resume-on-wake.md) | A cold wake resumes a running agent, including one lost during compaction | Accepted | 2026-11-19 |
 
 Numbers are inherited from the `csirin/monorepo` sequence this package was extracted
 from, and the gaps are real: 0009 (the brain/hand seam) and 0012 (the single-root ADR

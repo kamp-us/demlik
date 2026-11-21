@@ -8,7 +8,7 @@ Tier: `stable`
 import { … } from "@demlik/tea/do";
 ```
 
-## Exports (108)
+## Exports (109)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -18,7 +18,7 @@ import { … } from "@demlik/tea/do";
 | [`AgentHost`](#AgentHost) | Interface | stable | The assembled host: the runtime handle + the SSE hub + the framework test seam, owned ONCE. |
 | [`AgentHostConfig`](#AgentHostConfig) | Type | stable | What the consumer supplies to createAgentHost — the domain mappings, nothing of the wiring. |
 | [`AgentHostWiring`](#AgentHostWiring) | Interface | stable | The part of AgentHostConfig that is not the store and its sink. |
-| [`agentIsResumable`](#agentIsResumable) | Function | stable | True iff an agent slice loaded from storage is mid-loop (running + awaiting tools) — the resumable case `agent_boot` re-fires. |
+| [`agentIsResumable`](#agentIsResumable) | Function | stable | True iff an agent slice loaded from storage is mid-flight: `running` or `suspended`. |
 | [`AlarmStorage`](#AlarmStorage) | Interface | stable | The DO-native alarm slice `stepHost` re-arms. |
 | [`appliedEffects`](#appliedEffects) | Function | stable | Build a live guard. |
 | [`AppliedEffects`](#AppliedEffects) | Type | stable | The set of keys whose effect has been applied. |
@@ -70,6 +70,7 @@ import { … } from "@demlik/tea/do";
 | [`foldApplied`](#foldApplied) | Function | stable | THE FOLD. |
 | [`foldLedger`](#foldLedger) | Function | stable | THE FOLD. |
 | [`HibernatableCtx`](#HibernatableCtx) | Interface | stable | The slice of `DurableObjectState` the durable carrier needs: the Hibernation API accept + the registry of hibernatable sockets. |
+| [`HostOverlapError`](#HostOverlapError) | Class | stable | Thrown by `createAgentHost` when a call overlaps a lifecycle step that has to finish first: a `reset()` while another `reset()` is still stopping the run, a `reset()` from inside `run()`, or a `runtime()` while a `reset()` is still stopping the run. |
 | [`idempotentEffect`](#idempotentEffect) | Function | stable | Pair a durable `key` with an external effect `fn` — this module's primary surface. |
 | [`IdempotentEffect`](#IdempotentEffect) | Interface | stable | A keyed external effect. |
 | [`IdempotentOutcome`](#IdempotentOutcome) | Type | stable | The outcome of running a keyed effect through the guard. |
@@ -169,8 +170,16 @@ interface AgentHost<Stage, P extends string, O extends Record<P, AgentTurn>, R, 
    * Tear down the cached runtime (drain its tail via `stop()`, up to
    * `disposeTimeoutMs`, then drop the handle) so the next `runtime()` rebuilds
    * from storage. A Cmd handler that has not returned by the limit is given up
-   * on, so `reset()` returns either way. The framework `settle` test seam,
-   * owned once.
+   * on, so `reset()` returns either way, including while the run is waiting on a
+   * tool nobody has answered. It stops the handle the host holds from the moment
+   * `run` returned it, so it also stops a build that has not finished booting:
+   * that build dispatches nothing more, and a `runtime()` still waiting on it
+   * rejects with a `DispatchDiscardedError`.
+   *
+   * The framework `settle` test seam, owned once: a test and lifecycle seam for
+   * one caller at a time, not the way to stop a run in production. Give `run`
+   * a `cancellation` signal and abort it for that, and await a `reset()` before
+   * the next `reset()` or `runtime()`.
    */
   reset(): Promise<void>;
   /**
@@ -182,9 +191,16 @@ interface AgentHost<Stage, P extends string, O extends Record<P, AgentTurn>, R, 
   /**
    * Get (or build) the booted runtime. Build-once-boot-once: the first call
    * builds the machine, wires SSE off the semantic event stream, awaits the boot
-   * gate, runs the `autoBoot` re-fire for a rehydrated suspended run, and caches
+   * gate, dispatches `agent_boot` for a rehydrated running or suspended run (one
+   * that was waiting on its model call, its compaction or its tools), and caches
    * the booted handle; subsequent calls return the cached handle. The single
    * assembly every consumer used to hand-roll in `getRuntime()`.
+   *
+   * The call resolves once `agent_boot` is queued, not when the work it
+   * re-fired is done. That work can wait on a tool whose result a driver has not
+   * posted yet, and the driver reaches the run through this call, so waiting for
+   * it would deadlock. Read how far the run got from `getState()`, `subscribe` or
+   * `status()`.
    */
   runtime(): Promise<BootedRunHandle<AgentState<Stage, P, O, R>, AgentMachineMsg<P, O, R>, AgentEvent<R>>>;
   /**
@@ -1023,6 +1039,20 @@ interface HibernatableCtx {
 }
 ```
 
+<a id="HostOverlapError"></a>
+
+### `HostOverlapError`
+
+```ts
+class HostOverlapError extends Error {
+  constructor(call: "reset" | "runtime", during: "run" | "teardown");
+  readonly _tag: "HostOverlapError";
+  readonly call: "reset" | "runtime";
+  readonly during: "run" | "teardown";
+  readonly name: "HostOverlapError";
+}
+```
+
 <a id="idempotentEffect"></a>
 
 ### `idempotentEffect`
@@ -1572,6 +1602,27 @@ interface StepCtx {
 
 ```ts
 interface StepEngine<R, I, O> {
+  /**
+   * Optional admission check, run for EVERY authenticated pull — the first pull,
+   * a result post, a duplicate — after the token is accepted and the give-up
+   * alarm is re-armed, and BEFORE the settle, the deferred readiness probe and
+   * enqueue, nextStep and terminalOutput. Return `null` to
+   * continue exactly as a host without the hook does. Return the terminal
+   * `{ done: true, output }` response to end the pull there: `stepHost` sends
+   * it and does no further work for this request.
+   *
+   * It decides nothing for the host. The engine reads whatever persisted state it
+   * keeps for the run (a stop it recorded, say), acts on it (dispatches the run's
+   * cancel Msg through its own runtime), and answers. `stepHost` owns only the
+   * order and the short-circuit. A throw or a rejection propagates out of
+   * `handle` before the intake is touched, so the same result posted again is
+   * still new. It bounds this pull only: a step already started, or a stop that
+   * arrives after the hook returned, is outside it, and a worker that runs queued
+   * work later must check again.
+   */
+  beforeResume?(
+    runId: string,
+  ): { readonly done: true; readonly output: O } | Promise<{ readonly done: true; readonly output: O } | null> | null;
   /**
    * Read the next step the run is now waiting on — the next tool call — off the
    * resumed runtime's durable state, or `null` if the run has reached its

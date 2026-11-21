@@ -916,17 +916,17 @@ export type AgentLifecycleNote =
  *                   out of `init` before any `agent_start`. Distinct from
  *                   `running` so a "start or resume?" decision never boots a
  *                   run that has not begun (#92); the next move is `agent_start`.
- *   - `running`   — live, NOT awaiting tools (a brain call is in flight, or the
- *                   run is between stages). Not resumable on cold wake by
- *                   itself — the in-flight brain call re-fires from `boot`.
- *                   A `stale` run reads here too: monitored-run documents it
- *                   as a soft, still-resumable live mark that the next
- *                   `progress` flips back to `running`.
- *   - `suspended` — the RESUMABLE case: running + a live conversation +
- *                   `awaiting.kind === "tools"`. `pending` is the outstanding
- *                   tool calls (`conversation.awaiting` … the in-flight batch),
- *                   read off `tools.running`. This is exactly the shape
- *                   `agentIsResumable` re-derived by hand.
+ *   - `running`   — live, NOT awaiting tools (a brain call or a compaction is
+ *                   in flight, or the run is between stages). Resumable on cold
+ *                   wake, the same as `suspended`: the in-flight call re-fires
+ *                   from `boot`. A `stale` run reads here too: monitored-run
+ *                   documents it as a soft, still-resumable live mark that the
+ *                   next `progress` flips back to `running`.
+ *   - `suspended` — running + a live conversation + `awaiting.kind === "tools"`.
+ *                   `pending` is the outstanding tool calls
+ *                   (`conversation.awaiting` … the in-flight batch), read off
+ *                   `tools.running`. Resumable on cold wake: `boot` re-fires
+ *                   every call still in flight.
  *   - `done`      — the pipeline finished; `output` is the terminal model turn
  *                   stamped on `state.output` (issue #46), `null` if the run
  *                   produced no turn. `usage` is what the whole run cost,
@@ -990,8 +990,8 @@ export type AgentEndedStatus<Stage = unknown> = Extract<
  *      usage total (#354).
  *   5. `run.phase === "cancelled"` → `cancelled`, carrying when the stop landed.
  *   6. `running` / `stale` + conversation + `awaiting.kind === "tools"` →
- *      `suspended` with the outstanding tool calls (`tools.running`). THE
- *      resumability condition; otherwise the run reads `running`.
+ *      `suspended` with the outstanding tool calls (`tools.running`); otherwise
+ *      the run reads `running`. Both are mid-run states a cold wake resumes.
  *
  * Steps 2–6 are ONE exhaustive `switch` over `run.phase` closed by `absurd`, not
  * an `if` chain with a trailing `return { kind: "running" }`. Under the chain a
@@ -1037,7 +1037,7 @@ export function status<
     //    nothing did.
     case "cancelled":
       return { kind: "cancelled", at: run.at };
-    // 6) Live. Awaiting tools is the resumable shape — the outstanding calls are
+    // 6) Live. Awaiting tools is the suspended shape — the outstanding calls are
     //    the in-flight fan-out batch (`tools.running`); anything else is plain
     //    `running`, which is also where `stale` reads (a soft mark the next
     //    progress clears, not an outcome).

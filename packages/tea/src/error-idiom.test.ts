@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { HostOverlapError } from "./do/index";
 import {
   AsyncSchemaError,
   CmdNameCollisionError,
@@ -76,6 +77,12 @@ const thrownCases: readonly ThrownCase[] = [
     make: () => new TerminalTimeoutError(100),
     ctor: TerminalTimeoutError,
     tag: "TerminalTimeoutError",
+  },
+  {
+    name: "HostOverlapError",
+    make: () => new HostOverlapError("reset", "teardown"),
+    ctor: HostOverlapError,
+    tag: "HostOverlapError",
   },
   {
     name: "RetryExhaustedError",

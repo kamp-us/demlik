@@ -58,6 +58,7 @@ export {
   durableCommandCarrier,
   durableDeferredGateway,
 } from "./deferred-gateway";
+export { HostOverlapError } from "./host-lifecycle";
 export {
   agentIsResumable,
   autoBoot,

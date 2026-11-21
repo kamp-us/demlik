@@ -141,7 +141,7 @@ This is the part where the concern is real.
 
 `createAgentHost` is documented as *"the runtime cell + the SSE hub + the
 framework test seam, owned ONCE"*, and it means it. It builds the machine, wraps
-it in `run(...)`, wires `agentEvents()` into an SSE hub, runs `autoBoot`, and
+it in `run(...)`, wires `agentEvents()` into an SSE hub, re-fires `agent_boot` for a restored run, and
 hands back the lifecycle surface. There is no seam in it for a loop you are
 already running. If your DO drives LangGraph, or any other orchestrator, you
 cannot adopt `createAgentHost` for part of the run — it either owns the loop or
@@ -153,7 +153,7 @@ that runtime exists.
 
 **`stepHost` and `runStepLoop` are not.** This is the correction most likely to
 change what you adopt. `stepHost` orchestrates a `StepEngine` — a four-method
-port *you* implement:
+port *you* implement, with one optional admission hook:
 
 ```ts
 interface StepEngine<R, I, O> {
@@ -161,12 +161,14 @@ interface StepEngine<R, I, O> {
   resume(runId: string, posted: StepResult<R>): Promise<void> | void;
   nextStep(runId: string): Promise<NextStep<I> | null> | NextStep<I> | null;
   terminalOutput(runId: string): Promise<O> | O;
+  beforeResume?(runId: string): Promise<Terminal<O> | null> | Terminal<O> | null;
 }
 ```
 
-Nothing in that port names a `@demlik/tea` runtime, and `step-host.ts` imports
-nothing from `../agent`. Implement those four methods against whatever loop you
-already have and you get the `/step` contract — constant-time token check,
+`Terminal<O>` stands for the existing `{ done: true, output }` response. Nothing
+in that port names a `@demlik/tea` runtime, and `step-host.ts` imports nothing
+from `../agent`. Implement those four methods against whatever loop you already
+have and you get the `/step` contract — constant-time token check,
 re-armed give-up alarm, idempotent settle of a re-POSTed result, hibernation
 between steps — without moving your orchestrator.
 

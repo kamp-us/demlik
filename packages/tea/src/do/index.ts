@@ -105,6 +105,7 @@ export {
   durableCommandCarrier,
   durableDeferredGateway,
   type HibernatableCtx,
+  HostOverlapError,
   type ResumePort,
   reissueSurvivingEffects,
   type SseHub,

@@ -9,8 +9,8 @@ import {
   type AgentMachineMsg,
   type AgentState,
   agentBootMsg,
-  status,
 } from "../agent/index";
+import { isMidRun } from "../agent/mid-run";
 import type { RunHandle } from "../index";
 import type { DurableCommandCarrier } from "./deferred-gateway";
 
@@ -58,21 +58,52 @@ export async function bootResume<
   port: ResumePort<S, M>,
   now: () => number = Date.now,
 ): Promise<void> {
-  const runtime = await booting.ready;
-  if (port.isResumable(runtime.getState())) {
-    await runtime.dispatch(port.resumeMsg(now()));
-  }
+  const resumed = await beginResume(booting, port, now);
+  await resumed?.finished;
 }
 
 /**
- * True iff an agent slice loaded from storage is mid-loop (running + awaiting
- * tools) — the resumable case `agent_boot` re-fires.
+ * After `runtime.ready`, dispatch the resume Msg once, as {@link bootResume} does,
+ * and hand back the promise for the whole chain instead of waiting on it; `null`
+ * when the State is not resumable. The Msg is in the runtime's inbox when this
+ * returns, ahead of anything the caller dispatches next. Not on the `./do`
+ * barrel: `bootResume` waits for `finished`, and `createAgentHost` does not, so
+ * a host can hand out the run's handle while the re-fired work is still waiting
+ * on a tool the driver has not answered.
  *
- * The resumability question IS "is the run suspended on tools?" — so this
- * delegates to the agent's own typed `status` channel (issue #49) rather than
- * re-deriving the private `run.phase` / `conversation.awaiting` shape by hand.
- * The host no longer leaks the agent's internal slice structure; a change to
- * `Awaiting` surfaces as a compile error in `status`, not a silent break here.
+ * A `signal` that is aborted when the boot gate opens ends the call with the
+ * signal's reason and dispatches nothing: the host stopped this runtime while it
+ * was still loading, and a Msg into it would only be refused.
+ */
+export async function beginResume<
+  S,
+  M extends { _tag: string },
+  E extends { _tag: string } = never,
+>(
+  booting: RunHandle<S, M, E>,
+  port: ResumePort<S, M>,
+  now: () => number = Date.now,
+  signal?: AbortSignal,
+): Promise<{ readonly finished: Promise<void> } | null> {
+  const runtime = await booting.ready;
+  signal?.throwIfAborted();
+  if (!port.isResumable(runtime.getState())) return null;
+  return { finished: runtime.dispatch(port.resumeMsg(now())) };
+}
+
+/**
+ * True iff an agent slice loaded from storage is mid-flight: `running` or
+ * `suspended`. A run lost while its model call or its compaction was in flight
+ * restores as `running`, with that call still owed, and one lost while its tools
+ * were in flight restores as `suspended`. `agent_boot` reissues the one
+ * outstanding operation in each case. Idle and ended runs (`done`, `failed`,
+ * `cancelled`) are false.
+ *
+ * It reads the agent's own typed `status` channel (issue #49), so a failure
+ * annotation on a still-`running` phase reads as `failed`, and a `stale` run
+ * reads as `running`. The host does not inspect the slice's private `awaiting`
+ * shape, and a new status kind is a compile error in the table that answers
+ * this, not a silent `false` here.
  */
 export function agentIsResumable<
   Stage,
@@ -80,7 +111,7 @@ export function agentIsResumable<
   O extends Record<P, unknown>,
   R,
 >(state: AgentState<Stage, P, O, R>): boolean {
-  return status(state).kind === "suspended";
+  return isMidRun(state);
 }
 
 /**
@@ -103,11 +134,21 @@ export async function autoBoot<
   booting: RunHandle<AgentState<Stage, P, O, R>, AgentMachineMsg<P, O, R>, E>,
   now: () => number = Date.now,
 ): Promise<void> {
-  await bootResume(
-    booting,
-    { isResumable: agentIsResumable, resumeMsg: agentBootMsg },
-    now,
-  );
+  await bootResume(booting, agentBootPort(), now);
+}
+
+/**
+ * The agent's resume port: resumable per {@link agentIsResumable}, resumed by the
+ * agent-owned `agentBootMsg`. `autoBoot` and `createAgentHost` both read it, so
+ * the pairing is written once.
+ */
+export function agentBootPort<
+  Stage,
+  P extends string,
+  O extends Record<P, unknown>,
+  R,
+>(): ResumePort<AgentState<Stage, P, O, R>, AgentMachineMsg<P, O, R>> {
+  return { isResumable: agentIsResumable, resumeMsg: agentBootMsg };
 }
 
 /**
