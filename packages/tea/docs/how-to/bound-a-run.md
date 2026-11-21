@@ -147,8 +147,9 @@ Two things to do when you write one:
 
 ## 5. Budget tokens, and fold the transcript by size
 
-Skip this step if your model reports no `usage`. Both settings read the token
-counts the provider reported for each call. The tutorial's Anthropic adapter
+If your model reports no `usage`, skip the token-specific settings below and
+use the image-only recipe later in this step. Token settings read the counts
+the provider reported for each call. The tutorial's Anthropic adapter
 [maps them](../tutorial/build-a-durable-agent.md#give-the-agent-a-brain).
 
 Write the budget as a `stopWhen` over `state.usage`, the run's running total.
