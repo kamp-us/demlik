@@ -21,7 +21,7 @@ These are the ones to read first:
 | [`DefinedAgentState`](#DefinedAgentState) | Type the Model a defined agent persists — what a `Store` reads and writes. |
 | [`createAgent`](#createAgent) | Drop below the lid, once you need to walk a stage pipeline `defineAgent` does not express. |
 
-## Exports (156)
+## Exports (160)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -116,7 +116,8 @@ These are the ones to read first:
 | [`LlmOk`](#LlmOk) | Interface | experimental | The parsed, typed success carried on `resilient_run_ok`, tagged with its purpose. |
 | [`LlmRunCmd`](#LlmRunCmd) | Type | experimental | The effect Cmd this module emits: run the LLM call for `key` with `input`. |
 | [`LlmSucceedMsg`](#LlmSucceedMsg) | Type | experimental | The success Msg the engine mints — resilient-call's, with the parsed `LlmOk`. |
-| [`MediaSource`](#MediaSource) | Type | experimental | Where an image's or a file's bytes are. |
+| [`MediaReference`](#MediaReference) | Interface | experimental | An opaque host-owned blob key and its decoded byte length, safe to persist. |
+| [`MediaSource`](#MediaSource) | Type | experimental | Inline content, a URL, or a blob the model adapter resolves before sending. |
 | [`mergeInterpret`](#mergeInterpret) | Function | experimental | Join two `Interpret` dictionaries over DISJOINT Cmd subsets `A` and `B` (over the same Msg union `M` and Ctx) into the full `Interpret<M, A \| B, Ctx>`. |
 | [`MessageContent`](#MessageContent) | Type | experimental | A message's content: a plain string, or a list of parts. |
 | [`MessageLoader`](#MessageLoader) | Type | experimental | Build the `Msg[]` the handler hands to the bound model for a given call. |
@@ -131,6 +132,9 @@ These are the ones to read first:
 | [`PlainModel`](#PlainModel) | Type | experimental | The plain-function model port — the common path. |
 | [`renderPrompt`](#renderPrompt) | Function | experimental | The prompt as messages: the head, then each turn with its tool outcomes and caller feedback. |
 | [`ReservedToolName`](#ReservedToolName) | Type | experimental | A tool name `tool()` and `agentTool()` refuse. |
+| [`ResolvedContentPart`](#ResolvedContentPart) | Type | experimental | Provider-ready content whose sources contain no unresolved blob keys. |
+| [`ResolvedMediaSource`](#ResolvedMediaSource) | Type | experimental | Bytes or a URL a model adapter can send to its provider. |
+| [`resolveMediaParts`](#resolveMediaParts) | Function | experimental | Resolve references at the model boundary using the host's blob reader. |
 | [`RunFailure`](#RunFailure) | Type | experimental | Why a run terminated as `failed`. |
 | [`Schema`](#Schema) | Interface | experimental | The minimal structured-output schema contract: `parse(unknown) => T`, the zod-style call `decode` uses to validate the model's output before it settles `resilient_run_ok`. |
 | [`SnapshotInterpret`](#SnapshotInterpret) | Type | experimental | The CONFIG-DERIVED snapshot obligation on `toMachine`'s `toolInterpret`. |
@@ -1969,21 +1973,24 @@ type LlmRunCmd<P extends string> = RunCmd<LlmCall<P>>
 type LlmSucceedMsg<P extends string, O extends Record<P, unknown>> = SucceedMsg<LlmOk<P, O>, "resilient", LlmCall<P>>
 ```
 
+<a id="MediaReference"></a>
+
+### `MediaReference`
+
+```ts
+interface MediaReference {
+  readonly byteLength: number;
+  readonly key: string;
+  readonly type: "reference";
+}
+```
+
 <a id="MediaSource"></a>
 
 ### `MediaSource`
 
 ```ts
-type MediaSource =
-  | {
-    readonly data: string;
-    readonly type: "base64";
-  }
-  | {
-    readonly data: Uint8Array;
-    readonly type: "bytes";
-  }
-  | { readonly type: "url"; readonly url: string }
+type MediaSource = ResolvedMediaSource | MediaReference
 ```
 
 <a id="mergeInterpret"></a>
@@ -2123,6 +2130,42 @@ type ReservedToolName =
   | SettlePrefixOf<MsgTypeValue>
   | typeof REJECTED_TYPE
   | typeof SNAPSHOT_WRITE_TYPE
+```
+
+<a id="ResolvedContentPart"></a>
+
+### `ResolvedContentPart`
+
+```ts
+type ResolvedContentPart = TextPart | (ImagePart | FilePart) & { readonly source: ResolvedMediaSource }
+```
+
+<a id="ResolvedMediaSource"></a>
+
+### `ResolvedMediaSource`
+
+```ts
+type ResolvedMediaSource =
+  | {
+    readonly data: string;
+    readonly type: "base64";
+  }
+  | {
+    readonly data: Uint8Array;
+    readonly type: "bytes";
+  }
+  | { readonly type: "url"; readonly url: string }
+```
+
+<a id="resolveMediaParts"></a>
+
+### `resolveMediaParts`
+
+```ts
+function resolveMediaParts(
+  parts: readonly ContentPart[],
+  resolve: (reference: MediaReference) => Promise<ResolvedMediaSource>,
+): Promise<readonly ResolvedContentPart[]>
 ```
 
 <a id="RunFailure"></a>

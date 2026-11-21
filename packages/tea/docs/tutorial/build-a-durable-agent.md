@@ -89,15 +89,20 @@ import {
   type AgentMessage,
   type AgentTurn,
   type AnyToolDef,
-  type ContentPart,
+  type ResolvedContentPart,
   contentParts,
-  type MediaSource,
+  type ResolvedMediaSource,
+  resolveMediaParts,
   type TurnUsage,
 } from "@demlik/tea/agent";
 import { z } from "zod";
 
 /** Anthropic's Messages API as tea's plain `(messages) => turn` model port. */
-export function anthropic(tools: readonly AnyToolDef[], apiKey?: string) {
+export function anthropic(
+  tools: readonly AnyToolDef[],
+  apiKey: string | undefined,
+  readMedia: Parameters<typeof resolveMediaParts>[1],
+) {
   const client = new Anthropic({ apiKey });
   const declared: Anthropic.Tool[] = tools.map((t) => ({
     name: t.cmdType,
@@ -111,7 +116,7 @@ export function anthropic(tools: readonly AnyToolDef[], apiKey?: string) {
       thinking: { type: "adaptive" },
       system: messages.find((m) => m.role === "system")?.content,
       tools: declared,
-      messages: messages.flatMap(toParam),
+      messages: (await Promise.all(messages.map((m) => toParam(m, readMedia)))).flat(),
     });
     return {
       content: response.content
@@ -147,12 +152,15 @@ export function usageOf(usage: Anthropic.Usage): TurnUsage {
 }
 
 /** One tea message in Anthropic's shape; the system line goes to `system`. */
-export function toParam(m: AgentMessage): Anthropic.MessageParam[] {
+export async function toParam(
+  m: AgentMessage,
+  readMedia: Parameters<typeof resolveMediaParts>[1],
+): Promise<Anthropic.MessageParam[]> {
   switch (m.role) {
     case "system":
       return [];
     case "user":
-      return [{ role: "user", content: contentParts(m.content).map(toBlock) }];
+      return [{ role: "user", content: (await resolveMediaParts(contentParts(m.content), readMedia)).map(toBlock) }];
     case "assistant":
       return [
         {
@@ -181,7 +189,9 @@ export function toParam(m: AgentMessage): Anthropic.MessageParam[] {
               tool_use_id: m.callId,
               // A tool that declared `content` sends parts the model should
               // see (a screenshot, say); every other outcome goes as data.
-              content: m.parts?.map(toBlock) ?? JSON.stringify(m.outcome),
+              content: m.parts === undefined
+                ? JSON.stringify(m.outcome)
+                : (await resolveMediaParts(m.parts, readMedia)).map(toBlock),
               is_error: m.outcome.kind !== "ok",
             },
           ],
@@ -196,7 +206,7 @@ type Block =
   | Anthropic.DocumentBlockParam;
 
 /** One tea content part as an Anthropic block; a file is read as a PDF document. */
-function toBlock(p: ContentPart): Block {
+function toBlock(p: ResolvedContentPart): Block {
   switch (p.type) {
     case "text":
       return { type: "text", text: p.text };
@@ -224,10 +234,13 @@ function toBlock(p: ContentPart): Block {
 }
 
 /** Inline bytes as the base64 text Anthropic takes them in. */
-function base64(source: Exclude<MediaSource, { type: "url" }>): string {
-  return source.type === "base64"
-    ? source.data
-    : Buffer.from(source.data).toString("base64");
+function base64(source: Exclude<ResolvedMediaSource, { type: "url" }>): string {
+  switch (source.type) {
+    case "base64":
+      return source.data;
+    case "bytes":
+      return Buffer.from(source.data).toString("base64");
+  }
 }
 ```
 
@@ -244,6 +257,11 @@ saved with the turn, so a resumed run adds up to the same total as one that was
 never killed.
 [Bound a run](../how-to/bound-a-run.md#5-budget-tokens-and-fold-the-transcript-by-size)
 shows both uses.
+
+The third argument to `anthropic` is the host's blob reader. Below it reads keys
+as local file paths; for object storage, supply that store's reader instead.
+`toParam` calls `resolveMediaParts` before `toBlock` converts the parts, so
+stored references stay unchanged while the provider receives the bytes.
 
 `toBlock` is where pictures go. A tea message can carry content parts — text, an
 image, a file — and a tool that returns a screenshot declares which parts the
@@ -266,7 +284,7 @@ happen:
 // agent.ts
 import { type DefinedAgentState, defineAgent, tool } from "@demlik/tea/agent";
 import { fileStore } from "@demlik/tea/node";
-import { appendFile } from "node:fs/promises";
+import { appendFile, readFile } from "node:fs/promises";
 import { z } from "zod";
 import { anthropic } from "./model.ts";
 
@@ -305,7 +323,9 @@ brain, the tools, the instructions — and wires the rest:
 
 ```ts
 const agent = defineAgent({
-  model: anthropic([note], process.env.ANTHROPIC_API_KEY),
+  model: anthropic([note], process.env.ANTHROPIC_API_KEY, async ({ key }) => ({
+    type: "bytes", data: await readFile(key),
+  })),
   tools: [note],
   instructions:
     "You keep a notebook. Save exactly one note per turn; when every fact is saved, answer in one line.",

@@ -173,14 +173,26 @@ describe(
     // user message's parts and a tool's `parts` go as `image` / `document`
     // blocks with a base64 or url source, and a string is one text block.
     it("toParam maps content parts to Anthropic image and document blocks", async () => {
-      const { toParam } = (await import(pathToFileURL(modelEntry).href)) as {
-        toParam: (m: AgentMessage) => unknown[];
+      const { toParam: convert } = (await import(
+        pathToFileURL(modelEntry).href
+      )) as {
+        toParam: (
+          m: AgentMessage,
+          read: (reference: {
+            readonly key: string;
+          }) => Promise<{ type: "base64"; data: string }>,
+        ) => Promise<unknown[]>;
       };
       const jpeg: ContentPart = {
         type: "image",
         mediaType: "image/jpeg",
         source: { type: "base64", data: "/9j/4AAQ" },
       };
+      const toParam = (message: AgentMessage) =>
+        convert(message, async ({ key }) => ({
+          type: "base64",
+          data: `blob-${key}`,
+        }));
       const png: ContentPart = {
         type: "image",
         mediaType: "image/png",
@@ -192,11 +204,11 @@ describe(
         source: { type: "bytes", data: new Uint8Array([37, 80, 68, 70]) },
       };
 
-      expect(toParam({ role: "user", content: "hi" })).toEqual([
+      expect(await toParam({ role: "user", content: "hi" })).toEqual([
         { role: "user", content: [{ type: "text", text: "hi" }] },
       ]);
       expect(
-        toParam({
+        await toParam({
           role: "user",
           content: [{ type: "text", text: "look" }, png, pdf],
         }),
@@ -222,12 +234,17 @@ describe(
       ]);
       const outcome = { kind: "ok" as const, result: { jpeg: "/9j/4AAQ" } };
       expect(
-        toParam({
+        await toParam({
           role: "tool",
           callId: "s1",
           name: "screenshot",
           outcome,
-          parts: [jpeg],
+          parts: [
+            {
+              ...jpeg,
+              source: { type: "reference", key: "photo", byteLength: 8 },
+            },
+          ],
         }),
       ).toEqual([
         {
@@ -242,7 +259,7 @@ describe(
                   source: {
                     type: "base64",
                     media_type: "image/jpeg",
-                    data: "/9j/4AAQ",
+                    data: "blob-photo",
                   },
                 },
               ],
@@ -253,7 +270,7 @@ describe(
       ]);
       // No parts → the outcome is the payload, as before.
       expect(
-        toParam({ role: "tool", callId: "n1", name: "note", outcome }),
+        await toParam({ role: "tool", callId: "n1", name: "note", outcome }),
       ).toEqual([
         {
           role: "user",

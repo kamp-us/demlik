@@ -199,6 +199,24 @@ describe("independent compaction thresholds through defineAgent.run", () => {
     ).toHaveLength(10);
   });
 
+  it.each([
+    { knob: { afterImageBytes: 2 }, summaries: 0 },
+    { knob: { afterImageBytes: 1 }, summaries: 1 },
+    { knob: { afterImageCount: 2 }, summaries: 1 },
+  ])("counts reference images without resolving their bytes: $knob", async ({
+    knob,
+    summaries,
+  }) => {
+    const reference = image({ type: "reference", key: "pixel", byteLength: 1 });
+    const inline = await scenario({ ...BELOW, ...knob });
+    const external = await scenario({ ...BELOW, ...knob }, undefined, [
+      [reference],
+      [reference],
+    ]);
+    expect(inline.summaries).toHaveLength(summaries);
+    expect(external.summaries).toHaveLength(summaries);
+  });
+
   it("URL images have count but zero held bytes, without usage", async () => {
     const noUsage = [1, 2].map((id) => ({
       content: "look",
