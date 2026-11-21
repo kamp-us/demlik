@@ -1248,9 +1248,11 @@ interface FencedStore<S> extends Store<S> {
   /**
    * Compare-and-swap save. Writes `state` only if the stored version is still
    * `expectedVersion`, and resolves with the NEW version to swap on next time.
-   * Throws StoreConflictError when it is not.
+   * Throws StoreConflictError when it is not. `msg` is the same
+   * optional applied Msg Store.save receives; absent at boot and at the
+   * final flush.
    */
-  saveFenced(state: S, expectedVersion: number): Promise<number>;
+  saveFenced(state: S, expectedVersion: number, msg?: unknown): Promise<number>;
 }
 ```
 
@@ -2797,7 +2799,7 @@ type SettledOk<Name extends string, C, Ok> = {
 interface Store<S> {
   load(): Promise<unknown>;
   migrate(raw: unknown): Migrated<S>;
-  save(state: S): Promise<void>;
+  save(state: S, msg?: unknown): Promise<void>;
 }
 ```
 

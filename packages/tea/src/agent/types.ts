@@ -728,8 +728,9 @@ export interface AgentState<
    * that reported usage, summed field by field. It is what the run cost, so it
    * belongs to the run and not to any one conversation: a compaction fold keeps
    * it, a stage advance keeps it, and the retire to `done` keeps it after the
-   * conversation is cleared — `status(state)`'s `done` arm hands it on. Only
-   * `agent_start` resets it to zero. Read it from `stopWhen` for a token budget.
+   * conversation is cleared — `status(state)`'s `done` arm hands it on. Only a
+   * start for a new run resets it to zero; a repeated start for the stored
+   * `runId` leaves it as it is. Read it from `stopWhen` for a token budget.
    *
    * The one place the total lives. A Model persisted before this field held its
    * total on `conversation.usage`, and one persisted by 0.17.x held none; the

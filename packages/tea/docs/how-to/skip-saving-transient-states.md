@@ -6,7 +6,8 @@ states are not worth keeping: the next token replaces each one.
 
 tea has no option for this, and needs none. Wrap your `Store` so its `save`
 does nothing while the state is short-lived. The wrapper is a plain function
-over a `Store`, so the same one works on both engines.
+over a `Store`, so the same one works on both engines. It passes the Msg through
+on the saves it allows, the way `Store.save` receives it.
 
 ## 1. Write the wrapper beside the machine
 
@@ -50,8 +51,8 @@ export function skipSaving<S>(
 ): Store<S> {
   return {
     load: () => store.load(),
-    save: (state) =>
-      isTransient(state) ? Promise.resolve() : store.save(state),
+    save: (state, msg) =>
+      isTransient(state) ? Promise.resolve() : store.save(state, msg),
     migrate: (raw) => store.migrate(raw),
   };
 }
@@ -137,6 +138,10 @@ and `load` returns the finished reply.
   or make their handlers safe to repeat.
 - **`stop()` goes through the wrapper too.** If the run stops mid-stream, the
   final flush is skipped and the store keeps the last lasting state.
+- **Use it over a snapshot store only.** A skipped save also skips the Msg that
+  came with it. A store that records each applied Msg to rebuild State from a log
+  needs every one of them, so do not wrap such a store: a skipped input cannot be
+  reconstructed.
 - **The wrapper drops fencing.** It returns a plain `Store`, so a fenced store
   (`{ fenced: true }`) loses its second-writer check once wrapped. Do not
   spread the inner store (`{ ...store, save }`) to keep it: `run` would then

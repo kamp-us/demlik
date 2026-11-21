@@ -55,7 +55,8 @@ export const cmdlessStore = doEventSourcedStore(storage, cmdlessMachine, ctx, {
 // / `CmdlessMsg`, with no `Cmd`/`Sub`/`Machine` annotation leaking to the caller.
 type _AssertHandle = typeof cmdlessStore extends {
   store: { load(): Promise<unknown> };
-  append(msg: CmdlessMsg): Promise<void>;
+  snapshotNow(): Promise<boolean>;
+  readEvents(): AsyncIterable<{ seq: number; event: CmdlessMsg }>;
 }
   ? true
   : never;

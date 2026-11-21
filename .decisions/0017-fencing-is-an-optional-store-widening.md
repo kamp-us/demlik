@@ -1,12 +1,14 @@
 ---
 id: 0017
 title: Fencing is an optional Store widening, and a store conflict is a throw
-status: accepted
+status: amended-in-part by [0041](0041-store-save-receives-the-applied-message.md)
 date: 2026-09-09
 tags: []
 ---
 
 # 0017 — Fencing is an optional Store widening, and a store conflict is a throw
+
+**Point 1's "`Store<S>` is untouched" is amended by [0041](./0041-store-save-receives-the-applied-message.md):** `Store.save` and `saveFenced` now take the applied Msg as an optional last argument, so no implementor breaks. Everything else here stands.
 
 **Scope:** how `@demlik/tea` refuses a second live writer against one persisted run, and what
 shape that refusal takes on the `Store<S>` seam. Amends the durability story

@@ -172,6 +172,12 @@ have and you get the `/step` contract — constant-time token check,
 re-armed give-up alarm, idempotent settle of a re-POSTed result, hibernation
 between steps — without moving your orchestrator.
 
+`stepHost` also runs one request of a run at a time, after the token check: a
+queue private to that `stepHost` instance, one per `runId`, so a repeated post
+waits for the resume in flight and reads what it left. The queue adds no alarm
+owner and no SDK call. It re-arms through the same `AlarmStorage` port, and it
+orders requests inside one activation, not two Durable Objects or two processes.
+
 ### The adoptability table
 
 | Export | Adoptable incrementally? | Why |

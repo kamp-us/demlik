@@ -519,9 +519,10 @@ export class DisposeTimeoutNotice extends RuntimeDiscardNotice {
  * never returns, those promises never settle, and this count is the only word.
  *
  * tea starts no store call after `stop()` has returned. A store call already
- * under way when `stop()` gave up is not cancelled and can finish afterwards;
- * on a plain store that late save can overwrite what a newer run saved, and a
- * fenced store refuses it.
+ * under way when `stop()` gave up is not cancelled and can finish afterwards.
+ * A fenced store refuses that late save, and so does `doEventSourcedStore`
+ * once a newer run has loaded its log; a custom plain store that waits before
+ * it writes takes it over what a newer run saved.
  *
  * `cmdTypes` names the Cmd of each handler call still awaiting, one entry per
  * call. `pendingCmds` counts those plus any detached work, the same count
@@ -648,10 +649,17 @@ export function definePort<T>(name: string): Port<T> {
  * Where an engine loads and saves a machine's state. Implement `load`, `save`
  * and `migrate` to persist to your own storage, or use a store an adapter
  * ships.
+ *
+ * `save` receives the Msg whose transition produced `state`, as an optional
+ * second argument. The engine awaits `save` before it starts that transition's
+ * Cmds, so a store that records the Msg has it durable before any effect runs.
+ * A store that keeps only the State can ignore it. The boot save and the final
+ * flush at `stop()` carry no Msg, and a transition that folds to `null` is not
+ * saved at all.
  */
 export interface Store<S> {
   load(): Promise<unknown>;
-  save(state: S): Promise<void>;
+  save(state: S, msg?: unknown): Promise<void>;
   migrate(raw: unknown): Migrated<S>;
 }
 
@@ -760,9 +768,11 @@ export interface FencedStore<S> extends Store<S> {
   /**
    * Compare-and-swap save. Writes `state` only if the stored version is still
    * `expectedVersion`, and resolves with the NEW version to swap on next time.
-   * Throws {@link StoreConflictError} when it is not.
+   * Throws {@link StoreConflictError} when it is not. `msg` is the same
+   * optional applied Msg {@link Store.save} receives; absent at boot and at the
+   * final flush.
    */
-  saveFenced(state: S, expectedVersion: number): Promise<number>;
+  saveFenced(state: S, expectedVersion: number, msg?: unknown): Promise<number>;
 }
 
 /** A committed timer decision. */

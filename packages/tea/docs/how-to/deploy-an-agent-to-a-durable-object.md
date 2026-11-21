@@ -113,6 +113,33 @@ const runtime = await host.runtime();
 Call it from the request or alarm that wakes the object: `host.runtime()` is the
 point where a restored run starts working again.
 
+To keep the run's messages as a log as well as its State, give the host the store
+`doEventSourcedStore` builds in place of `doStore`:
+
+```ts
+const wired = agent.toMachine<object>({ toolInterpret });
+const events = doEventSourcedStore(this.ctx.storage, wired.machine, {}, { snapshotEvery: 50 });
+
+const host = createAgentHost({
+  run,
+  buildMachine: () => wired,
+  store: events.store,
+  ctx: {},
+  toSseFrame: () => null,
+});
+```
+
+The store appends each applied message from `save`, before the command it starts
+runs, and takes a snapshot every 50 events, all in one transaction. A run lost
+inside a model call wakes `running` with that call's input already in the log,
+and `host.runtime()` issues the call again. Nothing in your host appends: do not
+write the log from `runtime.observe`, which fires after the commands, and do not
+append a message before you dispatch it, or the run records it twice.
+
+The store takes the log when a run loads it. A `reset()` whose `stop()` gave up
+on a save at `disposeTimeoutMs` cannot then write over the run that replaced it:
+the late save is refused with `StoreConflictError`, and the new run's State stays.
+
 ### Stop: the run's signal
 
 Stopping a run is tea's own `signal`, given to the engine's `run`. The Durable
@@ -179,7 +206,44 @@ it answers with is read after the abort's cancel has folded, even while the boot
 save is still held. A cancel on a run that has ended is a no-op. A stop that
 arrives after the hook returned is outside it. A throw or a rejection from the
 hook propagates out of `handle`, and the same result posted again is still
-treated as new.
+treated as new. The hook runs inside the run's turn (see the next section), so
+it must not call `handle` for the same run and wait for the answer.
+
+### Requests: one at a time per run
+
+`stepHost` checks the token, then makes each request of a run wait for the run's
+earlier requests to settle before it does anything else: the alarm re-arm, the
+hook, the settle or the deferred enqueue, and the read of the next step or the
+output. So a result posted twice, or a pull that arrives while the first post is
+still resuming, is answered from the State that resume produced, never from a
+State in the middle of it. Your `nextStep` and `terminalOutput` read the State
+as it is and need no wait of their own for a request that is already in flight:
+do not add one with `runtime.idle()`.
+
+```ts
+const steps = stepHost({ storage: owner }, engine);
+// Three requests at once for run "a": a result, the same result posted again,
+// and a pull with nothing posted. They take turns, in the order they passed the
+// token check, each reading the State the one before it left.
+await Promise.all([
+  steps.handle({ runId: "a", token, posted: first }, now),
+  steps.handle({ runId: "a", token, posted: first }, now),
+  steps.handle({ runId: "a", token, posted: null }, now),
+]);
+```
+
+A request that fails the token check returns at once and takes no turn, so it
+does not re-arm the alarm or reach the hook. A turn that throws releases the run:
+its caller gets the error, the next request runs, and a `resume` that threw leaves
+its `callId` open, so the same post is tried again. Runs do not wait for each
+other, and two runs may use the same `callId`.
+
+The queue belongs to one `stepHost`, which is one activation. It does not order
+two hosts or two processes over the same run, and it cannot interrupt a model
+call that is already running: a stop that arrives then is read on the run's next
+turn, as in the section above. After an eviction the new host starts with an
+empty ledger, and a repeated post settles again against the durable State, which
+`resume` has to accept. Effects stay at least once.
 
 Do not stop the run with `host.reset()`. It is the test and lifecycle seam, for
 one caller at a time: a second `reset()` while one is stopping the run, a

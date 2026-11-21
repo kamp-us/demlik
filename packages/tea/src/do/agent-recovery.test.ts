@@ -27,11 +27,19 @@
  * one left `suspended`, ends the run cancelled with no further model call or
  * tool start, and the stop request never waits on the tool.
  *
+ * Third, the same job on a retained event log: the run's State is rebuilt from
+ * a snapshot and its tail, the model's turns go through a real agent host and
+ * step host, and the requests are retried, doubled, held and evicted (see
+ * `retained event log`). Every model turn completes once, the one call the
+ * eviction interrupts is issued again, and no request reads a State that is
+ * still being resumed.
+ *
  * Every case runs ten times.
  *
  * Globals are NOT enabled in vitest.config.ts — describe/it/expect are imported.
  */
 import { describe, expect, it } from "vitest";
+import { fakeDoStorage } from "../__fixtures__/do-storage";
 import {
   type AgentCompactOkMsg,
   type AgentCompactRunCmd,
@@ -54,7 +62,7 @@ import { DispatchDiscardedError } from "../runtime-types";
 import { createAgentHost } from "./agent-host";
 import { type DeferredGateway, deferredGateway } from "./deferred-gateway";
 import { HostOverlapError } from "./host-lifecycle";
-import { doStore } from "./index";
+import { doEventSourcedStore, doStore } from "./index";
 import {
   type DeferredStepOutcome,
   type StepEngine,
@@ -708,6 +716,211 @@ const finished: Outcome = {
   status: 200,
   body: { done: true, output: ANSWER.content },
 };
+
+// The first acceptance case: the run's log is the retained event store, not a
+// snapshot. Ten runs keep their history in ONE backing store under their own key
+// prefixes, as ten Durable Object ids sharing a namespace would.
+//
+// What a retried and evicted run owes: each model turn is made once, a request
+// posted twice (or three times at once) is answered from the State its resume
+// produced, and the one call the eviction cut off is issued again, once.
+describe(
+  "a run on a retained event log, retried, held and evicted",
+  { timeout: 30_000 },
+  () => {
+    const DOCUMENT = "document ".repeat(8192);
+    const keysOf = (id: string) => ({
+      snapshot: `${id}/snapshot`,
+      meta: `${id}/meta`,
+      eventPrefix: `${id}/event/`,
+    });
+    const histories = new Map<string, string>();
+    const capability = "retained-capability";
+
+    const request = (
+      id: string,
+      posted: StepRequest<string>["posted"] = null,
+    ) => ({ runId: id, token: capability, posted }) satisfies Request;
+    const stepOf = (outcome: Outcome) => {
+      expect(outcome.status).toBe(200);
+      if (
+        outcome.status !== 200 ||
+        outcome.body.done ||
+        "working" in outcome.body
+      )
+        throw new Error("expected a step");
+      return outcome.body.step.callId;
+    };
+
+    // One activation: a host over the event store, a step host over the host's
+    // runtime. `reads` is the status every request read the run in.
+    function over(
+      provider: () => Promise<AgentTurn>,
+      id: string,
+      backing: Map<string, string>,
+    ) {
+      const wired = wirePlain(plainAgent(provider), async () => undefined);
+      const events = doEventSourcedStore(
+        fakeDoStorage(backing).storage,
+        wired.machine,
+        {},
+        { snapshotEvery: 2, keys: keysOf(id) },
+      );
+      const { host, teardown } = hostOver(wired, events.store);
+      const reads: string[] = [];
+      const read = async () => {
+        const kind = status((await host.runtime()).getState());
+        reads.push(kind.kind);
+        return kind;
+      };
+      const engine: StepEngine<string, Hands, string> = {
+        tokenFor: () => capability,
+        async resume(_runId, posted) {
+          await (await host.runtime()).dispatch({
+            _tag: "agent_tool_ok",
+            callId: posted.callId,
+            result: posted.result,
+            at: 1,
+          });
+        },
+        async nextStep() {
+          const now = await read();
+          const call = now.kind === "suspended" ? now.pending[0] : undefined;
+          return call === undefined
+            ? null
+            : { callId: call.callId, tool: call.name, input: call.args };
+        },
+        async terminalOutput() {
+          return (await read()).kind;
+        },
+      };
+      const alarms: number[] = [];
+      const { handle } = stepHost(
+        { storage: { setAlarm: (at) => void alarms.push(at) } },
+        engine,
+      );
+      return { host, handle, reads, teardown, events };
+    }
+
+    it.each(
+      REPEATS,
+    )("makes every model turn once, answers every request from a settled State, and reissues only the interrupted call (repeat %i)", async (repeat) => {
+      const id = `documents-${repeat}`;
+      const keys = keysOf(id);
+      const attempts: number[] = [];
+      const duringTurnTwo = gate();
+      const releaseTurnTwo = gate();
+      const reachedTurnThree = gate();
+      let completed = 0;
+      let faults = false;
+      const provider = async () => {
+        const n = completed + 1;
+        attempts.push(n);
+        const first = attempts.filter((attempt) => attempt === n).length === 1;
+        if (faults && n === 2 && first) {
+          duringTurnTwo.release();
+          await releaseTurnTwo.reached;
+        }
+        if (faults && n === 3 && first) {
+          reachedTurnThree.release();
+          return hangs<AgentTurn>();
+        }
+        completed++;
+        return turn(n);
+      };
+      const old = over(provider, id, histories);
+      let wake: ReturnType<typeof over> | undefined;
+      try {
+        const runtime = await old.host.runtime();
+        const begin = () =>
+          runtime.dispatch({ _tag: "agent_start", runId: id, at: 0 });
+        await Promise.all([begin(), begin()]);
+        await begin();
+        expect(
+          attempts,
+          "concurrent and retried starts share one first call",
+        ).toEqual([1]);
+
+        faults = true;
+        expect(stepOf(await old.handle(request(id), 0))).toBe("document-1");
+        const posted1 = request(id, { callId: "document-1", result: DOCUMENT });
+        const first = old.handle(posted1, 1);
+        await duringTurnTwo.reached;
+        let duplicateSettled = false;
+        const duplicate = old.handle(posted1, 2).then((outcome) => {
+          duplicateSettled = true;
+          return outcome;
+        });
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(
+          duplicateSettled,
+          "a duplicate waits for the resumed State",
+        ).toBe(false);
+        releaseTurnTwo.release();
+        expect((await Promise.all([first, duplicate])).map(stepOf)).toEqual([
+          "document-2",
+          "document-2",
+        ]);
+        expect(old.reads).not.toContain("running");
+
+        const posted2 = request(id, { callId: "document-2", result: DOCUMENT });
+        void old.handle(posted2, 3).catch(noop);
+        await reachedTurnThree.reached;
+
+        const tail = Number(
+          JSON.parse(histories.get(keys.meta) ?? "{}").lastSeq,
+        );
+        const snapshot = JSON.parse(histories.get(keys.snapshot) ?? "null");
+        expect(snapshot, "a snapshot exists").not.toBeNull();
+        expect(tail, "events follow the snapshot").toBeGreaterThan(
+          snapshot.seq,
+        );
+        const recovered = await doEventSourcedStore(
+          fakeDoStorage(new Map(histories)).storage,
+          wirePlain(plainAgent(provider), async () => undefined).machine,
+          {},
+          { keys },
+        ).store.load();
+        expect(status(recovered as S).kind).toBe("running");
+        expect((recovered as S).conversation?.toolRecords).toHaveLength(2);
+        expect(JSON.stringify(recovered).length).toBeGreaterThan(100_000);
+        await old.host.reset();
+
+        wake = over(provider, id, histories);
+        const woken = await wake.host.runtime();
+        await reaches(woken, (now) => now.kind !== "running");
+        expect(stepOf(await wake.handle(posted2, 4))).toBe("document-3");
+        expect(
+          stepOf(
+            await wake.handle(
+              request(id, { callId: "document-3", result: DOCUMENT }),
+              5,
+            ),
+          ),
+        ).toBe("document-4");
+        expect(
+          await wake.handle(
+            request(id, { callId: "document-4", result: DOCUMENT }),
+            6,
+          ),
+        ).toEqual({ status: 200, body: { done: true, output: "done" } });
+
+        expect(attempts).toEqual([1, 2, 3, 3, 4, 5]);
+        expect(completed).toBe(DOCUMENTS + 1);
+        expect(wake.reads).not.toContain("running");
+        for (const a of [old, wake]) {
+          expect(
+            a.teardown.every((name) => INTENTIONAL_TEARDOWN.includes(name)),
+          ).toBe(true);
+        }
+      } finally {
+        releaseTurnTwo.release();
+        await old.host.reset();
+        await wake?.host.reset();
+      }
+    });
+  },
+);
 
 describe.each([
   "model",

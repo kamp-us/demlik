@@ -1,7 +1,7 @@
 ---
 id: 0025
 title: "`stop()` gives up on a Cmd handler that has not returned at `disposeTimeoutMs`, never waits for it without limit"
-status: accepted
+status: amended-in-part by [0042](0042-a-save-abandoned-at-dispose-never-overwrites-a-later-run.md)
 date: 2026-10-13
 tags: [tea, engine, stop, teardown]
 ---

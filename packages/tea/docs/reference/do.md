@@ -63,7 +63,7 @@ import { … } from "@demlik/tea/do";
 | [`emptyLedger`](#emptyLedger) | Function | stable | The empty ledger — the fold's starting value (a fresh actor owes nothing). |
 | [`EventLogRange`](#EventLogRange) | Interface | stable | Optional inclusive bounds for EventSourcedStore.readEvents. |
 | [`EventSourcedOptions`](#EventSourcedOptions) | Interface | stable | Options for doEventSourcedStore. |
-| [`EventSourcedStore`](#EventSourcedStore) | Interface | stable | The handle returned by doEventSourcedStore: a `Store<S>` to hand to `run(...)`, plus the append + recovery surface the cooperating DO drives. |
+| [`EventSourcedStore`](#EventSourcedStore) | Interface | stable | The handle returned by doEventSourcedStore: a `Store<S>` to hand to `run(...)`, plus the snapshot and read surface the cooperating DO drives. |
 | [`ExecutedStep`](#ExecutedStep) | Interface | stable | What ExecutedSteps holds for a step that ran. |
 | [`ExecutedSteps`](#ExecutedSteps) | Interface | stable | The hands' memory of the steps they already ran, keyed by `callId`. |
 | [`ExecuteStep`](#ExecuteStep) | Type | stable | Execute one tool call and produce its result (the consumer's hands). |
@@ -921,17 +921,25 @@ interface EventSourcedOptions<S, M> {
 ```ts
 interface EventSourcedStore<S, M> {
   /**
-   * The `Store<S>` to pass as `run(machine, { ctx, store })`. Its `load()`
-   * performs the fold (snapshot + log replay); its `save(state)` is the
-   * count-based snapshot writer. `migrate` forwards to `parse`.
+   * The `Store<S>` to pass as `run(machine, { ctx, store })`, and the only way
+   * the log grows. Its `load()` performs the fold (snapshot + log replay). Its
+   * `save(state, msg)` appends the applied `msg`, advances the meta cell and,
+   * when `snapshotEvery` events have accumulated, writes the snapshot, all in
+   * one storage transaction that settles before the engine starts the
+   * transition's Cmds. A save without a Msg (the boot save, the flush at
+   * `stop()`) appends nothing. A write that fails rejects the save and leaves
+   * the stored bytes as they were. `migrate` forwards to `parse`.
+   *
+   * Its `load()` also takes the log for this isolate. A store built earlier on
+   * the same storage can no longer write: a `save` or `snapshotNow()` it called
+   * before the later `load()` is refused with `StoreConflictError` at its write
+   * point, whenever it gets there, so a stopped run's save that lands late never
+   * overwrites what the later run saved. A save with no later `load()` behind it
+   * still lands, whether or not its run was given up on. Every `load()` counts,
+   * this store's own included, so a store a host hands to each run it rebuilds
+   * is covered too.
    */
   readonly store: Store<S>;
-  /**
-   * Append one applied `Msg` to the log. Call from `runtime.observe` for every
-   * non-null msg. Resolves once the event is durably written. Triggers a
-   * snapshot when the event count crosses a `snapshotEvery` boundary.
-   */
-  append(msg: M): Promise<void>;
   /**
    * Stream the persisted event log in `seq` order, optionally bounded by an
    * inclusive EventLogRange. This is the PUBLIC read side of the
@@ -961,17 +969,16 @@ interface EventSourcedStore<S, M> {
    * checkpoint the current folded state without injecting filler events purely
    * to advance the counter.
    *
-   * It checkpoints the latest state the substrate handed `save()` at the current
-   * highest sequence, then advances the count-based baseline (`snapshotEvery`
-   * counts afresh from here, so a manual snapshot defers the next automatic one).
+   * It checkpoints the State of the highest event the store has durably
+   * written, at that event's sequence, then advances the count-based baseline
+   * (`snapshotEvery` counts afresh from here, so a manual snapshot defers the
+   * next automatic one).
    *
    * Returns `true` if a snapshot was written, `false` on a no-op: nothing has
    * been applied yet (fresh actor), or no new event exists since the last
-   * snapshot (already current). Like the count-based path, it pairs the held
-   * state with the highest sequence, so the caller MUST invoke it between
-   * settled transitions — after the turn's `append()`s have resolved — never
-   * mid-transition (the same boundary discipline `append`'s own snapshot relies
-   * on). Resolves once the snapshot is durably written.
+   * snapshot (already current). The State and the sequence it pairs move
+   * together, only once an event is durable, so a transition whose save failed
+   * is never checkpointed. Resolves once the snapshot is durably written.
    */
   snapshotNow(): Promise<boolean>;
 }
@@ -1604,9 +1611,10 @@ interface StepCtx {
 interface StepEngine<R, I, O> {
   /**
    * Optional admission check, run for EVERY authenticated pull — the first pull,
-   * a result post, a duplicate — after the token is accepted and the give-up
-   * alarm is re-armed, and BEFORE the settle, the deferred readiness probe and
-   * enqueue, nextStep and terminalOutput. Return `null` to
+   * a result post, a duplicate — after the token is accepted, the run's earlier
+   * requests have settled and the give-up alarm is re-armed, and BEFORE the
+   * settle, the deferred readiness probe and enqueue, nextStep and
+   * terminalOutput. Return `null` to
    * continue exactly as a host without the hook does. Return the terminal
    * `{ done: true, output }` response to end the pull there: `stepHost` sends
    * it and does no further work for this request.
@@ -1618,7 +1626,9 @@ interface StepEngine<R, I, O> {
    * `handle` before the intake is touched, so the same result posted again is
    * still new. It bounds this pull only: a step already started, or a stop that
    * arrives after the hook returned, is outside it, and a worker that runs queued
-   * work later must check again.
+   * work later must check again. It runs inside the run's turn, so it must not
+   * call `handle` for the same run and wait for it: that request queues behind
+   * the turn that is waiting for it.
    */
   beforeResume?(
     runId: string,
@@ -1633,11 +1643,15 @@ interface StepEngine<R, I, O> {
    * Settle the posted tool result into the run, then RESUME from the durable
    * checkpoint: dispatch the settle and run to DISPATCH-QUIESCENCE (e.g.
    * `await runtime.dispatch(settleMsg)` — dispatch drains the follow-up chain
-   * by default, #50). Called at most once per distinct
-   * `callId` — `stepHost` dedupes re-POSTs via `idempotent-intake` BEFORE
-   * calling this, so the side effect runs exactly once. On the first request
-   * (`posted === null`) `stepHost` skips settle and calls nextStep
-   * directly to hand out the first step.
+   * by default, #50). `stepHost` calls it once per distinct `callId` of a run
+   * for as long as this host instance lives, because it runs one request of a
+   * run at a time and dedupes a re-POST through `idempotent-intake` BEFORE
+   * calling this. A resume that throws or rejects does not count: the same
+   * `callId` posted again calls it again, so it must be safe to run twice. A
+   * new host instance (an evicted object waking up) has an empty ledger and
+   * settles a re-POST once more, which the durable checkpoint absorbs. On the
+   * first request (`posted === null`) `stepHost` skips settle and calls
+   * nextStep directly to hand out the first step.
    */
   resume(runId: string, posted: StepResult<R>): void | Promise<void>;
   /**

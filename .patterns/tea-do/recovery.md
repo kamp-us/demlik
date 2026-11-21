@@ -48,6 +48,21 @@ from a snapshot; with no snapshot it needs fresh init to establish the log's
 starting State. The live runtime then initializes the recovered State once
 for the new activation.
 
+The two durable-object recoveries are different and a run takes one. The legacy
+replay store `doEventSourcedStore` journals each APPLIED message from
+`Store.save(state, msg)`, after the reducer ran and before its effects start, and
+a wake folds that log through the reducer again. Nothing else feeds it: not
+`runtime.observe`, which fires after the Cmds, and not a host append before the
+dispatch. Its `load()` also takes the log for the isolate: a save or snapshot
+called before a later `load()` is refused at its write point, so a run `stop()`
+gave up on cannot write over the run that replaced it
+([ADR 0042](../../.decisions/0042-a-save-abandoned-at-dispose-never-overwrites-a-later-run.md)).
+A `LoggedStore` (`logged: true`, [ADR 0038](../../.decisions/0038-engine-owned-durable-log.md))
+admits a message before reduction, stores committed State and the deliveries
+still owed, and never runs a committed reducer again on a wake; its recovery
+belongs to the engine, so a host that uses it does not also run `autoBoot` or
+call `init` a second time.
+
 `bootResume` (`packages/tea/src/do/resume.ts`, exported from `@demlik/tea/do`)
 remains useful when the host deliberately supplies a resume Msg after `ready`.
 Subs are already open at that point; it cannot order the first move before

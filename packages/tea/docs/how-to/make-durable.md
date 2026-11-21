@@ -88,8 +88,9 @@ overwritten by a fresh boot. To show a "couldn't restore" view instead, see
 
 The in-memory box demonstrates serialization within one process. Use
 `fileStore` in step 4 or Cloudflare's `doStore` for storage that survives a
-process restart. The optional `doEventSourcedStore` also needs message-log
-append wiring; see [snapshot restore versus replay](../explanation/durability-model.md#event-log-replay).
+process restart. The optional `doEventSourcedStore` also records each applied
+message from `save`, before that transition's commands run; see
+[snapshot restore versus replay](../explanation/durability-model.md#event-log-replay).
 
 ## 2. Boot with the Store, and let it persist
 

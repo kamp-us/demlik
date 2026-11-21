@@ -41,6 +41,14 @@ option for a host message after `ready`, when Subs are already open; combining
 both resume paths for the same work can repeat it.
 An agent's saved retry counters survive too; restarting does not reset its attempt budget.
 
+An agent's `runId` is the identity of its run, and the saved State holds it. A
+start for the `runId` the State already holds, in any phase, returns that State
+and issues no command, so a request retried or sent twice does not issue the
+first model call again, reset the run's usage or clear a finished run's output.
+Only a State with no run, or a start for a different `runId`, begins a new run
+and resets them. A host that wants a second run on the same State passes a new
+`runId`.
+
 A host that sleeps and wakes on its next Msg boots on every wake, so `init`'s
 Cmds run on every wake. Passing `boot: "restored"` to `run` says this start is a
 wake: with a loaded State, `init` still folds it, but none of its Cmds run, and
@@ -70,8 +78,23 @@ snapshot. With no snapshot it starts from fresh init. Commands produced during
 the fold are data; their handlers are not executed.
 Pending work still needs the resume path after recovery.
 
-This mode requires applied-message append wiring as well as the store. Changing
-the store alone does not record the message log.
+The store writes the log itself. Each applied message reaches `Store.save` with
+its new State, and the store appends the message, advances its counter and takes
+a due snapshot in one transaction before `save` resolves. The engine saves before
+it starts that transition's commands, so the message is durable before any effect
+runs: a run lost in the middle of a model call finds that call's input in the
+log, and its wake sees the run `running`, not `idle`. Hand `run` the store and
+nothing else. Do not feed the log from `runtime.observe`, which fires after the
+commands, and do not append a message by hand before you dispatch it, or it is
+recorded twice. The boot save and the flush at `stop()` carry no message and
+write no row. A log written by the earlier observer-fed store reads unchanged.
+
+This is replay of an applied-message log. A store with a durable log
+(`logged: true`,
+[ADR 0038](https://github.com/kamp-us/demlik/blob/main/.decisions/0038-engine-owned-durable-log.md))
+works the other way: it admits a message before the reducer runs, keeps committed
+State and the deliveries still owed, and on a wake never runs a committed reducer
+again. Give a run one or the other, not both.
 
 [`replay` and `replayTrace`](../how-to/replay-in-a-test.md) also fold messages
 without effects. They support tests and debugging; normal snapshot restore does
@@ -114,12 +137,19 @@ store is known to hold it, so it writes nothing at boot or at `stop()`.
 
 A stopped run can be that stale writer. When `stop()` gives up at
 `disposeTimeoutMs`, tea starts no store call after `stop()` has returned, but a
-save already under way is not cancelled and can land later. On a plain store
-that late save can overwrite what a newer run saved, and nothing reports it. A
-fenced store refuses it. So a host that starts a new run on the same store
-after a `stop()` that gave up needs a fenced store.
+save already under way is not cancelled and can land later. A fenced store
+refuses it. So does `doEventSourcedStore`: a `load()` takes the log, and a write
+called before a later run loaded it is refused with `StoreConflictError` at its
+write point, so a stopped run's save never overwrites what the later run saved.
+The check is one generation per log in the isolate. Nothing is written to
+storage, so a log written before the check reads unchanged. A custom plain store
+that waits between being called and writing takes the late save over what a
+newer run saved, and nothing reports it, so it checks at its own write point or
+is fenced.
 [ADR 0025](https://github.com/kamp-us/demlik/blob/main/.decisions/0025-stop-gives-up-on-handlers.md) records
-the limit.
+the limit and
+[ADR 0042](https://github.com/kamp-us/demlik/blob/main/.decisions/0042-a-save-abandoned-at-dispose-never-overwrites-a-later-run.md)
+the check.
 
 `fileStore`, `doStore`, and `memoryStore` support `{ fenced: true }`.
 `chromeStorageStore` has no atomic compare-and-swap and stays unfenced.

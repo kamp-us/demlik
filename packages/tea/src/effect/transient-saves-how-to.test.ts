@@ -76,6 +76,31 @@ describe("skipSaving — the page's wrapper, on both engines", () => {
     expect(saved.filter(isStreaming)).toHaveLength(1 + tokens.length + 1);
   });
 
+  it("hands the inner store the Msg of each save it allows", async () => {
+    const inner = memoryStore<ReplyState>();
+    const received: unknown[] = [];
+    const store: Store<ReplyState> = {
+      load: () => inner.load(),
+      save: (state, msg) => {
+        received.push(msg);
+        return inner.save(state);
+      },
+      migrate: (raw) => inner.migrate(raw),
+    };
+    const runtime = await run(reply, {
+      store: skipSaving(store, isStreaming),
+    }).ready;
+    const finish = { _tag: "finish" } as const;
+    await runtime.dispatch({ _tag: "start" });
+    await runtime.dispatch({ _tag: "token", text: "Hel" });
+    await runtime.dispatch(finish);
+    await runtime.stop();
+
+    // Boot and the flush at `stop()` carry no Msg; `finish` is the one lasting
+    // transition, and the streaming ones never reached the store.
+    expect(received).toEqual([undefined, finish, undefined]);
+  });
+
   it("a stop mid-stream keeps the last lasting state on disk", async () => {
     const { store, saved, loaded } = recordingStore();
     const runtime = await run(reply, {

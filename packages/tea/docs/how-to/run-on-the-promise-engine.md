@@ -119,10 +119,11 @@ What each piece does:
   and so are the Msgs queued behind it; the notice's `droppedMsgs` counts those
   per Msg type. No store call starts after `stop()`
   has returned, but a save or load already under way is not cancelled and can
-  finish later. On a plain store that late save can overwrite what a newer run
-  saved; a [fenced store](./make-durable.md#4-refuse-a-second-writer-if-two-processes-can-reach-the-storage)
-  refuses it. Use a fenced store if you start a new run on the same store
-  after a `stop()` that gave up.
+  finish later. A [fenced store](./make-durable.md#4-refuse-a-second-writer-if-two-processes-can-reach-the-storage)
+  refuses that late save, and so does `doEventSourcedStore` once a newer run has
+  loaded its log. A custom plain store that waits before it writes takes it over
+  what a newer run saved. Use one of the first two if you start a new run on the
+  same store after a `stop()` that gave up.
 - **`onError` hears what has no caller to reject at.** That is a failing Sub
   (`"sub"`), a failed final save (`"stop-save"`), or a Msg sent with `tell`, by a
   Sub, or by a Cmd that failed (`"follow-up"`). A reducer's thrown object reaches
