@@ -62,13 +62,23 @@ export function fakeDoStorage<V = string>(
     },
     async list<T = unknown>(options?: {
       readonly prefix?: string;
+      readonly start?: string;
+      readonly startAfter?: string;
+      readonly end?: string;
+      readonly limit?: number;
     }): Promise<Map<string, T>> {
       const prefix = options?.prefix ?? "";
       const listed = new Map<string, T>();
       // The platform lists keys in lexicographic order.
       for (const key of [...backing.keys()].sort()) {
-        if (key.startsWith(prefix)) {
+        if (
+          key.startsWith(prefix) &&
+          (options?.start === undefined || key >= options.start) &&
+          (options?.startAfter === undefined || key > options.startAfter) &&
+          (options?.end === undefined || key < options.end)
+        ) {
           listed.set(key, structuredClone(backing.get(key)) as T);
+          if (listed.size === options?.limit) break;
         }
       }
       return listed;

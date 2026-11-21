@@ -12,18 +12,25 @@
  * explicitly, matching the rest of the package's test files.
  */
 
+import { spawnSync } from "node:child_process";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import fc from "fast-check";
+import { build } from "vite";
 import { describe, expect, it, vi } from "vitest";
 import { fakeDoStorage as fakeStorage } from "../__fixtures__/do-storage";
 import {
   defineMachine,
   type Reducer,
   replay,
+  StoreRefusedError,
   type Transitions,
 } from "../index";
 import { arbMsg, arbMsgSequence, type MsgArbitraryTable } from "../pbt";
 import { run } from "../promise";
-import { doEventSourcedStore } from "./event-sourced-store";
+import { doEventSourcedStore, RestoreInterruptedError } from "./index";
 
 // ── A tiny counter machine with a few Msg variants. ─────────────────────────
 // State folds every Msg, so an arbitrary Msg sequence exercises a real fold
@@ -718,6 +725,338 @@ const snapshotCell = (backing: Map<string, string>, key = "@@es/snapshot") =>
     seq: number;
     state: State;
   } | null;
+
+describe("bounded restore", () => {
+  it("snapshot restore never fetches preceding events", async () => {
+    const backing = new Map<string, string>();
+    await liveRun(
+      backing,
+      Array.from({ length: 100 }, () => ({ _tag: "inc", by: 1 })),
+      99,
+    );
+    const { storage } = fakeStorage(backing);
+    const list = vi.spyOn(storage, "list");
+    const es = doEventSourcedStore(storage, counter(), ctx);
+
+    expect(await es.store.load()).toEqual({
+      _tag: "counting",
+      count: 100,
+      log: [],
+    });
+    const fetched = (
+      await Promise.all(list.mock.results.map((r) => r.value))
+    ).flatMap((rows) => [...rows.keys()]);
+    expect(fetched).toEqual([rowKey(100)]);
+    expect(
+      list.mock.calls.every(([options]) => Number.isInteger(options?.limit)),
+    ).toBe(true);
+  });
+
+  it("replay does not retain historical commands", async () => {
+    const work = await mkdtemp(join(tmpdir(), "tea-replay-memory-"));
+    try {
+      await build({
+        configFile: false,
+        logLevel: "error",
+        build: {
+          ssr: fileURLToPath(
+            new URL("./fixtures/replay-memory-child.ts", import.meta.url),
+          ),
+          outDir: work,
+          rollupOptions: { output: { entryFileNames: "child.mjs" } },
+        },
+      });
+      const child = spawnSync(
+        process.execPath,
+        ["--max-old-space-size=64", join(work, "child.mjs")],
+        {
+          encoding: "utf8",
+          timeout: 30_000,
+        },
+      );
+      expect({
+        status: child.status,
+        signal: child.signal,
+        error: child.error?.message,
+      }).toEqual({ status: 0, signal: null, error: undefined });
+      expect(child.stdout.trim()).toBe("600,600,600");
+    } finally {
+      await rm(work, { recursive: true, force: true });
+    }
+  });
+
+  it("failed or interrupted restore never starts a fresh machine", async () => {
+    for (const cells of [
+      { "@@es/snapshot": "{broken" },
+      { "@@es/snapshot": '{"seq":99,"state":null}' },
+      {
+        "@@es/snapshot":
+          '{"seq":"99","state":{"_tag":"counting","count":99,"log":[]}}',
+      },
+      { "@@es/meta/restore-attempt": '{"attempts":2}' },
+    ]) {
+      const backing = new Map<string, string>(Object.entries(cells));
+      const { storage } = fakeStorage(backing);
+      const init = vi.fn(counter().init);
+      const act = vi.fn();
+      const machine = { ...worker(), init };
+      const list = vi.spyOn(storage, "list");
+      const es = doEventSourcedStore(storage, machine, ctx);
+      const booting = run(machine, {
+        ctx,
+        store: es.store,
+        interpret: { act },
+      });
+      const failure = await booting.ready.then(
+        () => undefined,
+        (cause) => cause,
+      );
+      try {
+        expect(failure).toBeInstanceOf(StoreRefusedError);
+        expect(failure.cause).toBeInstanceOf(Error);
+        if ("@@es/meta/restore-attempt" in cells) {
+          expect(failure.cause).toBeInstanceOf(RestoreInterruptedError);
+          expect(failure.cause).toMatchObject({
+            _tag: "restore_interrupted",
+            attempts: 2,
+            retryLimit: 1,
+          });
+        }
+        expect(init).not.toHaveBeenCalled();
+        expect(act).not.toHaveBeenCalled();
+        expect(list).not.toHaveBeenCalled();
+        for (const [key, value] of Object.entries(cells))
+          expect(backing.get(key)).toBe(value);
+        expect(
+          JSON.parse(backing.get("@@es/meta/restore-attempt") ?? "null"),
+        ).toEqual({ attempts: "@@es/snapshot" in cells ? 1 : 2 });
+      } finally {
+        await booting.stop();
+      }
+    }
+  });
+
+  it("one interrupted restore retries once, a second is refused", async () => {
+    let backing = new Map<string, string>();
+    const interrupt = async () => {
+      const { storage } = fakeStorage(backing);
+      let entered!: () => void;
+      const started = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      vi.spyOn(storage, "get").mockImplementation(async (key) => {
+        if (key === "@@es/snapshot") {
+          entered();
+          return new Promise<never>(() => {});
+        }
+        return backing.get(key);
+      });
+      void doEventSourcedStore(storage, counter(), ctx).store.load();
+      await started;
+      // Only durable bytes survive an activation loss; its pending load cannot settle.
+      backing = new Map(backing);
+    };
+    await interrupt();
+    expect(
+      JSON.parse(backing.get("@@es/meta/restore-attempt") ?? "null"),
+    ).toEqual({ attempts: 1 });
+    await interrupt();
+    const { storage } = fakeStorage(backing);
+    const get = vi.spyOn(storage, "get");
+    const list = vi.spyOn(storage, "list");
+    for (let activation = 0; activation < 3; activation++) {
+      await expect(
+        doEventSourcedStore(storage, counter(), ctx).store.load(),
+      ).rejects.toMatchObject({
+        _tag: "restore_interrupted",
+        attempts: 2,
+        retryLimit: 1,
+      });
+    }
+    expect(
+      get.mock.calls.every(([key]) => key === "@@es/meta/restore-attempt"),
+    ).toBe(true);
+    expect(list).not.toHaveBeenCalled();
+  });
+
+  it("a refused recovered state keeps retry evidence and never reaches runtime init", async () => {
+    const backing = new Map<string, string>([
+      [
+        "@@es/snapshot",
+        '{"seq":99,"state":{"_tag":"counting","count":99,"log":[]}}',
+      ],
+      ["@@es/meta", '{"lastSeq":100}'],
+      [rowKey(100), '{"_tag":"inc","by":1}'],
+    ]);
+    const { storage } = fakeStorage(backing);
+    const init = vi.fn(counter().init);
+    const machine = { ...counter(), init };
+    const es = doEventSourcedStore(storage, machine, ctx, {
+      parse: (raw) => ((raw as State).count < 100 ? (raw as State) : null),
+    });
+    const booting = run(machine, { ctx, store: es.store });
+    await expect(booting.ready).rejects.toBeInstanceOf(StoreRefusedError);
+    await booting.stop();
+    expect(init).not.toHaveBeenCalled();
+    expect(backing.get("@@es/meta/restore-attempt")).toBe('{"attempts":1}');
+  });
+
+  it("pages an inclusive window and folds each event before decoding the next", async () => {
+    const backing = new Map<string, string>();
+    for (let seq = 1; seq <= 400; seq++) {
+      backing.set(rowKey(seq), JSON.stringify({ _tag: "inc", by: 1 }));
+    }
+    backing.set("@@es/meta", '{"lastSeq":400}');
+    backing.set(
+      "@@es/snapshot",
+      '{"seq":99,"state":{"_tag":"counting","count":99,"log":[]}}',
+    );
+    const { storage } = fakeStorage(backing);
+    const list = vi.spyOn(storage, "list");
+    let decoded = 99;
+    const machine = {
+      ...counter(),
+      update: {
+        ...update,
+        inc: (state: State, msg: Extract<Msg, { _tag: "inc" }>) => {
+          expect(decoded).toBe(state.count + 1);
+          return update.inc(state, msg);
+        },
+      },
+    };
+    const es = doEventSourcedStore(storage, machine, ctx, {
+      parseEvent: (raw) => {
+        decoded++;
+        return raw as Msg;
+      },
+    });
+    expect(await es.store.load()).toEqual({
+      _tag: "counting",
+      count: 400,
+      log: [],
+    });
+    expect(list.mock.calls.length).toBeGreaterThan(1);
+    const fetched = async () =>
+      (await Promise.all(list.mock.results.map((r) => r.value))).flatMap(
+        (rows) => [...rows.keys()],
+      );
+    expect(await fetched()).toEqual(
+      Array.from({ length: 301 }, (_, i) => rowKey(i + 100)),
+    );
+    expect(
+      (await Promise.all(list.mock.results.map((r) => r.value))).every(
+        (rows) => rows.size <= 128,
+      ),
+    ).toBe(true);
+
+    list.mockClear();
+    const rows = await collect(es.readEvents({ fromSeq: 120, toSeq: 380 }));
+    expect(rows.map((r) => r.seq)).toEqual(
+      Array.from({ length: 261 }, (_, i) => i + 120),
+    );
+    expect(await fetched()).toEqual(
+      Array.from({ length: 261 }, (_, i) => rowKey(i + 120)),
+    );
+  });
+
+  it.each([
+    0, 2,
+  ])("honors retry limit %i and resets its budget only on success", async (restoreRetryLimit) => {
+    const backing = new Map<string, string>([["@@es/snapshot", "{broken"]]);
+    const { storage } = fakeStorage(backing);
+    const es = doEventSourcedStore(storage, counter(), ctx, {
+      restoreRetryLimit,
+    });
+    for (let attempt = 1; attempt <= restoreRetryLimit + 1; attempt++) {
+      await expect(es.store.load()).rejects.toBeInstanceOf(SyntaxError);
+      expect(
+        JSON.parse(backing.get("@@es/meta/restore-attempt") ?? "null"),
+      ).toEqual({ attempts: attempt });
+    }
+    await expect(es.store.load()).rejects.toMatchObject({
+      _tag: "restore_interrupted",
+      retryLimit: restoreRetryLimit,
+    });
+
+    const keys = { meta: "other/meta", restoreAttempt: "other/attempt" };
+    backing.delete("@@es/snapshot");
+    backing.set(keys.restoreAttempt, '{"attempts":1}');
+    const retry = doEventSourcedStore(storage, counter(), ctx, {
+      keys,
+      restoreRetryLimit: 1,
+    });
+    await retry.store.load();
+    expect(backing.has(keys.restoreAttempt)).toBe(false);
+    backing.set("@@es/snapshot", "{broken");
+    await expect(retry.store.load()).rejects.toBeInstanceOf(SyntaxError);
+    expect(backing.get(keys.restoreAttempt)).toBe('{"attempts":1}');
+    for (const limit of [-1, 0.5, Number.POSITIVE_INFINITY, Number.NaN]) {
+      expect(() =>
+        doEventSourcedStore(storage, counter(), ctx, {
+          restoreRetryLimit: limit,
+        }),
+      ).toThrow(/restoreRetryLimit/);
+    }
+  });
+
+  it("serializes concurrent loads across handles without consuming the retry budget", async () => {
+    const { storage, backing } = fakeStorage();
+    const get = storage.get.bind(storage);
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const attempts: string[] = [];
+    vi.spyOn(storage, "get").mockImplementation(async (key) => {
+      if (key === "@@es/snapshot") {
+        attempts.push(backing.get("@@es/meta/restore-attempt") ?? "missing");
+        entered();
+        await held;
+      }
+      return get(key);
+    });
+    const first = doEventSourcedStore(storage, counter(), ctx);
+    const second = doEventSourcedStore(storage, counter(), ctx);
+    const pending = [
+      first.store.load(),
+      first.store.load(),
+      second.store.load(),
+    ];
+    await started;
+    expect(attempts).toEqual(['{"attempts":1}']);
+    release();
+    await Promise.all(pending);
+    expect(attempts).toEqual(Array(3).fill('{"attempts":1}'));
+    expect(backing.size).toBe(0);
+  });
+
+  it("exposes the committed sequence without rescanning and advances it only after a successful save", async () => {
+    const backing = new Map<string, string>();
+    await liveRun(backing, sampleMsgs, 2);
+    const faults = fakeStorage(backing);
+    const list = vi.spyOn(faults.storage, "list");
+    const es = doEventSourcedStore(faults.storage, counter(), ctx);
+    expect(await es.getCommittedSeq()).toBe(5);
+    expect(list).not.toHaveBeenCalled();
+    const state = (await es.store.load()) as State;
+    list.mockClear();
+    await es.store.save({ ...state, count: 4 }, { _tag: "inc", by: 4 });
+    expect(await es.getCommittedSeq()).toBe(6);
+    faults.failPut((key) => key.startsWith(EVENT_PREFIX));
+    await expect(
+      es.store.save({ ...state, count: 9 }, { _tag: "inc", by: 5 }),
+    ).rejects.toThrow();
+    expect(await es.getCommittedSeq()).toBe(6);
+    expect(list).not.toHaveBeenCalled();
+    expect(await collect(es.readEvents({ fromSeq: 7 }))).toEqual([]);
+    const empty = doEventSourcedStore(fakeStorage().storage, counter(), ctx);
+    expect(await empty.getCommittedSeq()).toBe(0);
+  });
+});
 
 describe("doEventSourcedStore — write-ahead log", () => {
   it("has the Msg, its meta cell and its snapshot in storage when the Cmd handler starts", async () => {

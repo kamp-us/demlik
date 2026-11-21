@@ -65,13 +65,16 @@
  */
 
 import type { Cmd, Machine, Store, Sub } from "../index";
-import { foldMsgs, replay } from "../index";
+import { foldMsgs } from "../index";
 import { saveFence } from "./save-fence";
 
 /** Default cell prefixes. Chosen to sort log keys lexicographically by seq. */
 const DEFAULT_SNAPSHOT_KEY = "@@es/snapshot";
 const DEFAULT_META_KEY = "@@es/meta";
 const DEFAULT_EVENT_PREFIX = "@@es/evt/";
+const EVENT_PAGE_SIZE = 128;
+// Loads on the same storage namespace share a queue, including across handles.
+const loads = new WeakMap<object, Map<string, Promise<unknown>>>();
 /** Zero-pad seq numbers so `storage.list({ prefix })` returns them in order. */
 const SEQ_WIDTH = 16;
 
@@ -94,6 +97,38 @@ interface MetaCell {
   readonly lastSeq: number;
 }
 
+/** JSON restore evidence retained until a load succeeds. Counts started attempts. */
+export interface RestoreAttempt {
+  readonly attempts: number;
+}
+
+/** A previous restore did not finish and its automatic retry budget is spent. */
+export class RestoreInterruptedError extends Error {
+  override readonly name = "RestoreInterruptedError";
+  readonly _tag = "restore_interrupted" as const;
+  constructor(
+    readonly attempts: number,
+    readonly retryLimit: number,
+  ) {
+    super(
+      `Restore interrupted after ${attempts} attempts (retry limit ${retryLimit})`,
+    );
+  }
+}
+
+function nextRestoreAttempt(
+  attempts: number,
+  retryLimit: number,
+): RestoreAttempt {
+  const decisions = {
+    available: () => ({ attempts: attempts + 1 }),
+    exhausted: () => {
+      throw new RestoreInterruptedError(attempts, retryLimit);
+    },
+  } satisfies Record<"available" | "exhausted", () => RestoreAttempt>;
+  return decisions[attempts > retryLimit ? "exhausted" : "available"]();
+}
+
 /**
  * Options for {@link doEventSourcedStore}.
  */
@@ -106,11 +141,18 @@ export interface EventSourcedOptions<S, M> {
    */
   readonly snapshotEvery?: number;
   /**
+   * Automatic retries after an unfinished restore. Default 1: an initial
+   * attempt and one retry; a second unfinished attempt refuses before reading
+   * the snapshot or journal. Must be a non-negative safe integer. A thrown
+   * load also leaves an unfinished attempt. Only success clears the record.
+   */
+  readonly restoreRetryLimit?: number;
+  /**
    * Boundary parse for the persisted SNAPSHOT cell (the `S` blob). Returns `S`
    * on a recognized shape, `null` on an unrecognized one, and must NOT throw.
-   * Unlike `doStore`'s `parse`, `null` loses nothing: the snapshot is only a
-   * shortcut, so a `null` discards it and replays the whole event log from
-   * seq 0. Default accepts any non-null, non-array object as `S`.
+   * A present snapshot that returns `null` refuses restore; it never falls
+   * back to replaying the full journal. Default accepts any non-null,
+   * non-array object as `S`.
    */
   readonly parse?: (raw: unknown) => S | null;
   /**
@@ -134,6 +176,8 @@ export interface EventSourcedOptions<S, M> {
     readonly snapshot?: string;
     readonly meta?: string;
     readonly eventPrefix?: string;
+    /** Restore-attempt cell. Default: `${meta}/restore-attempt`. */
+    readonly restoreAttempt?: string;
   };
 }
 
@@ -186,6 +230,12 @@ export interface EventSourcedStore<S, M> {
    * still lands, whether or not its run was given up on. Every `load()` counts,
    * this store's own included, so a store a host hands to each run it rebuilds
    * is covered too.
+   *
+   * Loads on the same storage object and meta key are serialized, including
+   * across handles. Before snapshot or journal reads, load persists a JSON
+   * {@link RestoreAttempt}. Success clears it; failure leaves it. Once
+   * `restoreRetryLimit` is spent, load throws {@link RestoreInterruptedError}
+   * before expensive reads. The engine preserves it as StoreRefusedError.cause.
    */
   readonly store: Store<S>;
   /**
@@ -211,6 +261,13 @@ export interface EventSourcedStore<S, M> {
    */
   snapshotNow(): Promise<boolean>;
   /**
+   * Highest committed append sequence, or 0 for an empty log. Reads only meta
+   * before load; after load/save it uses the acknowledged sequence in memory.
+   * Consumers can resume readEvents at this sequence + 1 without scanning history.
+   * Assumes this handle is the active writer, like save and snapshotNow.
+   */
+  getCommittedSeq(): Promise<number>;
+  /**
    * Stream the persisted event log in `seq` order, optionally bounded by an
    * inclusive {@link EventLogRange}. This is the PUBLIC read side of the
    * event-sourced write model — the surface replay / projection / audit
@@ -224,6 +281,7 @@ export interface EventSourcedStore<S, M> {
    * a window (`{ fromSeq, toSeq }`). An empty (or fully out-of-range) log yields
    * nothing. Events whose `parseEvent` returns `null` (a retired Msg variant)
    * are dropped, identical to the recovery fold.
+   * Bounds are applied in storage queries, in pages of at most 128 rows.
    *
    * Read-only: it never appends, snapshots, or mutates store state, so streaming
    * the log can never perturb the live actor.
@@ -289,11 +347,19 @@ export function doEventSourcedStore<
       `@demlik/tea/do: snapshotEvery must be an integer >= 1, got ${snapshotEvery}`,
     );
   }
+  const restoreRetryLimit = opts.restoreRetryLimit ?? 1;
+  if (!Number.isSafeInteger(restoreRetryLimit) || restoreRetryLimit < 0) {
+    throw new Error(
+      "@demlik/tea/do: restoreRetryLimit must be a non-negative safe integer",
+    );
+  }
   const parse = opts.parse ?? defaultParse;
   const parseEvent = opts.parseEvent ?? defaultParseEvent;
   const snapshotKey = opts.keys?.snapshot ?? DEFAULT_SNAPSHOT_KEY;
   const metaKey = opts.keys?.meta ?? DEFAULT_META_KEY;
   const eventPrefix = opts.keys?.eventPrefix ?? DEFAULT_EVENT_PREFIX;
+  const restoreAttemptKey =
+    opts.keys?.restoreAttempt ?? `${metaKey}/restore-attempt`;
 
   // In-memory mirror of the durable seq counter, set during load() and moved
   // only once a write has been acknowledged. Before load() it is unknown;
@@ -320,7 +386,10 @@ export function doEventSourcedStore<
     const raw = await storage.get<string>(metaKey);
     if (raw === undefined || raw === null) return 0;
     const meta = JSON.parse(raw) as MetaCell;
-    return typeof meta.lastSeq === "number" ? meta.lastSeq : 0;
+    if (!Number.isSafeInteger(meta.lastSeq) || meta.lastSeq < 0) {
+      throw new Error("@demlik/tea/do: invalid committed sequence");
+    }
+    return meta.lastSeq;
   }
 
   /**
@@ -336,8 +405,8 @@ export function doEventSourcedStore<
 
   /**
    * Read the persisted snapshot cell, parsed through the boundary. Returns the
-   * folded state + the seq it covers, or `{ state: null, seq: 0 }` when absent
-   * or unrecognized (fold then starts from a fresh `init`).
+   * folded state + the seq it covers, or `{ state: null, seq: 0 }` when absent.
+   * An unrecognized snapshot refuses instead of replaying its preceding events.
    */
   async function readSnapshot(): Promise<{ state: S | null; seq: number }> {
     const raw = await storage.get<string>(snapshotKey);
@@ -346,9 +415,12 @@ export function doEventSourcedStore<
     // not a schema mismatch.
     const cell = JSON.parse(raw) as SnapshotCell<unknown>;
     const parsed = parse(cell.state);
-    if (parsed === null) return { state: null, seq: 0 };
-    const seq = typeof cell.seq === "number" ? cell.seq : 0;
-    return { state: parsed, seq };
+    if (parsed === null)
+      throw new Error("@demlik/tea/do: persisted snapshot was refused");
+    if (!Number.isSafeInteger(cell.seq) || cell.seq < 0) {
+      throw new Error("@demlik/tea/do: invalid snapshot sequence");
+    }
+    return { state: parsed, seq: cell.seq };
   }
 
   /**
@@ -361,61 +433,85 @@ export function doEventSourcedStore<
   async function* readEvents(
     range: EventLogRange = {},
   ): AsyncGenerator<PersistedEvent<M>> {
-    const fromSeq = range.fromSeq ?? Number.NEGATIVE_INFINITY;
-    const toSeq = range.toSeq ?? Number.POSITIVE_INFINITY;
-    // list() returns keys in lexicographic order; zero-padded seq keys sort by
-    // sequence, so this is already seq-ascending. Bounds are matched on the
-    // parsed seq (inclusive both ends).
-    const rows = await storage.list<string>({ prefix: eventPrefix });
-    for (const [key, value] of rows) {
-      const seq = Number(key.slice(eventPrefix.length));
-      if (!Number.isFinite(seq) || seq < fromSeq || seq > toSeq) continue;
-      const decoded = parseEvent(JSON.parse(value));
-      // A `null` decode drops a retired Msg variant (documented in parseEvent).
-      if (decoded !== null) yield { seq, event: decoded };
+    const fromSeq = Math.max(1, Math.ceil(range.fromSeq ?? 1));
+    const toSeq = Math.floor(range.toSeq ?? Number.POSITIVE_INFINITY);
+    if (fromSeq > toSeq || fromSeq === Number.POSITIVE_INFINITY) return;
+    const start = eventKey(eventPrefix, fromSeq);
+    const end = Number.isFinite(toSeq)
+      ? eventKey(eventPrefix, toSeq + 1)
+      : undefined;
+    let startAfter: string | undefined;
+    while (true) {
+      const rows = await storage.list<string>({
+        prefix: eventPrefix,
+        ...(startAfter === undefined ? { start } : { startAfter }),
+        ...(end === undefined ? {} : { end }),
+        limit: EVENT_PAGE_SIZE,
+        noCache: true,
+      });
+      for (const [key, value] of rows) {
+        startAfter = key;
+        const seq = Number(key.slice(eventPrefix.length));
+        if (!Number.isFinite(seq) || seq < fromSeq || seq > toSeq) continue;
+        const decoded = parseEvent(JSON.parse(value));
+        if (decoded !== null) yield { seq, event: decoded };
+      }
+      if (rows.size < EVENT_PAGE_SIZE) return;
     }
   }
 
-  /** Read the logged events strictly after `afterSeq`, in seq order. */
-  async function readLog(afterSeq: number): Promise<M[]> {
-    // The replay tail is the public reader bounded to seqs > afterSeq — one
-    // shared source for the key convention, no second `storage.list` walk.
-    const events: M[] = [];
+  /** Fold one decoded event at a time, retaining neither the tail nor its Cmds. */
+  async function readLog(state: S, afterSeq: number): Promise<S> {
     for await (const { event } of readEvents({ fromSeq: afterSeq + 1 })) {
-      events.push(event);
+      state = foldMsgs(machine, state, [event]);
     }
-    return events;
+    return state;
+  }
+
+  async function load(): Promise<S> {
+    fence.takeOver();
+    const raw = await storage.get<string>(restoreAttemptKey);
+    const previous: unknown =
+      raw === undefined ? { attempts: 0 } : JSON.parse(raw);
+    if (
+      previous === null ||
+      typeof previous !== "object" ||
+      !("attempts" in previous) ||
+      typeof previous.attempts !== "number" ||
+      !Number.isSafeInteger(previous.attempts) ||
+      previous.attempts < 0
+    ) {
+      throw new Error("@demlik/tea/do: invalid restore-attempt record");
+    }
+    const attempt = nextRestoreAttempt(previous.attempts, restoreRetryLimit);
+    await storage.put(restoreAttemptKey, JSON.stringify(attempt));
+
+    const { state: snapshot, seq: snapSeq } = await readSnapshot();
+    const committedSeq = await readMeta();
+    const initialState = snapshot ?? machine.init(null, ctx)[0];
+    const state = await readLog(initialState, snapSeq);
+    if (parse(state) === null) {
+      throw new Error("@demlik/tea/do: recovered state was refused");
+    }
+    if (!readyFired) opts.onReady?.(state);
+    await storage.delete(restoreAttemptKey);
+    readyFired = true;
+    latestState = state;
+    lastSeq = committedSeq;
+    snapshotSeq = snapSeq;
+    return state;
   }
 
   const store: Store<S> = {
-    async load(): Promise<unknown> {
-      fence.takeOver();
-      const { state: snapshot, seq: snapSeq } = await readSnapshot();
-      snapshotSeq = snapSeq;
-      lastSeq = await readMeta();
-
-      const events = await readLog(snapSeq);
-
-      const state =
-        snapshot === null
-          ? replay(machine, { msgs: events, ctx }).state
-          : foldMsgs(machine, snapshot, events);
-      // The folded State is the State of event `lastSeq`: the pair a snapshot
-      // records until the next event is written.
-      latestState = state;
-
-      // RecoveryCompleted: fire once per activation, AFTER the fold, even when
-      // the log + snapshot were both empty (fresh actor). Idempotent within the
-      // activation via `readyFired`; may fire again on a future activation.
-      if (!readyFired) {
-        readyFired = true;
-        opts.onReady?.(state);
-      }
-
-      // Returned as `unknown` and re-validated through `migrate` (= parse), same
-      // boundary discipline as doStore. The substrate feeds it to `init` as
-      // `loaded`, so the live `init` rehydrate branch runs on the folded state.
-      return state;
+    load(): Promise<unknown> {
+      const queue = loads.get(storage) ?? new Map<string, Promise<unknown>>();
+      loads.set(storage, queue);
+      const result = (queue.get(metaKey) ?? Promise.resolve()).then(load);
+      queue.set(
+        metaKey,
+        result.catch(() => undefined),
+      );
+      return result;
     },
 
     async save(state: S, msg?: unknown): Promise<void> {
@@ -514,5 +610,5 @@ export function doEventSourcedStore<
     });
   }
 
-  return { store, snapshotNow, readEvents };
+  return { store, snapshotNow, readEvents, getCommittedSeq: ensureLastSeq };
 }

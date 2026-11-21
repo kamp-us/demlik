@@ -81,6 +81,8 @@ export {
   type EventSourcedOptions,
   type EventSourcedStore,
   type PersistedEvent,
+  type RestoreAttempt,
+  RestoreInterruptedError,
 } from "./event-sourced-store";
 // The minimum-viable DO HOST for a `createAgent` runtime — the deferred-tool
 // gateway, auto-boot, WS accept + inbound bridge, runtime→SSE plumbing, the
