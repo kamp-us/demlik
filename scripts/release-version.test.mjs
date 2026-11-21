@@ -163,12 +163,12 @@ describe("planRelease", () => {
 });
 
 describe("afterVersionStep", () => {
-  it("names tea's reference regeneration and nothing for other packages", () => {
+  it("names tea's versioned docs regeneration and nothing for other packages", () => {
     expect(afterVersionStep("@demlik/tea")?.pnpmArgs).toEqual([
       "--filter",
       "@demlik/tea",
       "run",
-      "docs:reference",
+      "docs:versioned",
     ]);
     expect(afterVersionStep("@demlik/code-graph")).toBeNull();
     expect(afterVersionStep("toString")).toBeNull();
@@ -198,7 +198,7 @@ describe("the CLI", () => {
     expect(runCli("@w/solo", { EXIT_WITH: "3" }).status).toBe(3);
   });
 
-  it("regenerates tea's reference docs after a tea bump, and not after another package's", () => {
+  it("regenerates tea's versioned docs after a tea bump, and not after another package's", () => {
     pkg("tea", "@demlik/tea");
     pkg("code-graph", "@demlik/code-graph");
     changeset("a.md", { "@demlik/tea": "minor" });
@@ -208,7 +208,7 @@ describe("the CLI", () => {
     expect(tea.status).toBe(0);
     expect(tea.calls).toBe(
       "exec changeset version --ignore @demlik/code-graph\n" +
-        "--filter @demlik/tea run docs:reference\n",
+        "--filter @demlik/tea run docs:versioned\n",
     );
 
     rmSync(path.join(repo, "changeset.log"));

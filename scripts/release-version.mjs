@@ -159,8 +159,8 @@ export function planRelease({ packages, changesets, target }) {
  */
 export const AFTER_VERSION = {
   "@demlik/tea": {
-    why: "packages/tea/docs/reference/ prints the tea version",
-    pnpmArgs: ["--filter", "@demlik/tea", "run", "docs:reference"],
+    why: "packages/tea/docs/reference/ and packages/tea/AGENTS.md print the tea version",
+    pnpmArgs: ["--filter", "@demlik/tea", "run", "docs:versioned"],
   },
 };
 
