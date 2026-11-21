@@ -788,29 +788,23 @@ describe("bounded restore", () => {
     ).toBe(true);
   });
 
-  it(
-    "replay does not retain historical commands",
-    async () => {
+  describe("in a child process", { timeout: restoreChildTimeoutMs }, () => {
+    it("replay does not retain historical commands", async () => {
       expect(
         await runRestoreChild("./fixtures/replay-memory-child.ts", [
           "--max-old-space-size=64",
         ]),
       ).toBe("600,600,600");
-    },
-    restoreChildTimeoutMs,
-  );
+    });
 
-  it(
-    "the load queue releases recovered state after a later save",
-    async () => {
+    it("the load queue releases recovered state after a later save", async () => {
       expect(
         await runRestoreChild("./fixtures/restore-queue-gc-child.ts", [
           "--expose-gc",
         ]),
       ).toBe("collected");
-    },
-    restoreChildTimeoutMs,
-  );
+    });
+  });
 
   it("onReady can snapshot recovered state while marker deletion is pending", async () => {
     const backing = new Map<string, string>();
