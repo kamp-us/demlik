@@ -1326,15 +1326,7 @@ function defineAgent<T extends AnyToolDef>(
 ### `DefineAgentCompaction`
 
 ```ts
-type DefineAgentCompaction =
-  | CompactionTriggers & {
-    readonly afterContextTokens?: number;
-    readonly afterTurns: number;
-  }
-  | CompactionTriggers & {
-    readonly afterContextTokens: number;
-    readonly afterTurns?: number;
-  }
+type DefineAgentCompaction = { [K in CompactionTriggerTag]: CompactionTriggers & Required<Pick<CompactionTriggers, K>> }[CompactionTriggerTag]
 ```
 
 <a id="DefineAgentConfig"></a>
@@ -1357,9 +1349,12 @@ interface DefineAgentConfig<T extends AnyToolDef> {
    * `afterTurns: 20` folds once the conversation holds twenty turns.
    * `afterContextTokens: 8_000` folds once the last brain turn's reported
    * `inputTokens + outputTokens` reaches eight thousand; the number is yours,
-   * because tea knows no model's window size. Set both and the first one
-   * reached folds. `keepTurns` is how many of the newest turns survive the
-   * fold intact. It is not a guard: nothing fails, and the run goes on.
+   * because tea knows no model's window size. `afterInputTokens` folds when
+   * provider-reported input (cached tokens included) strictly exceeds its limit.
+   * `afterImageBytes` folds above its held payload byte limit; `afterImageCount`
+   * folds at its held image count. Each works alone; configured triggers use OR.
+   * `keepTurns` is how many of the newest turns survive the fold intact.
+   * It is not a guard: nothing fails, and the run goes on.
    *
    * Omit → NO compaction, exactly as before: the transcript grows for as long
    * as the model keeps asking for tools. Nothing is defaulted on your behalf —

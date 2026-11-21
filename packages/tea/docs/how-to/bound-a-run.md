@@ -13,7 +13,7 @@ wall-clock cap it reads as, is in
 exact behaviour is on
 [`DefineAgentConfig`](../reference/agent.md#DefineAgentConfig) in the reference.
 
-Every sample below is quoted from
+The guard samples below are quoted from
 [`examples/agent-stop-conditions.ts`](https://github.com/kamp-us/demlik/blob/main/packages/tea/examples/agent-stop-conditions.ts),
 which runs in-process with scripted models:
 `modelAsking(napMs)` asks for one `tick` every turn, and each `tick` naps that
@@ -176,7 +176,35 @@ Set the budget below your real limit by one turn's worth: the run spent 68k
 against a 60k budget. When the run ends, read what it spent off `state.usage`,
 or off `status(state).usage` when `status(state).kind === "done"`.
 
+Each threshold works independently; combinations use OR, so whichever is
+reached first requests one fold. `afterTurns` and `afterContextTokens` fire at
+or above their limits. `afterInputTokens` fires strictly above the latest brain
+turn's provider-reported input tokens, including cached input, without counting
+output tokens or cumulative spend.
+
+For image tools that report no token usage, pass this image-only budget as
+`defineAgent`'s `compaction` beside your model and image-producing tools:
+
+```ts
+import type { DefineAgentCompaction } from "@demlik/tea/agent";
+
+const imageBudget = {
+  afterImageBytes: 4_000_000,
+  afterImageCount: 8,
+  keepTurns: 1,
+} satisfies DefineAgentCompaction;
+```
+
+`afterImageBytes` fires strictly above the decoded held image payload bytes;
+`afterImageCount` fires at or above the held image-part count. Only tool content
+projections count, including repeated images. URL images count as one image and
+zero held bytes, without fetching. Files and text do not count. This recipe
+needs no token usage. See the [compaction reference](../reference/agent.md#DefineAgentCompaction)
+for the complete contract.
+
 To fold by turn count instead, set `compaction: { afterTurns: 20 }`.
+A fold of fewer than two turns is skipped. Retained images can still exceed a
+provider limit, and a failed summary proceeds with the existing transcript.
 
 ## 6. Put all four on one agent
 
