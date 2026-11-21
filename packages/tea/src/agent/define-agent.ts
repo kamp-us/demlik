@@ -70,6 +70,7 @@ import {
   status,
   type ToolCall,
   type ToolOutcome,
+  type ToolRecord,
   type TurnChunk,
 } from "./types";
 
@@ -1115,7 +1116,7 @@ function compactionPolicyOf<R>(
         ? Math.max(0, conversation.turns.length - keep)
         : 0,
     payloadOf: (conversation, folding): AgentMessage[] =>
-      renderPrompt(
+      renderProjectedPrompt(
         {
           instructions: SUMMARIZE_INSTRUCTION,
           input: null,
@@ -1128,7 +1129,9 @@ function compactionPolicyOf<R>(
             nudges: conversation.nudges.filter((n) => n.turn < folding),
           },
         },
-        visiblePartsOf(conversation, partsOf, media),
+        visibleToolRecords(conversation, partsOf, media).filter(
+          ({ record }) => record.turn < folding,
+        ),
       ),
   };
 }
@@ -1176,9 +1179,8 @@ function compactionFactsOf<R>(
   partsOf: ToolPartsOf,
   media: DefineAgentConfig<AnyToolDef>["media"],
 ): CompactionFacts {
-  const visible = visiblePartsOf(conversation, partsOf, media);
-  const parts = conversation.toolRecords.flatMap(
-    (record) => visible(record.call, record.outcome) ?? [],
+  const parts = visibleToolRecords(conversation, partsOf, media).flatMap(
+    (record) => record.parts ?? [],
   );
   return {
     turns: conversation.turns.length,
@@ -1303,7 +1305,22 @@ export function renderPrompt(
   partsOf: ToolPartsOf = noParts,
   media?: DefineAgentConfig<AnyToolDef>["media"],
 ): AgentMessage[] {
-  const visible = visiblePartsOf(prompt.conversation, partsOf, media);
+  return renderProjectedPrompt(
+    prompt,
+    visibleToolRecords(prompt.conversation, partsOf, media),
+  );
+}
+
+interface ProjectedToolRecord<R> {
+  readonly record: ToolRecord<R>;
+  readonly parts: readonly ContentPart[] | null;
+}
+
+/** Render each projected occurrence beside its producing turn. PURE. */
+function renderProjectedPrompt(
+  prompt: AgentPrompt<unknown>,
+  records: readonly ProjectedToolRecord<unknown>[],
+): AgentMessage[] {
   const head: AgentMessage[] = [];
   if (prompt.instructions !== null) {
     head.push({ role: "system", content: prompt.instructions });
@@ -1311,19 +1328,18 @@ export function renderPrompt(
   if (prompt.input !== null) {
     head.push({ role: "user", content: prompt.input });
   }
-  const { turns, toolRecords, nudges = [] } = prompt.conversation;
+  const { turns, nudges = [] } = prompt.conversation;
   const transcript = turns.flatMap<AgentMessage>((turn, i) => [
     assistantOf(turn),
-    ...toolRecords
-      .filter((r) => r.turn === i)
-      .map<AgentMessage>((r) => {
+    ...records
+      .filter(({ record }) => record.turn === i)
+      .map<AgentMessage>(({ record: r, parts }) => {
         const message = {
           role: "tool",
           callId: r.call.callId,
           name: r.call.name,
           outcome: r.outcome,
         } as const;
-        const parts = visible(r.call, r.outcome);
         return parts === null ? message : { ...message, parts };
       }),
     ...nudges
@@ -1334,39 +1350,33 @@ export function renderPrompt(
 }
 
 /** Project once in prompt order; the same window feeds rendering and facts. PURE. */
-function visiblePartsOf<R>(
+function visibleToolRecords<R>(
   conversation: Conversation<R>,
   partsOf: ToolPartsOf,
   media: DefineAgentConfig<AnyToolDef>["media"],
-): ToolPartsOf {
-  if (media === undefined) return partsOf;
+): readonly ProjectedToolRecord<R>[] {
   const projected = conversation.turns.flatMap((_, turn) =>
     conversation.toolRecords
-      .filter((r) => r.turn === turn)
-      .map((r) => ({
-        call: r.call,
-        parts: partsOf(r.call, r.outcome),
+      .filter((record) => record.turn === turn)
+      .map((record) => ({
+        record,
+        parts: partsOf(record.call, record.outcome),
       })),
   );
-  const images = projected.filter((r) =>
-    r.parts?.some((p) => p.type === "image"),
+  if (media === undefined) return projected;
+  const imageIndices = projected.flatMap(({ parts }, index) =>
+    parts?.some((p) => p.type === "image") ? [index] : [],
   );
   const { ceiling, floor } = media.retain;
-  const n = images.length;
+  const n = imageIndices.length;
   const visible = n < ceiling ? n : floor + ((n - ceiling) % (ceiling - floor));
-  const hidden = new Set(images.slice(0, n - visible).map((r) => r.call));
-  const parts = new Map(
-    projected.map((r) => {
-      const kept = hidden.has(r.call)
-        ? r.parts?.filter((p) => p.type !== "image")
-        : r.parts;
-      return [
-        r.call,
-        kept?.length === 0 && hidden.has(r.call) ? null : (kept ?? null),
-      ];
-    }),
-  );
-  return (call) => parts.get(call) ?? null;
+  const lastHidden = imageIndices[n - visible - 1] ?? -1;
+  return projected.map((entry, index) => {
+    if (index > lastHidden || !entry.parts?.some((p) => p.type === "image"))
+      return entry;
+    const parts = entry.parts.filter((p) => p.type !== "image");
+    return { ...entry, parts: parts.length === 0 ? null : parts };
+  });
 }
 
 /** The `partsOf` a render with no router gets: no call shows the model parts. PURE. */

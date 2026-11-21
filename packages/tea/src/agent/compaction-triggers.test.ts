@@ -259,6 +259,43 @@ describe("tool image retention", () => {
       .flatMap((m) => (m.role === "tool" ? (m.parts ?? []) : []))
       .filter((p) => p.type === "image");
 
+  it.each([
+    [7, [1, 2, 3, 4, 5, 6, 7]],
+    [8, [5, 6, 7, 8]],
+  ] as const)("keeps each result occurrence when one immutable call is reused across %i turns", async (n, expected) => {
+    const reused = Object.freeze(call(1));
+    const turns = Array.from({ length: n }, () => ({
+      content: "look",
+      toolCalls: [reused],
+    }));
+    const batches = Array.from({ length: n }, (_, i) => [
+      image({ type: "bytes", data: new Uint8Array(i + 1) }),
+    ]);
+    const { brain } = await scenario(BELOW, turns, batches, Infinity, media);
+    expect(
+      imagesOf(brain[n] ?? []).map((p) =>
+        p.source.type === "bytes" ? p.source.data.byteLength : null,
+      ),
+    ).toEqual(expected);
+    const bytes = expected.reduce((sum, size) => sum + size, 0);
+    for (const [knob, folds] of [
+      [{ afterImageBytes: bytes }, 0],
+      [{ afterImageBytes: bytes - 1 }, 1],
+      [{ afterImageCount: expected.length + 1 }, 0],
+      [{ afterImageCount: expected.length }, 1],
+    ] as const) {
+      const result = await scenario(
+        knob,
+        turns,
+        batches,
+        Infinity,
+        media,
+        true,
+      );
+      expect(result.summaries).toHaveLength(folds);
+    }
+  });
+
   it("drops old image records in steps, preserving text and the prefix between drops", async () => {
     const { brain } = await scenario(
       BELOW,
