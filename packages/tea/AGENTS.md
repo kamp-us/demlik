@@ -22,6 +22,7 @@ IMPORTANT: Prefer retrieval-led reasoning over pre-training-led reasoning. Read 
 | The host must wake the machine at its next deadline after the call ends | `deadlinesSub`, `deadlineExceeded`. Replaces an in-process timer after stop; share the State deadline selector and set the platform alarm in the host | `@demlik/tea/resilience` | [Read](docs/how-to/make-durable.md#5-end-each-call-and-return-the-next-alarm) |
 | An effect needs typed success and error results | `Cmd.define`. Replaces hand-written outcome Msgs; declare input and ok schemas and err tags | `@demlik/tea` | [Read](docs/how-to/run-on-the-promise-engine.md) |
 | The saved State shape changed and old saves must still load | `schemaMigrate`. Replaces repeated boundary parsing; give Store.migrate a schemaMigrate(schema, upcast) | `@demlik/tea` | [Read](docs/reference/tea.md#schemaMigrate) |
+| The same request or job can arrive twice (a retry, a redelivery after a crash); do its work once per id | `createIntake`, `seen`, `remember`. Replaces a hand-kept Set of processed ids in State; keep an IdempotencyStore in the Model and check seen before the work | `@demlik/tea/idempotency` | [Read](docs/reference/idempotency.md) |
 
 ## Docs index
 

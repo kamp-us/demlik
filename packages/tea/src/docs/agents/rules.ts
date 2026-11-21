@@ -92,4 +92,12 @@ export const rules: readonly Rule[] = [
     instead:
       "repeated boundary parsing; give Store.migrate a schemaMigrate(schema, upcast)",
   },
+  {
+    when: "The same request or job can arrive twice (a retry, a redelivery after a crash); do its work once per id",
+    use: "createIntake, seen, remember",
+    from: "@demlik/tea/idempotency",
+    page: "docs/reference/idempotency.md",
+    instead:
+      "a hand-kept Set of processed ids in State; keep an IdempotencyStore in the Model and check seen before the work",
+  },
 ] satisfies readonly Rule[];
