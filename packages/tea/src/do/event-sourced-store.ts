@@ -74,7 +74,7 @@ const DEFAULT_META_KEY = "@@es/meta";
 const DEFAULT_EVENT_PREFIX = "@@es/evt/";
 const EVENT_PAGE_SIZE = 128;
 // Loads on the same storage namespace share a queue, including across handles.
-const loads = new WeakMap<object, Map<string, Promise<unknown>>>();
+const loads = new WeakMap<object, Map<string, Promise<void>>>();
 /** Zero-pad seq numbers so `storage.list({ prefix })` returns them in order. */
 const SEQ_WIDTH = 16;
 
@@ -493,23 +493,26 @@ export function doEventSourcedStore<
     if (parse(state) === null) {
       throw new Error("@demlik/tea/do: recovered state was refused");
     }
-    if (!readyFired) opts.onReady?.(state);
-    await storage.delete(restoreAttemptKey);
-    readyFired = true;
     latestState = state;
     lastSeq = committedSeq;
     snapshotSeq = snapSeq;
+    if (!readyFired) opts.onReady?.(state);
+    await storage.delete(restoreAttemptKey);
+    readyFired = true;
     return state;
   }
 
   const store: Store<S> = {
     load(): Promise<unknown> {
-      const queue = loads.get(storage) ?? new Map<string, Promise<unknown>>();
+      const queue = loads.get(storage) ?? new Map<string, Promise<void>>();
       loads.set(storage, queue);
       const result = (queue.get(metaKey) ?? Promise.resolve()).then(load);
       queue.set(
         metaKey,
-        result.catch(() => undefined),
+        result.then(
+          () => undefined,
+          () => undefined,
+        ),
       );
       return result;
     },

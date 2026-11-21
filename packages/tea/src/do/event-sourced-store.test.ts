@@ -726,6 +726,40 @@ const snapshotCell = (backing: Map<string, string>, key = "@@es/snapshot") =>
     state: State;
   } | null;
 
+async function runRestoreChild(
+  fixture: string,
+  nodeArgs: readonly string[],
+): Promise<string> {
+  const work = await mkdtemp(join(tmpdir(), "tea-restore-child-"));
+  try {
+    await build({
+      configFile: false,
+      logLevel: "error",
+      build: {
+        ssr: fileURLToPath(new URL(fixture, import.meta.url)),
+        outDir: work,
+        rollupOptions: { output: { entryFileNames: "child.mjs" } },
+      },
+    });
+    const child = spawnSync(
+      process.execPath,
+      [...nodeArgs, join(work, "child.mjs")],
+      { encoding: "utf8", timeout: 30_000 },
+    );
+    expect(
+      {
+        status: child.status,
+        signal: child.signal,
+        error: child.error?.message,
+      },
+      child.stderr,
+    ).toEqual({ status: 0, signal: null, error: undefined });
+    return child.stdout.trim();
+  } finally {
+    await rm(work, { recursive: true, force: true });
+  }
+}
+
 describe("bounded restore", () => {
   it("snapshot restore never fetches preceding events", async () => {
     const backing = new Map<string, string>();
@@ -753,36 +787,63 @@ describe("bounded restore", () => {
   });
 
   it("replay does not retain historical commands", async () => {
-    const work = await mkdtemp(join(tmpdir(), "tea-replay-memory-"));
+    expect(
+      await runRestoreChild("./fixtures/replay-memory-child.ts", [
+        "--max-old-space-size=64",
+      ]),
+    ).toBe("600,600,600");
+  });
+
+  it("the load queue releases recovered state after a later save", async () => {
+    expect(
+      await runRestoreChild("./fixtures/restore-queue-gc-child.ts", [
+        "--expose-gc",
+      ]),
+    ).toBe("collected");
+  });
+
+  it("onReady can snapshot recovered state while marker deletion is pending", async () => {
+    const backing = new Map<string, string>();
+    await liveRun(
+      backing,
+      [2, 3, 4].map((by) => ({ _tag: "inc", by })),
+      2,
+    );
+    const { storage } = fakeStorage(backing);
+    const remove = storage.delete.bind(storage);
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let entered!: () => void;
+    const deleting = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    vi.spyOn(storage, "delete").mockImplementation(async (key) => {
+      entered();
+      await held;
+      return remove(key);
+    });
+    let checkpoint: Promise<boolean> | undefined;
+    const es = doEventSourcedStore(storage, counter(), ctx, {
+      onReady: () => {
+        checkpoint = es.snapshotNow();
+      },
+    });
+    const loading = es.store.load();
+    await deleting;
     try {
-      await build({
-        configFile: false,
-        logLevel: "error",
-        build: {
-          ssr: fileURLToPath(
-            new URL("./fixtures/replay-memory-child.ts", import.meta.url),
-          ),
-          outDir: work,
-          rollupOptions: { output: { entryFileNames: "child.mjs" } },
-        },
+      expect(backing.has("@@es/meta/restore-attempt")).toBe(true);
+      expect(await checkpoint).toBe(true);
+      expect(snapshotCell(backing)).toEqual({
+        seq: 3,
+        state: { _tag: "counting", count: 9, log: [] },
       });
-      const child = spawnSync(
-        process.execPath,
-        ["--max-old-space-size=64", join(work, "child.mjs")],
-        {
-          encoding: "utf8",
-          timeout: 30_000,
-        },
-      );
-      expect({
-        status: child.status,
-        signal: child.signal,
-        error: child.error?.message,
-      }).toEqual({ status: 0, signal: null, error: undefined });
-      expect(child.stdout.trim()).toBe("600,600,600");
     } finally {
-      await rm(work, { recursive: true, force: true });
+      release();
+      await loading;
     }
+    expect(await es.snapshotNow()).toBe(false);
   });
 
   it("failed or interrupted restore never starts a fresh machine", async () => {
