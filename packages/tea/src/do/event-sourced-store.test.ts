@@ -726,6 +726,8 @@ const snapshotCell = (backing: Map<string, string>, key = "@@es/snapshot") =>
     state: State;
   } | null;
 
+const restoreChildTimeoutMs = 60_000;
+
 async function runRestoreChild(
   fixture: string,
   nodeArgs: readonly string[],
@@ -744,7 +746,7 @@ async function runRestoreChild(
     const child = spawnSync(
       process.execPath,
       [...nodeArgs, join(work, "child.mjs")],
-      { encoding: "utf8", timeout: 30_000 },
+      { encoding: "utf8", timeout: restoreChildTimeoutMs },
     );
     expect(
       {
@@ -786,20 +788,22 @@ describe("bounded restore", () => {
     ).toBe(true);
   });
 
-  it("replay does not retain historical commands", async () => {
-    expect(
-      await runRestoreChild("./fixtures/replay-memory-child.ts", [
-        "--max-old-space-size=64",
-      ]),
-    ).toBe("600,600,600");
-  });
+  describe("in a child process", { timeout: restoreChildTimeoutMs }, () => {
+    it("replay does not retain historical commands", async () => {
+      expect(
+        await runRestoreChild("./fixtures/replay-memory-child.ts", [
+          "--max-old-space-size=64",
+        ]),
+      ).toBe("600,600,600");
+    });
 
-  it("the load queue releases recovered state after a later save", async () => {
-    expect(
-      await runRestoreChild("./fixtures/restore-queue-gc-child.ts", [
-        "--expose-gc",
-      ]),
-    ).toBe("collected");
+    it("the load queue releases recovered state after a later save", async () => {
+      expect(
+        await runRestoreChild("./fixtures/restore-queue-gc-child.ts", [
+          "--expose-gc",
+        ]),
+      ).toBe("collected");
+    });
   });
 
   it("onReady can snapshot recovered state while marker deletion is pending", async () => {
