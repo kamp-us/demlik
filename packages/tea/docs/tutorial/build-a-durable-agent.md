@@ -225,9 +225,14 @@ function toBlock(p: ContentPart): Block {
 
 /** Inline bytes as the base64 text Anthropic takes them in. */
 function base64(source: Exclude<MediaSource, { type: "url" }>): string {
-  return source.type === "base64"
-    ? source.data
-    : Buffer.from(source.data).toString("base64");
+  switch (source.type) {
+    case "base64":
+      return source.data;
+    case "bytes":
+      return Buffer.from(source.data).toString("base64");
+    case "reference":
+      throw new Error("Resolve media references before building the provider request.");
+  }
 }
 ```
 

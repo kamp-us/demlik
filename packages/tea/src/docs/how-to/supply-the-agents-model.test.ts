@@ -243,6 +243,10 @@ async function downloaded(source: MediaSource): Promise<MediaSource> {
 /** A part's source as chat completions reads it: a link, or a data URL. */
 function urlOf(mediaType: string, source: MediaSource): string {
   switch (source.type) {
+    case "reference":
+      throw new Error(
+        "Resolve media references before building the provider request.",
+      );
     case "url":
       return source.url;
     case "base64":

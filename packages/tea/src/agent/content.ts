@@ -9,21 +9,26 @@
  * maps a part to its provider's block, exactly as it maps a whole message.
  */
 
-/**
- * Where an image's or a file's bytes are. Inline as base64 text, inline as raw
- * bytes, or out of band at a URL — one of the three, never a part that carries
- * both data and a URL.
- *
- * A part a tool derives from its result is re-derived on every render from the
- * durable result, so the part itself is never stored; the RESULT is. Keep what
- * the result holds JSON-shaped — base64 text survives a JSON `Store`, a
- * `Uint8Array` does not — and derive `bytes` from it only if your adapter wants
- * them.
- */
-export type MediaSource =
+/** Bytes or a URL a model adapter can send to its provider. */
+export type ResolvedMediaSource =
   | { readonly type: "base64"; readonly data: string }
   | { readonly type: "bytes"; readonly data: Uint8Array }
   | { readonly type: "url"; readonly url: string };
+
+/** An opaque host-owned blob key and its decoded byte length, safe to persist. */
+export interface MediaReference {
+  readonly type: "reference";
+  readonly key: string;
+  readonly byteLength: number;
+}
+
+/**
+ * Inline content, a URL, or a blob the model adapter resolves before sending.
+ * Tool results are durable: keep the reference metadata in the result and
+ * derive a reference part from it. Rendering and compaction never read the
+ * blob; only the host's model adapter calls `resolveMediaParts` to read it.
+ */
+export type MediaSource = ResolvedMediaSource | MediaReference;
 
 /** A run of text. */
 export interface TextPart {
@@ -47,6 +52,32 @@ export interface FilePart {
 
 /** One part of a multimodal message. */
 export type ContentPart = TextPart | ImagePart | FilePart;
+
+/** Provider-ready content whose sources contain no unresolved blob keys. */
+export type ResolvedContentPart =
+  | TextPart
+  | ((ImagePart | FilePart) & { readonly source: ResolvedMediaSource });
+
+/**
+ * Resolve references at the model boundary using the host's blob reader.
+ * Stored parts are never mutated. Text, ordering, media types and resolved
+ * sources are preserved; a failed read rejects for the model's retry policy.
+ */
+export async function resolveMediaParts(
+  parts: readonly ContentPart[],
+  resolve: (reference: MediaReference) => Promise<ResolvedMediaSource>,
+): Promise<readonly ResolvedContentPart[]> {
+  return Promise.all(
+    parts.map(async (part): Promise<ResolvedContentPart> => {
+      if (part.type === "text") return part;
+      const source = part.source;
+      return {
+        ...part,
+        source: source.type === "reference" ? await resolve(source) : source,
+      };
+    }),
+  );
+}
 
 /** A message's content: a plain string, or a list of parts. */
 export type MessageContent = string | readonly ContentPart[];

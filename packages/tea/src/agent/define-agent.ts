@@ -1223,6 +1223,7 @@ const MEDIA_SOURCE_BYTES = {
   },
   bytes: (source) => source.data.byteLength,
   url: () => 0,
+  reference: (source) => source.byteLength,
 } satisfies SourceBytesRules & Record<MediaSource["type"], unknown>;
 
 function mediaSourceBytes(source: MediaSource): number {
