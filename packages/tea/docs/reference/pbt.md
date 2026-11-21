@@ -193,7 +193,7 @@ const journalConformance: (make: JournalKitFactory, options: KitOptions) => Prom
 ### `JournalKitFactory`
 
 ```ts
-type JournalKitFactory = JournalKit.JournalKitFactory
+type JournalKitFactory = () => Promise<JournalKitFixture>;
 ```
 
 <a id="JournalKitFixture"></a>
@@ -201,7 +201,15 @@ type JournalKitFactory = JournalKit.JournalKitFactory
 ### `JournalKitFixture`
 
 ```ts
-type JournalKitFixture = JournalKit.JournalKitFixture
+interface JournalKitFixture {
+  open(): Promise<Journal>;
+  interruptAt(point: number | undefined): void;
+  writePoints(records: readonly string[]): readonly number[];
+  dispose(): Promise<void>;
+  readonly byteFile: boolean;
+  tearTail?(stream: string): Promise<void>;
+  readStoredBytes?(stream: string): Promise<Uint8Array>;
+}
 ```
 
 <a id="KitCase"></a>
@@ -209,7 +217,7 @@ type JournalKitFixture = JournalKit.JournalKitFixture
 ### `KitCase`
 
 ```ts
-type KitCase = JournalKit.KitCase
+type KitCase = "K1" | "K2" | "K3" | "K4" | "K5" | "K6" | "K7" | "K8";
 ```
 
 <a id="KitOptions"></a>
@@ -217,7 +225,15 @@ type KitCase = JournalKit.KitCase
 ### `KitOptions`
 
 ```ts
-type KitOptions = JournalKit.KitOptions
+type KitOptions = {
+  readonly records: number;
+  readonly now: () => number;
+  readonly seed?: number;
+  /** Generated histories per case; defaults to 100. */
+  readonly runs?: number;
+  readonly repeats?: number;
+  readonly replay?: { readonly id: KitCase; readonly path: string };
+};
 ```
 
 <a id="KitResult"></a>
@@ -225,7 +241,11 @@ type KitOptions = JournalKit.KitOptions
 ### `KitResult`
 
 ```ts
-type KitResult = JournalKit.KitResult
+type KitResult = {
+  readonly id: KitCase;
+  readonly status: "passed" | "failed" | "skipped";
+  readonly detail?: string;
+};
 ```
 
 <a id="LawBreak"></a>

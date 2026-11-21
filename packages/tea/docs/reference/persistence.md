@@ -132,7 +132,7 @@ function deepEqual(a: unknown, b: unknown): boolean
 ### `EncodedRecord`
 
 ```ts
-type EncodedRecord = JournalContract.EncodedRecord
+type EncodedRecord = string;
 ```
 
 <a id="eventSourcedStore"></a>
@@ -155,7 +155,14 @@ function eventSourcedStore<S, M extends { _tag: string }, C extends Cmd>(
 ### `FencedJournal`
 
 ```ts
-type FencedJournal = JournalContract.FencedJournal
+interface FencedJournal extends Journal {
+  readonly fenced: true;
+  appendFenced(
+    stream: string,
+    records: readonly [EncodedRecord, ...EncodedRecord[]],
+    expected: number,
+  ): Promise<JournalAppend | JournalRefusal | JournalConflict>;
+}
 ```
 
 <a id="Journal"></a>
@@ -163,7 +170,14 @@ type FencedJournal = JournalContract.FencedJournal
 ### `Journal`
 
 ```ts
-type Journal = JournalContract.Journal
+interface Journal {
+  read(stream: string, after: number): Promise<JournalRead | JournalRefusal>;
+  append(
+    stream: string,
+    records: readonly [EncodedRecord, ...EncodedRecord[]],
+  ): Promise<JournalAppend | JournalRefusal>;
+  close(): Promise<void>;
+}
 ```
 
 <a id="JournalAppend"></a>
@@ -171,7 +185,11 @@ type Journal = JournalContract.Journal
 ### `JournalAppend`
 
 ```ts
-type JournalAppend = JournalContract.JournalAppend
+type JournalAppend = {
+  readonly _tag: "appended";
+  readonly head: number;
+  readonly entries: readonly JournalEntry[];
+};
 ```
 
 <a id="JournalConflict"></a>
@@ -179,7 +197,11 @@ type JournalAppend = JournalContract.JournalAppend
 ### `JournalConflict`
 
 ```ts
-type JournalConflict = JournalContract.JournalConflict
+type JournalConflict = {
+  readonly _tag: "journal_conflict";
+  readonly expected: number;
+  readonly head: number;
+};
 ```
 
 <a id="JournalEntry"></a>
@@ -187,7 +209,10 @@ type JournalConflict = JournalContract.JournalConflict
 ### `JournalEntry`
 
 ```ts
-type JournalEntry = JournalContract.JournalEntry
+type JournalEntry = {
+  readonly seq: number;
+  readonly record: EncodedRecord;
+};
 ```
 
 <a id="JournalRead"></a>
@@ -195,7 +220,11 @@ type JournalEntry = JournalContract.JournalEntry
 ### `JournalRead`
 
 ```ts
-type JournalRead = JournalContract.JournalRead
+type JournalRead = {
+  readonly _tag: "read";
+  readonly head: number;
+  readonly entries: readonly JournalEntry[];
+};
 ```
 
 <a id="JournalRefusal"></a>
@@ -203,7 +232,14 @@ type JournalRead = JournalContract.JournalRead
 ### `JournalRefusal`
 
 ```ts
-type JournalRefusal = JournalContract.JournalRefusal
+type JournalRefusal =
+  | {
+      readonly _tag: "journal_io";
+      readonly operation: "read" | "append";
+      readonly message: string;
+      readonly uncertain: boolean;
+    }
+  | { readonly _tag: "journal_corrupt"; readonly message: string };
 ```
 
 <a id="parseJSONL"></a>

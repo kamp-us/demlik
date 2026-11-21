@@ -149,6 +149,65 @@ describe("reference generator", { timeout: 120_000 }, () => {
       expect(defineMachine).toMatch(/\): Machine<S, M, C, U, Ctx>/);
     });
 
+    it("journal and kit aliases show the members a host author implements", async () => {
+      const docs = renderReferenceDocs(await inputs());
+      for (const [file, symbol, methods] of [
+        ["persistence.md", "Journal", ["read(", "append(", "close("]],
+        ["pbt.md", "JournalKitFixture", ["interruptAt(", "writePoints("]],
+      ] as const) {
+        const declaration = declarationOf(docs.get(file) ?? "", symbol);
+        for (const method of methods) {
+          expect.soft(declaration, `${file}: ${symbol}`).toContain(method);
+        }
+      }
+    });
+
+    it("no generated page leaves a namespace type alias without its declaration", async () => {
+      const docs = renderReferenceDocs(await inputs());
+      const emptyAliases = [...docs].flatMap(([file, page]) =>
+        [
+          ...page.matchAll(
+            /^type [A-Za-z]+(<[^>]*>)? = [A-Za-z]+\.[A-Za-z]+(<[^>]*>)?;?$/gm,
+          ),
+        ].map(([line]) => `${file}: ${line}`),
+      );
+      expect(emptyAliases).toEqual([]);
+    });
+
+    it("a union alias keeps its own declaration", async () => {
+      const docs = renderReferenceDocs(await inputs());
+      expect(declarationOf(docs.get("node.md") ?? "", "FileLockBlock")).toBe(
+        'type FileLockBlock = "another-host" | "contended" | "live-holder" | "unreadable" | "unwritten"',
+      );
+    });
+
+    it("an alias that names what it is keeps its own line", async () => {
+      const docs = renderReferenceDocs(await inputs());
+      // TimerSub IS a Sub; expanding it to an object literal would hide that.
+      expect(declarationOf(docs.get("tea.md") ?? "", "TimerSub")).toBe(
+        `type TimerSub<M> = Sub<"timer", TimerDeps<M>>`,
+      );
+      expect(declarationOf(docs.get("tea.md") ?? "", "BuiltinSub")).toBe(
+        "type BuiltinSub<M> = TimerSub<M>",
+      );
+    });
+
+    it("alias rows keep their summaries, target member docs, and same-name values", async () => {
+      const docs = renderReferenceDocs(await inputs());
+      expect(docs.get("persistence.md")).toContain(
+        "| [`Journal`](#Journal) | Type | experimental | Ordered storage of opaque text in atomic batches. |",
+      );
+      expect(docs.get("pbt.md")).toContain(
+        "| [`JournalKitFixture`](#JournalKitFixture) | Type | experimental | A fixture's fresh driver handles and physical interruption controls. |",
+      );
+      expect(declarationOf(docs.get("pbt.md") ?? "", "KitOptions")).toContain(
+        "/** Generated histories per case; defaults to 100. */",
+      );
+      expect(declarationOf(docs.get("effect.md") ?? "", "Cmd")).toContain(
+        "const Cmd: {",
+      );
+    });
+
     it("every page and catalog row prints the tier MAINTAINING.md stamps", async () => {
       const { tiers } = await inputs();
       const docs = renderReferenceDocs(await inputs());

@@ -140,7 +140,10 @@ function resolveReference(
  * descriptive error if the tree is not the expected `{ children: Module[] }`
  * shape — a malformed model must fail loudly, never silently emit empty docs.
  */
-export function parseTypedocModel(raw: unknown): DocModule[] {
+export function parseTypedocModel(
+  raw: unknown,
+  declarationFor: typeof printDeclaration = printDeclaration,
+): DocModule[] {
   if (!isRecord(raw) || !Array.isArray(raw.children)) {
     throw new Error(
       "typedoc model: expected an object with a `children` array",
@@ -179,7 +182,7 @@ export function parseTypedocModel(raw: unknown): DocModule[] {
           typeof decl.kind === "number" ? decl.kind : sym.kind,
         ),
         summary: firstSentence(commentText(comment)),
-        declaration: printDeclaration(sym.name, decl),
+        declaration: declarationFor(sym.name, decl),
         experimental: isExperimental(comment),
       });
     }
