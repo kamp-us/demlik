@@ -1,5 +1,12 @@
 # @demlik/backlog-sweep
 
+## 0.1.7
+
+### Patch Changes
+
+- Updated dependencies [2024a29]
+  - @demlik/tea@0.33.0
+
 ## 0.1.6
 
 ### Patch Changes
