@@ -19,8 +19,16 @@
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Application, TSConfigReader, TypeDocReader } from "typedoc";
+import {
+  Application,
+  Converter,
+  ReflectionKind,
+  TSConfigReader,
+  TypeDocReader,
+} from "typedoc";
+import ts from "typescript";
 import { parseTierTable, type Tier, tierOf } from "./tier-table";
+import { printDeclaration } from "./typedoc-declaration";
 import {
   type DocModule,
   type DocSymbol,
@@ -365,17 +373,70 @@ export async function packageExportKeys(): Promise<string[]> {
   return Object.keys(exports);
 }
 
+/**
+ * A published alias that only re-exports a type through a namespace import
+ * (`export type Journal = JournalContract.Journal;`, written so the subpath can
+ * carry its own summary and `@experimental` tag) prints as its target: the
+ * reader needs `Journal`'s methods, not the line that renames it. Every other
+ * alias prints as written, since `type TimerSub<M> = Sub<"timer", ...>` says
+ * what the alias is.
+ */
+function reExportedTarget(
+  alias: ts.TypeAliasDeclaration,
+  checker: ts.TypeChecker,
+): string | undefined {
+  const reference = alias.type;
+  if (
+    alias.typeParameters ||
+    !ts.isTypeReferenceNode(reference) ||
+    reference.typeArguments ||
+    !ts.isQualifiedName(reference.typeName) ||
+    reference.typeName.right.text !== alias.name.text
+  )
+    return;
+  let symbol = checker.getSymbolAtLocation(reference.typeName);
+  if (symbol && symbol.flags & ts.SymbolFlags.Alias)
+    symbol = checker.getAliasedSymbol(symbol);
+  const target = symbol?.declarations?.find(
+    (node): node is ts.InterfaceDeclaration | ts.TypeAliasDeclaration =>
+      ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node),
+  );
+  if (!target || target.getSourceFile().isDeclarationFile) return;
+  const text = target.getText();
+  const keyword = ts.isInterfaceDeclaration(target) ? "interface" : "type";
+  return text.slice(text.indexOf(keyword));
+}
+
 /** Invoke typedoc to (re)emit the JSON model, then return the parsed modules. */
 async function loadModel(): Promise<DocModule[]> {
   const app = await Application.bootstrapWithPlugins(
     { options: PKG_ROOT, logLevel: "Error" },
     [new TypeDocReader(), new TSConfigReader()],
   );
+  const targets = new Map<number, string>();
+  app.converter.on(
+    Converter.EVENT_CREATE_DECLARATION,
+    (context, reflection) => {
+      if (!reflection.kindOf(ReflectionKind.TypeAlias)) return;
+      const alias = context
+        .getSymbolFromReflection(reflection)
+        ?.declarations?.find(ts.isTypeAliasDeclaration);
+      if (!alias) return;
+      const target = reExportedTarget(alias, context.checker);
+      if (target) targets.set(reflection.id, target);
+    },
+  );
   const project = await app.convert();
   if (!project) throw new Error("typedoc: conversion failed (see logs above)");
   await app.generateJson(project, MODEL_JSON);
   const raw: unknown = JSON.parse(await readFile(MODEL_JSON, "utf8"));
-  return parseTypedocModel(raw);
+  return parseTypedocModel(raw, (name, declaration) => {
+    const target =
+      typeof declaration.id === "number"
+        ? targets.get(declaration.id)
+        : undefined;
+    return target ?? printDeclaration(name, declaration);
+  });
 }
 
 /** One row of a generated table: where it sits, what it names, what it says. */
