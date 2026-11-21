@@ -8,7 +8,7 @@ Tier: `stable`
 import { … } from "@demlik/tea/do";
 ```
 
-## Exports (109)
+## Exports (111)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -100,6 +100,8 @@ import { … } from "@demlik/tea/do";
 | [`registerHibernatableSocket`](#registerHibernatableSocket) | Function | stable | Register an already-created `server` socket on the DO via the Cloudflare **Hibernation API**: `ctx.acceptWebSocket(server, tags)` hands the socket to the runtime (it survives eviction and re-delivers inbound frames to the DO's `webSocketMessage` lifecycle method), and — when an `attachment` is supplied — persists it via `server.serializeAttachment` so it survives the wake. |
 | [`RegisterOptions`](#RegisterOptions) | Interface | stable | Optional settings for registerHibernatableSocket / acceptPresenceSocket. |
 | [`reissueSurvivingEffects`](#reissueSurvivingEffects) | Function | stable | Re-fire every round-trip a rehydrated actor still owes, on wake. |
+| [`RestoreAttempt`](#RestoreAttempt) | Interface | stable | JSON restore evidence retained until a load succeeds. |
+| [`RestoreInterruptedError`](#RestoreInterruptedError) | Class | stable | A previous restore did not finish and its automatic retry budget is spent. |
 | [`ResumePort`](#ResumePort) | Interface | stable | The typed cold-wake resume port `bootResume` fires through — the agent's `AgentBootPort`, generalized to any DO-hosted machine. |
 | [`runProjection`](#runProjection) | Function | stable | Build a ProjectionRunner for a projection, starting from a stored offset (default 0 = `NoOffset`, a fresh run). |
 | [`runStepLoop`](#runStepLoop) | Function | stable | Drive the pull loop to completion. |
@@ -889,6 +891,8 @@ interface EventSourcedOptions<S, M> {
   readonly keys?: {
     readonly eventPrefix?: string;
     readonly meta?: string;
+    /** Restore-attempt cell. Default: `${meta}/restore-attempt`. */
+    readonly restoreAttempt?: string;
     readonly snapshot?: string;
   };
   /**
@@ -903,9 +907,9 @@ interface EventSourcedOptions<S, M> {
   /**
    * Boundary parse for the persisted SNAPSHOT cell (the `S` blob). Returns `S`
    * on a recognized shape, `null` on an unrecognized one, and must NOT throw.
-   * Unlike `doStore`'s `parse`, `null` loses nothing: the snapshot is only a
-   * shortcut, so a `null` discards it and replays the whole event log from
-   * seq 0. Default accepts any non-null, non-array object as `S`.
+   * A present snapshot that returns `null` refuses restore; it never falls
+   * back to replaying the full journal. Default accepts any non-null,
+   * non-array object as `S`.
    */
   readonly parse?: (raw: unknown) => S | null;
   /**
@@ -915,6 +919,13 @@ interface EventSourcedOptions<S, M> {
    * string `_tag` as `M`.
    */
   readonly parseEvent?: (raw: unknown) => M | null;
+  /**
+   * Automatic retries after an unfinished restore. Default 1: an initial
+   * attempt and one retry; a second unfinished attempt refuses before reading
+   * the snapshot or journal. Must be a non-negative safe integer. A thrown
+   * load also leaves an unfinished attempt. Only success clears the record.
+   */
+  readonly restoreRetryLimit?: number;
   /**
    * Take a snapshot every N appended events (count-based retention, mirrors
    * Akka `RetentionCriteria.snapshotEvery`). A snapshot bounds how many events
@@ -949,8 +960,21 @@ interface EventSourcedStore<S, M> {
    * still lands, whether or not its run was given up on. Every `load()` counts,
    * this store's own included, so a store a host hands to each run it rebuilds
    * is covered too.
+   *
+   * Loads on the same storage object and meta key are serialized, including
+   * across handles. Before snapshot or journal reads, load persists a JSON
+   * RestoreAttempt. Success clears it; failure leaves it. Once
+   * `restoreRetryLimit` is spent, load throws RestoreInterruptedError
+   * before expensive reads. The engine preserves it as StoreRefusedError.cause.
    */
   readonly store: Store<S>;
+  /**
+   * Highest committed append sequence, or 0 for an empty log. Reads only meta
+   * before load; after load/save it uses the acknowledged sequence in memory.
+   * Consumers can resume readEvents at this sequence + 1 without scanning history.
+   * Assumes this handle is the active writer, like save and snapshotNow.
+   */
+  getCommittedSeq(): Promise<number>;
   /**
    * Stream the persisted event log in `seq` order, optionally bounded by an
    * inclusive EventLogRange. This is the PUBLIC read side of the
@@ -965,6 +989,7 @@ interface EventSourcedStore<S, M> {
    * a window (`{ fromSeq, toSeq }`). An empty (or fully out-of-range) log yields
    * nothing. Events whose `parseEvent` returns `null` (a retired Msg variant)
    * are dropped, identical to the recovery fold.
+   * Bounds are applied in storage queries, in pages of at most 128 rows.
    *
    * Read-only: it never appends, snapshots, or mutates store state, so streaming
    * the log can never perturb the live actor.
@@ -1455,6 +1480,30 @@ function reissueSurvivingEffects<R>(
   carrier: DurableCommandCarrier<R>,
   reissue: (callId: string) => void,
 ): readonly string[]
+```
+
+<a id="RestoreAttempt"></a>
+
+### `RestoreAttempt`
+
+```ts
+interface RestoreAttempt {
+  readonly attempts: number;
+}
+```
+
+<a id="RestoreInterruptedError"></a>
+
+### `RestoreInterruptedError`
+
+```ts
+class RestoreInterruptedError extends Error {
+  constructor(attempts: number, retryLimit: number);
+  readonly _tag: "restore_interrupted";
+  readonly attempts: number;
+  readonly name: "RestoreInterruptedError";
+  readonly retryLimit: number;
+}
 ```
 
 <a id="ResumePort"></a>

@@ -2328,13 +2328,25 @@ export type Machine<
 //
 // Each Msg is dispatched through `applyCell` — the same primitive `run` uses —
 // so every fold site agrees on the reducer-vs-transitions form by construction
-// (no second copy of the dispatch to drift). The caller keeps the returned Cmds
-// (`replay`) or discards them (`foldMsgs`).
+// (no second copy of the dispatch to drift). `foldUpdates` collects Cmds for
+// `replay`; `foldMsgs` consumes the steps without retaining historical Cmds.
 //
 // Touches no `Store`, no `interpret` handler, and starts no subscription — it
 // only calls `update` cells. The two public folds differ only in how they
 // enter and what they return: `replay` enters via `init` and returns
 // `{ state, cmds, subs }`; `foldMsgs` enters from a base state and returns `S`.
+function* updateSteps<S, M extends { _tag: string }, C extends Cmd>(
+  machine: { update: object; __form?: UpdateForm },
+  state: S,
+  msgs: readonly M[],
+): Generator<readonly [S, readonly C[]]> {
+  for (const msg of msgs) {
+    const step = applyCellChecked<S, M, C>(machine, state, msg);
+    state = step[0];
+    yield step;
+  }
+}
+
 /**
  * Fold a machine's `update` over a list of Msgs from a starting state, and
  * return the final state with every Cmd the cells emitted. `replay` and
@@ -2349,8 +2361,7 @@ export function foldUpdates<S, M extends { _tag: string }, C extends Cmd>(
   let state: S = initialState;
   const cmds: C[] = [];
 
-  for (const msg of msgs) {
-    const [next, emitted] = applyCellChecked<S, M, C>(machine, state, msg);
+  for (const [next, emitted] of updateSteps<S, M, C>(machine, state, msgs)) {
     state = next;
     cmds.push(...emitted);
   }
@@ -2394,5 +2405,7 @@ export function foldMsgs<
   U extends Sub,
   Ctx,
 >(machine: Machine<S, M, C, U, Ctx>, base: S, msgs: readonly M[]): S {
-  return foldUpdates<S, M, C>(machine, base, msgs).state;
+  let state = base;
+  for (const [next] of updateSteps<S, M, C>(machine, base, msgs)) state = next;
+  return state;
 }

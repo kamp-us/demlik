@@ -8,7 +8,9 @@ import {
 
 /**
  * Read a store's saved state through its `migrate`: the `S` it holds, or `null`
- * when nothing was saved. Throws {@link StoreRefusedError} when `migrate`
+ * when nothing was saved. A rejected load never reaches migrate or fresh init.
+ * Typed load failures remain the refusal's original `cause`, without decoding
+ * or replacing their diagnostic fields. Throws {@link StoreRefusedError} when `migrate`
  * refuses, and when `load` or `migrate` throws (#316) — the caller then writes
  * nothing, so bytes it could not read are never overwritten. Boot and the work
  * queue both read a store through this.

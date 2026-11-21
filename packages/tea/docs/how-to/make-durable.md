@@ -308,3 +308,39 @@ Answer-bearing log frames use protocol 3 and require this reader. Ordinary frame
 and checkpoints stay on protocol 2. Protocol-2 messages keep their previous meaning:
 an extra field named `answerTo` is ignored. Protocol-3 message frames require a
 positive safe-integer `answerTo`; older readers refuse these frames.
+
+## 7. Bound replay on a Durable Object
+
+For an existing applied-message journal, use
+[`doEventSourcedStore`](../reference/do.md#doEventSourcedStore) with the object's
+storage, machine and context. This store replays reducers; keep effects in
+command handlers. It is a different persistence mode from the engine-owned
+logged store in steps 5–6.
+
+1. Set `snapshotEvery` to the number of applied messages you can afford to
+   replay. Await the runtime's `ready` before dispatching. Restore reads the
+   latest snapshot and only the events after it, in bounded pages, folding one
+   event at a time. A present snapshot that cannot be parsed refuses restore;
+   it never triggers a full-history fallback. With no snapshot yet, recovery
+   starts from pure initialization and replays the available journal.
+2. Catch `StoreRefusedError` from `ready`. Inspect its `cause` for
+   [`RestoreInterruptedError`](../reference/do.md#RestoreInterruptedError),
+   whose `attempts` and `retryLimit` describe an exhausted restore budget.
+   Preserve the refusal and stop this activation. Do not start another runtime
+   with an empty store.
+3. Choose `restoreRetryLimit` for automatic recovery. The default permits an
+   initial attempt and one retry. A failed load and an interrupted activation
+   both leave a small JSON attempt record. A second unfinished attempt refuses
+   future loads before reading the snapshot or journal. Set the option to `0`
+   to refuse on the first activation after an unfinished attempt. Success
+   clears the record and resets the budget. Keep the record across activations;
+   remove it only as part of an explicit recovery after inspecting the failure.
+4. When building a projection from the recovered State, pair that projection
+   with `await handle.getCommittedSeq()`. Save the pair together. Resume its
+   subsequent event reads with `{ fromSeq: savedSequence + 1 }`; no scan is
+   needed to rediscover the sequence. A projection with an older checkpoint
+   must resume from its own saved sequence, rather than skipping to the head.
+
+See [`EventSourcedOptions`](../reference/do.md#EventSourcedOptions) for the
+restore-attempt key override and parsing options. Storage values remain JSON
+text; command handlers and host recovery actions stay outside the replay fold.
