@@ -203,6 +203,18 @@ zero held bytes, without fetching. Files and text do not count. This recipe
 needs no token usage. See the [compaction reference](../reference/agent.md#DefineAgentCompaction)
 for the complete contract.
 
+To cap image-bearing tool results before a fold is needed, add
+`media: { retain: { ceiling: 8, floor: 4 } }` beside `compaction` in
+`defineAgent`. For 1 through 13 image-bearing results, the prompt shows images
+from 1,2,3,4,5,6,7,4,5,6,7,4,5 results. Each drop removes the oldest results'
+image parts. Between drops, the existing prompt prefix stays stable.
+
+Both settings must be positive integers with `floor < ceiling`. A result with
+several images occupies one window slot; compaction counts every visible image
+part and its bytes. Text and files survive, and an image-only hidden result
+renders with no `parts`. The summary uses the same selection before replacing
+visible media with text placeholders. Omit `media` to keep all images.
+
 To fold by turn count instead, set `compaction: { afterTurns: 20 }`.
 A fold of fewer than two turns is skipped. Retained images can still exceed a
 provider limit, and a failed summary proceeds with the existing transcript.
