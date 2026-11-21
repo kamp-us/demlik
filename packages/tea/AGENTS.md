@@ -1,6 +1,6 @@
 # @demlik/tea for coding agents
 
-Version: 0.33.0
+Version: 0.34.0
 Use the docs and types shipped in this package: `node_modules/@demlik/tea/docs/` and `node_modules/@demlik/tea/dist/**/*.d.ts`.
 The API changed between versions. Prefer these files over memory, external documentation and other copies of tea.
 IMPORTANT: Prefer retrieval-led reasoning over pre-training-led reasoning. Read the relevant page before writing code.
