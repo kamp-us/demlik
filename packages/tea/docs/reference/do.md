@@ -159,7 +159,14 @@ function acceptPresenceSocket<A>(
 ### `AgentHost`
 
 ```ts
-interface AgentHost<Stage, P extends string, O extends Record<P, AgentTurn>, R, Frame> {
+interface AgentHost<
+  Stage,
+  P extends string,
+  O extends Record<P, AgentTurn>,
+  R,
+  Frame,
+  M extends Tagged = AgentMachineMsg<P, O, R>,
+> {
   /**
    * The SSE hub — the route (`host.sse.open()`) AND the test seam
    * (`host.sse.register(sink)`). The host drives `hub.emit` off the semantic
@@ -202,7 +209,7 @@ interface AgentHost<Stage, P extends string, O extends Record<P, AgentTurn>, R, 
    * it would deadlock. Read how far the run got from `getState()`, `subscribe` or
    * `status()`.
    */
-  runtime(): Promise<BootedRunHandle<AgentState<Stage, P, O, R>, AgentMachineMsg<P, O, R>, AgentEvent<R>>>;
+  runtime(): Promise<BootedRunHandle<AgentState<Stage, P, O, R>, AgentMachineMsg<P, O, R> | M, AgentEvent<R>>>;
   /**
    * The agent's lifecycle status (#49) — the ONE typed channel a consumer reads
    * instead of re-deriving `run.phase` / `awaiting` by hand. Ensures the runtime
@@ -229,7 +236,8 @@ type AgentHostConfig<
   C extends Cmd = Cmd,
   U extends Sub = Sub,
   Ctx = unknown,
-> = AgentHostWiring<Stage, P, O, R, Frame, C, U, Ctx> & StoreAndOnError<AgentState<Stage, P, O, R>> & {
+  M extends Tagged = AgentMachineMsg<P, O, R>,
+> = AgentHostWiring<Stage, P, O, R, Frame, C, U, Ctx, M> & StoreAndOnError<AgentState<Stage, P, O, R>> & {
   /** The durable `Store` for the agent slice (typically `doStore(storage, parse)`). */
   readonly store: Store<AgentState<Stage, P, O, R>>;
 }
@@ -249,6 +257,7 @@ interface AgentHostWiring<
   C extends Cmd = Cmd,
   U extends Sub = Sub,
   Ctx = unknown,
+  M extends Tagged = AgentMachineMsg<P, O, R>,
 > {
   /**
    * Build the wired agent machine and the handlers it runs under — its
@@ -257,16 +266,17 @@ interface AgentHostWiring<
    * runtime — if any — was torn down. The consumer wires its per-tool interpret
    * here, and `agent.toMachine({ toolInterpret })` already returns exactly this.
    */
-  readonly buildMachine: () => Wired<AgentState<Stage, P, O, R>, AgentMachineMsg<P, O, R>, C, U, Ctx>;
+  readonly buildMachine: () => Wired<AgentState<Stage, P, O, R>, M | AgentMachineMsg<P, O, R>, C, U, Ctx>;
   /** The plain Ctx the machine threads to its interpret cells. */
   readonly ctx: Ctx;
   /** Clock injected for `autoBoot` (the host's only boot clock read). */
   readonly now?: () => number;
   /**
    * The engine's `run` — `run` from `@demlik/tea/promise`, or any engine's. The
-   * host imports no engine; it boots the machine through this.
+   * host imports no engine; it boots the machine through this. `NoInfer` keeps
+   * the generic engine from widening the messages inferred from `buildMachine`.
    */
-  readonly run: EngineRun<AgentState<Stage, P, O, R>, AgentMachineMsg<P, O, R>, C, U, Ctx, AgentEvent<R>>;
+  readonly run: EngineRun<AgentState<Stage, P, O, R>, AgentMachineMsg<P, O, R> | NoInfer<M>, C, U, Ctx, AgentEvent<R>>;
   /**
    * The run-terminality predicate (#46) — what makes `result()` first-class.
    * Defaults to the agent's own terminal phases (`done` / `failed`).
@@ -492,9 +502,10 @@ function createAgentHost<
   C extends Cmd = Cmd,
   U extends Sub = Sub,
   Ctx = unknown,
+  M extends Tagged = AgentMachineMsg<P, O, R>,
 >(
-  config: AgentHostConfig<Stage, P, O, R, Frame, C, U, Ctx>,
-): AgentHost<Stage, P, O, R, Frame>
+  config: AgentHostConfig<Stage, P, O, R, Frame, C, U, Ctx, M>,
+): AgentHost<Stage, P, O, R, Frame, M>
 ```
 
 <a id="deferredGateway"></a>

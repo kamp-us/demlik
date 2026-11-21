@@ -25,6 +25,7 @@ import type {
   Store,
   StoreAndOnError,
   Sub,
+  Tagged,
   Wired,
 } from "../index";
 import {
@@ -83,6 +84,10 @@ import { type SseHub, sseFromAgentEvents, sseHub } from "./sse";
  * `buildMachine` at the `createAgentHost` call site (never name them by hand;
  * an erased `any` here cost consumers all checking on this layer — #278).
  *
+ * `M` carries the machine's message union, including registered tools' settle
+ * messages. The wired machine must accept `AgentMachineMsg<P, O, R> | M`,
+ * so the host can always send the agent protocol. It defaults to that protocol.
+ *
  * `store` is required, and a fenced one needs an `onError` (see
  * {@link StoreAndOnError}).
  */
@@ -95,7 +100,8 @@ export type AgentHostConfig<
   C extends Cmd = Cmd,
   U extends Sub = Sub,
   Ctx = unknown,
-> = AgentHostWiring<Stage, P, O, R, Frame, C, U, Ctx> &
+  M extends Tagged = AgentMachineMsg<P, O, R>,
+> = AgentHostWiring<Stage, P, O, R, Frame, C, U, Ctx, M> &
   StoreAndOnError<AgentState<Stage, P, O, R>> & {
     /** The durable `Store` for the agent slice (typically `doStore(storage, parse)`). */
     readonly store: Store<AgentState<Stage, P, O, R>>;
@@ -111,14 +117,16 @@ export interface AgentHostWiring<
   C extends Cmd = Cmd,
   U extends Sub = Sub,
   Ctx = unknown,
+  M extends Tagged = AgentMachineMsg<P, O, R>,
 > {
   /**
    * The engine's `run` — `run` from `@demlik/tea/promise`, or any engine's. The
-   * host imports no engine; it boots the machine through this.
+   * host imports no engine; it boots the machine through this. `NoInfer` keeps
+   * the generic engine from widening the messages inferred from `buildMachine`.
    */
   readonly run: EngineRun<
     AgentState<Stage, P, O, R>,
-    AgentMachineMsg<P, O, R>,
+    AgentMachineMsg<P, O, R> | NoInfer<M>,
     C,
     U,
     Ctx,
@@ -133,7 +141,7 @@ export interface AgentHostWiring<
    */
   readonly buildMachine: () => Wired<
     AgentState<Stage, P, O, R>,
-    AgentMachineMsg<P, O, R>,
+    AgentMachineMsg<P, O, R> | M,
     C,
     U,
     Ctx
@@ -165,6 +173,7 @@ export interface AgentHostWiring<
  * @typeParam O     Per-purpose outputs (bound to {@link AgentTurn}).
  * @typeParam R     Tool result type.
  * @typeParam Frame The consumer's SSE event shape.
+ * @typeParam M The machine's messages, combined with the required agent protocol.
  */
 export interface AgentHost<
   Stage,
@@ -172,6 +181,7 @@ export interface AgentHost<
   O extends Record<P, AgentTurn>,
   R,
   Frame,
+  M extends Tagged = AgentMachineMsg<P, O, R>,
 > {
   /**
    * Get (or build) the booted runtime. Build-once-boot-once: the first call
@@ -192,7 +202,7 @@ export interface AgentHost<
   runtime(): Promise<
     BootedRunHandle<
       AgentState<Stage, P, O, R>,
-      AgentMachineMsg<P, O, R>,
+      AgentMachineMsg<P, O, R> | M,
       AgentEvent<R>
     >
   >;
@@ -304,11 +314,12 @@ export function createAgentHost<
   C extends Cmd = Cmd,
   U extends Sub = Sub,
   Ctx = unknown,
+  M extends Tagged = AgentMachineMsg<P, O, R>,
 >(
-  config: AgentHostConfig<Stage, P, O, R, Frame, C, U, Ctx>,
-): AgentHost<Stage, P, O, R, Frame> {
+  config: AgentHostConfig<Stage, P, O, R, Frame, C, U, Ctx, M>,
+): AgentHost<Stage, P, O, R, Frame, M> {
   type S = AgentState<Stage, P, O, R>;
-  type M = AgentMachineMsg<P, O, R>;
+  type Msg = AgentMachineMsg<P, O, R> | M;
   type E = AgentEvent<R>;
 
   const sse = sseHub<Frame>();
@@ -323,12 +334,12 @@ export function createAgentHost<
       s.run.phase === "failed" ||
       s.run.phase === "cancelled");
 
-  type Booted = BootedRunHandle<S, M, E>;
+  type Booted = BootedRunHandle<S, Msg, E>;
   // One build's record, made before the build runs. The handle lands the moment
   // `run` returns it, and until then the table refuses a `reset()`.
   interface Build {
     readonly abort: AbortController;
-    handle: RunHandle<S, M, E> | null;
+    handle: RunHandle<S, Msg, E> | null;
     readonly result: Deferred<Booted>;
   }
   const lifecycle = hostLifecycle<Build>();
@@ -397,13 +408,13 @@ export function createAgentHost<
     // Lifted out of `config`, `store` and `onError` no longer read as one
     // member of its union, so the options are read at `run`'s own parameter
     // type.
-    const booting: RunHandle<S, M, E> = config.run(wired.machine, {
+    const booting: RunHandle<S, Msg, E> = config.run(wired.machine, {
       ...wired,
       ...ctxArg,
       store: config.store,
       onError: config.onError,
       events: agentEvents<Stage, P, O, R>(),
-    } as RunOptions<S, M, C, U, Ctx, E>);
+    } as RunOptions<S, Msg, C, U, Ctx, E>);
     // Held from the moment `run` returns it, before any await, so `reset()`
     // can stop this run whatever its boot is waiting on. Until then the table
     // refuses a `reset()`: it came from inside `run`.
