@@ -123,15 +123,13 @@ is served.
 
 ```ts
 const stop = new AbortController();
+const cancel = () => agentCancelMsg(Date.now());
 
 const host = createAgentHost({
   run: (machine, options) =>
     run(machine, {
       ...options,
-      cancellation: {
-        signal: stop.signal,
-        cancel: () => agentCancelMsg(Date.now()),
-      },
+      cancellation: { signal: stop.signal, cancel },
     }),
   buildMachine: () => agent.toMachine<object>({ toolInterpret }),
   store: doStore(this.ctx.storage, parse),
@@ -149,11 +147,15 @@ this.ctx.blockConcurrencyWhile(async () => {
 await this.ctx.storage.put(`stop:${runId}`, true);
 stop.abort();
 
-// The pull's admission: the hands settle nothing for a stopped run.
-const admit = async () =>
-  (await this.ctx.storage.get<boolean>(`stop:${runId}`)) === true
-    ? { done: true as const, output: (await host.status()).kind }
-    : null;
+// The pull's admission: the hands settle nothing for a stopped run. It answers
+// once the cancel has folded: `dispatch` resolves when the engine has processed
+// the Msg, so the same cancel, sent behind the abort's, is that wait.
+const admit = async () => {
+  if ((await this.ctx.storage.get<boolean>(`stop:${runId}`)) !== true)
+    return null;
+  await (await host.runtime()).dispatch(cancel());
+  return { done: true as const, output: (await host.status()).kind };
+};
 
 const steps = stepHost({ storage: owner }, { ...engine, beforeResume: admit });
 ```
@@ -170,11 +172,14 @@ re-fires nothing.
 pull and a repeated post, after the token check and before it settles a posted
 result, defers it, or reads the next step. Returning `null` continues as a host
 without the hook does. Here it reads the key the stop request wrote and answers
-with the run's status, so the hands of a stopped run settle nothing. It stops
-nothing; the abort did. A pull answered before the cancel has folded reads the
-run as it stood, and a stop that arrives after the hook returned is outside it. A
-throw or a rejection from the hook propagates out of `handle`, and the same
-result posted again is still treated as new.
+with the run's status, so the hands of a stopped run settle nothing. The abort
+stops the run; the hook only waits for it. It sends the same cancel the signal
+queued, and `dispatch` resolves once the engine has processed it, so the status
+it answers with is read after the abort's cancel has folded, even while the boot
+save is still held. A cancel on a run that has ended is a no-op. A stop that
+arrives after the hook returned is outside it. A throw or a rejection from the
+hook propagates out of `handle`, and the same result posted again is still
+treated as new.
 
 Do not stop the run with `host.reset()`. It is the test and lifecycle seam, for
 one caller at a time: a second `reset()` while one is stopping the run, a

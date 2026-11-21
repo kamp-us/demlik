@@ -177,6 +177,8 @@ function storage(seed: S | null = null) {
   return { store, snapshot: () => structuredClone(value) };
 }
 
+const cancel = () => agentCancelMsg(NOW);
+
 // A host over one activation. A handler that never returns is reported at
 // teardown as intentional; any other report fails the test.
 function hostOver<C extends Cmd>(
@@ -201,7 +203,7 @@ function hostOver<C extends Cmd>(
         : run(machine, {
             ...options,
             disposeTimeoutMs: 0,
-            cancellation: { signal, cancel: () => agentCancelMsg(NOW) },
+            cancellation: { signal, cancel },
           }),
     onError: (error, context) => {
       if (context.phase !== "discard") throw error;
@@ -559,8 +561,9 @@ function activation(
 // is tea's run signal: one controller per run, in memory, handed to `run`. A wake
 // that finds `stop:<runId>` recorded aborts it before any request is served, as
 // `blockConcurrencyWhile` holds one; a stop request records the key and aborts.
-// `beforeResume` only answers the pull. `reset()` is the test's way to evict the
-// activation.
+// `beforeResume` answers a stopped run's pull once the cancel has folded: it
+// dispatches the same cancel behind the abort's, and `dispatch` resolves once the
+// engine has processed it. `reset()` is the test's way to evict the activation.
 function assemble<C extends Cmd>(
   wired: AgentWired<C>,
   r: Retained,
@@ -598,6 +601,7 @@ function assemble<C extends Cmd>(
     async beforeResume(runId) {
       order.push("check-stop");
       if ((await r.storage.get<boolean>(`stop:${runId}`)) !== true) return null;
+      await (await host.runtime()).dispatch(cancel());
       return { done: true, output: (await host.status()).kind };
     },
     async resume(_runId, posted) {
@@ -694,6 +698,11 @@ async function drive(
     request = post(outcome.body.step.callId);
   }
 }
+
+const CANCELLED: Outcome = {
+  status: 200,
+  body: { done: true, output: "cancelled" },
+};
 
 const finished: Outcome = {
   status: 200,
@@ -1386,17 +1395,24 @@ async function checkpointed(left: "running" | "suspended") {
 }
 
 // Where a stop can land against a wake, for a run left `running` or `suspended`.
-// Each row brings the wake to that point over the real deferred gateway, makes
-// the stop request, and reads the run through `stepHost.handle`. The run ends
-// cancelled; the stop request answers at once, with no tool answered and none
-// to wait for; and the activation pays for no model call and starts no tool
-// after the stop.
+// Each row brings the wake to that point over the real deferred gateway, then
+// makes the stop request and pulls at once, with whatever the row holds still
+// held. The pull answers only once the run is cancelled, and the stop request
+// answers at once, with no tool answered and none to wait for. The activation
+// pays for no model call and starts no tool after the stop. `release` lets go of
+// what the row holds.
 const WHEN = {
   "before the wake": async (w: World, r: Retained) => {
     await r.storage.put(`stop:${RUN}`, true);
     const gateway = deferredGateway<string>();
     const next = activation("model", r, w, null, false, { gateway });
-    return { next, gateway, stopped: async () => await next.host.runtime() };
+    return {
+      next,
+      gateway,
+      stop: async () => {},
+      release: noop,
+      runtime: () => next.host.runtime(),
+    };
   },
   "while the cold load is pending": async (w: World, r: Retained) => {
     const load = parked();
@@ -1411,11 +1427,9 @@ const WHEN = {
     return {
       next,
       gateway,
-      stopped: async () => {
-        await next.stop();
-        load.release();
-        return building;
-      },
+      stop: () => next.stop(),
+      release: load.release,
+      runtime: () => building,
     };
   },
   "while the boot save is held": async (w: World, r: Retained) => {
@@ -1430,11 +1444,9 @@ const WHEN = {
     return {
       next,
       gateway,
-      stopped: async () => {
-        await next.stop();
-        save.release();
-        return building;
-      },
+      stop: () => next.stop(),
+      release: save.release,
+      runtime: async () => building,
     };
   },
   "while the run waits on a tool": async (w: World, r: Retained) => {
@@ -1445,10 +1457,9 @@ const WHEN = {
     return {
       next,
       gateway,
-      stopped: async () => {
-        await next.stop();
-        return runtime;
-      },
+      stop: () => next.stop(),
+      release: noop,
+      runtime: async () => runtime,
     };
   },
 } satisfies Record<string, (w: World, r: Retained) => Promise<unknown>>;
@@ -1464,17 +1475,23 @@ describe.each(
       REPEATS,
     )("ends it cancelled with no further model call or tool start (repeat %i)", async () => {
       const { r, w } = await checkpointed(left);
-      const { next, gateway, stopped } = await WHEN[when](w, r);
+      const { next, gateway, stop, release, runtime } = await WHEN[when](w, r);
       const models = w.invocations;
       const starts = [...w.started];
 
-      const runtime = await stopped();
-      await reaches(runtime, (now) => now.kind === "cancelled");
-
-      expect(await next.handle(post("document-3"), NOW)).toEqual({
-        status: 200,
-        body: { done: true, output: "cancelled" },
+      await stop();
+      const answers: Outcome[] = [];
+      const pulled = next.handle(pull, NOW).then((outcome) => {
+        answers.push(outcome);
+        return outcome;
       });
+      await tick();
+      for (const answer of answers) expect(answer).toEqual(CANCELLED);
+      release();
+      expect(await pulled).toEqual(CANCELLED);
+      await reaches(await runtime(), (now) => now.kind === "cancelled");
+
+      expect(await next.handle(post("document-3"), NOW)).toEqual(CANCELLED);
       expect(w.invocations).toBe(models);
       expect(w.started).toEqual(starts);
       expect(status(await r.saved()).kind).toBe("cancelled");
