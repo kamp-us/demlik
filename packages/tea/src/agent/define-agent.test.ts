@@ -1687,6 +1687,53 @@ function compactableModel(turns: readonly AgentTurn[]) {
 }
 
 describe("defineAgent — the compaction knob (#149)", () => {
+  it("without media preserves the AgentPrompt summarize payload bytes", async () => {
+    const brain = compactableModel([ASK, ASK_2, ASK_3, ANSWER]);
+    const payloads: unknown[] = [];
+    await defineAgent({
+      model: brain.model,
+      tools: [search],
+      instructions: INSTRUCTIONS,
+      compaction: { afterTurns: 3, keepTurns: 1 },
+    })
+      .with({
+        interpret: {
+          compact_run: (next) => async (cmd, ctx, dispatch) => {
+            payloads.push(cmd.input.payload);
+            return next(cmd, ctx, dispatch);
+          },
+        },
+      })
+      .run(INPUT, { ctx: { kb } });
+    const expected: AgentPrompt<unknown> = {
+      instructions:
+        "Summarize the conversation so far. Preserve the facts, decisions and tool " +
+        "results a continuation would need, and drop everything else. Reply with the " +
+        "summary as your message content and request no tools.",
+      input: null,
+      conversation: {
+        turns: [ASK, ASK_2],
+        toolRecords: [ASK, ASK_2].flatMap((turn, index) =>
+          turn.toolCalls.map((call) => ({
+            call,
+            outcome: {
+              kind: "ok",
+              result: { snippet: "TEA folds the loop in one reducer." },
+            },
+            turn: index,
+          })),
+        ),
+        nudges: [],
+        turnCount: 3,
+        awaiting: { kind: "llm" },
+        contextTokens: null,
+      },
+    };
+    expect(payloads).toHaveLength(1);
+    expect(JSON.stringify(payloads[0])).toBe(JSON.stringify(expected));
+    expect(brain.summaries()).toBe(1);
+  });
+
   it("a run past the threshold folds its oldest turns into one summary", async () => {
     const brain = compactableModel([ASK, ASK_2, ANSWER]);
     const final = await defineAgent({

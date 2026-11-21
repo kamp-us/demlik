@@ -1071,7 +1071,7 @@ function compactingMachine<T extends AnyToolDef>(
   });
   const wiring = {
     tools,
-    toolInterpret: { compact_run: summarizeWith(brain) },
+    toolInterpret: { compact_run: summarizeWith(brain, tools.partsOf, media) },
   } as Parameters<typeof agent.toMachine<DefinedAgentCtx<T>, T>>[0];
   return agent.toMachine<DefinedAgentCtx<T>, T>(
     wiring,
@@ -1115,24 +1115,26 @@ function compactionPolicyOf<R>(
       isCompactionDue(knob, compactionFactsOf(conversation, partsOf, media))
         ? Math.max(0, conversation.turns.length - keep)
         : 0,
-    payloadOf: (conversation, folding): AgentMessage[] =>
-      renderProjectedPrompt(
-        {
-          instructions: SUMMARIZE_INSTRUCTION,
-          input: null,
-          conversation: {
-            ...conversation,
-            turns: conversation.turns.slice(0, folding),
-            toolRecords: conversation.toolRecords.filter(
-              (r) => r.turn < folding,
-            ),
-            nudges: conversation.nudges.filter((n) => n.turn < folding),
-          },
+    payloadOf: (conversation, folding): AgentPrompt<R> | AgentMessage[] => {
+      const prompt: AgentPrompt<R> = {
+        instructions: SUMMARIZE_INSTRUCTION,
+        input: null,
+        conversation: {
+          ...conversation,
+          turns: conversation.turns.slice(0, folding),
+          toolRecords: conversation.toolRecords.filter((r) => r.turn < folding),
+          nudges: conversation.nudges.filter((n) => n.turn < folding),
         },
+      };
+      // Preserve the durable summarize payload for agents without a media window.
+      if (media === undefined) return prompt;
+      return renderProjectedPrompt(
+        prompt,
         visibleToolRecords(conversation, partsOf, media).filter(
           ({ record }) => record.turn < folding,
         ),
-      ),
+      );
+    },
   };
 }
 
@@ -1253,10 +1255,15 @@ function mediaSourceBytes(source: MediaSource): number {
  */
 function summarizeWith(
   model: PlainModel<AgentMessage, AgentTurn>,
+  partsOf: ToolPartsOf,
+  media: DefineAgentConfig<AnyToolDef>["media"],
 ): (cmd: AgentCompactRunCmd) => Promise<AgentCompactOkMsg> {
   return async (cmd) => {
-    const payload = cmd.input.payload as readonly AgentMessage[];
-    const turn = await model(payload.map(withoutMedia));
+    const messages =
+      media === undefined
+        ? renderPrompt(cmd.input.payload as AgentPrompt<unknown>, partsOf)
+        : (cmd.input.payload as readonly AgentMessage[]);
+    const turn = await model(messages.map(withoutMedia));
     // `Date.now()` at the settle, exactly as the composed llm-call handler
     // stamps the brain call's own settle Msg.
     return {
