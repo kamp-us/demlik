@@ -3,8 +3,7 @@
 // `@ts-expect-error` MUST sit on a line that genuinely fails to type-check;
 // every undirected line is a positive case that must compile.
 //
-// The contract: a compaction budget names a turn trigger, a token trigger, or
-// both. One naming neither could never fire, so it does not compile.
+// The contract: at least one independent trigger is required.
 
 import type { DefineAgentCompaction } from "./index";
 
@@ -21,3 +20,22 @@ export const empty: DefineAgentCompaction = {};
 
 // @ts-expect-error — `keepTurns` alone says what survives a fold, never when.
 export const keepOnly: DefineAgentCompaction = { keepTurns: 2 };
+
+export const byInput: DefineAgentCompaction = { afterInputTokens: 10 };
+export const byBytes: DefineAgentCompaction = { afterImageBytes: 10 };
+export const byCount: DefineAgentCompaction = { afterImageCount: 2 };
+export const byImagesAndInput: DefineAgentCompaction = {
+  afterInputTokens: 10,
+  afterImageBytes: 100,
+  afterImageCount: 2,
+  keepTurns: 1,
+};
+
+export const byAll: DefineAgentCompaction = {
+  afterTurns: 20,
+  afterContextTokens: 100,
+  afterInputTokens: 80,
+  afterImageBytes: 1000,
+  afterImageCount: 4,
+  keepTurns: 2,
+};

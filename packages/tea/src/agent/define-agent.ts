@@ -30,7 +30,12 @@ import {
   COMPACTION_PURPOSE,
   type CompactionPolicy,
 } from "./compaction";
-import { type ContentPart, type MessageContent, omitMedia } from "./content";
+import {
+  type ContentPart,
+  type MediaSource,
+  type MessageContent,
+  omitMedia,
+} from "./content";
 import { createAgent } from "./index";
 import {
   AGENT_EVENT_TYPES,
@@ -420,9 +425,12 @@ export interface DefineAgentConfig<T extends AnyToolDef> {
    * `afterTurns: 20` folds once the conversation holds twenty turns.
    * `afterContextTokens: 8_000` folds once the last brain turn's reported
    * `inputTokens + outputTokens` reaches eight thousand; the number is yours,
-   * because tea knows no model's window size. Set both and the first one
-   * reached folds. `keepTurns` is how many of the newest turns survive the
-   * fold intact. It is not a guard: nothing fails, and the run goes on.
+   * because tea knows no model's window size. `afterInputTokens` folds when
+   * provider-reported input (cached tokens included) strictly exceeds its limit.
+   * `afterImageBytes` folds above its held payload byte limit; `afterImageCount`
+   * folds at its held image count. Each works alone; configured triggers use OR.
+   * `keepTurns` is how many of the newest turns survive the fold intact.
+   * It is not a guard: nothing fails, and the run goes on.
    *
    * Omit → NO compaction, exactly as before: the transcript grows for as long
    * as the model keeps asking for tools. Nothing is defaulted on your behalf —
@@ -451,14 +459,13 @@ export interface DefineAgentConfig<T extends AnyToolDef> {
 
 /**
  * The lid's compaction budget: when a transcript is too long, and how much of
- * it survives the fold. "Too long" is a turn count (`afterTurns`), a context
- * size (`afterContextTokens`), or both — whichever is reached first folds — and
- * a budget naming neither is a compile error, because it could never fire.
+ * it survives the fold. Turn count, last-turn context or input tokens, and
+ * held image bytes or count are independent triggers: whichever is reached
+ * first requests one fold. At least one trigger is required.
  *
- * Both triggers read durable facts, so the trigger they build is PURE — a replay
- * re-decides identically. The context size is what the PROVIDER reported on the
- * last brain turn, journaled with that turn like its `content`; no clock and no
- * token estimate enters the Model (ADR 0004).
+ * All triggers read durable facts through pure projections, so replay re-decides
+ * identically. Token readings come from the provider, with no clock, token
+ * estimate or model window registry (ADR 0004).
  *
  * This is deliberately a threshold rather than the core's `planCompaction`
  * function: a policy function is a second place a lid agent would have to learn
@@ -466,17 +473,14 @@ export interface DefineAgentConfig<T extends AnyToolDef> {
  * run that needs its own heuristic descends to `createAgent`, whose
  * `CompactionPolicy` this is built from.
  */
-export type DefineAgentCompaction =
-  | (CompactionTriggers & {
-      readonly afterTurns: number;
-      readonly afterContextTokens?: number;
-    })
-  | (CompactionTriggers & {
-      readonly afterTurns?: number;
-      readonly afterContextTokens: number;
-    });
+export type DefineAgentCompaction = {
+  [K in CompactionTriggerTag]: CompactionTriggers &
+    Required<Pick<CompactionTriggers, K>>;
+}[CompactionTriggerTag];
 
-/** The fields every {@link DefineAgentCompaction} arm shares. */
+type CompactionTriggerTag = Exclude<keyof CompactionTriggers, "keepTurns">;
+
+/** Independent thresholds and the retained tail of {@link DefineAgentCompaction}. */
 interface CompactionTriggers {
   /**
    * Fold once the conversation holds at least this many turns, counted BEFORE
@@ -495,6 +499,23 @@ interface CompactionTriggers {
    * carry `usage`; with one that never reports it, this trigger never fires.
    */
   readonly afterContextTokens?: number;
+  /**
+   * Fold when the latest brain turn's provider-reported `usage.inputTokens`
+   * strictly exceeds this number, including cached input. Output tokens and
+   * cumulative spend do not count. Missing usage and a fold clear the reading.
+   */
+  readonly afterInputTokens?: number;
+  /**
+   * Fold when held image payload bytes strictly exceed this number. Counts
+   * projected tool image parts: decoded base64 and byte views' byteLength.
+   * URLs contribute zero bytes, without fetching; files and text do not count.
+   */
+  readonly afterImageBytes?: number;
+  /**
+   * Fold when held projected tool image occurrences reach this number, including
+   * URL images and repeated images. Recomputed from surviving records after a fold.
+   */
+  readonly afterImageCount?: number;
   /**
    * How many of the NEWEST turns survive the fold intact, beside the summary.
    * Everything older becomes the summary's one synthetic head turn. Omit → `0`:
@@ -1018,7 +1039,10 @@ function compactingMachine<T extends AnyToolDef>(
     ToolResult<T>,
     ToolCmd<T>,
     AgentMessage
-  >({ ...core, compaction: compactionPolicyOf<ToolResult<T>>(knob) });
+  >({
+    ...core,
+    compaction: compactionPolicyOf<ToolResult<T>>(knob, tools.partsOf),
+  });
   const wiring = {
     tools,
     toolInterpret: { compact_run: summarizeWith(brain, tools.partsOf) },
@@ -1043,9 +1067,9 @@ const SUMMARIZE_INSTRUCTION =
  * translation from "how long a transcript I tolerate" to "how many of the oldest
  * turns to fold now".
  *
- * `planCompaction` is PURE and reads only the turn count and the reported
- * context size, so a replay re-decides identically (design D). Below every
- * threshold it returns `0` and the agent fires
+ * `planCompaction` is PURE and reads held turns, fresh provider usage and
+ * projected image payloads, so a replay re-decides identically (design D).
+ * Below every threshold it returns `0` and the agent fires
  * the brain call it was going to fire, which is what makes an unconfigured — and
  * an under-budget — run byte for byte the run it was before.
  *
@@ -1056,11 +1080,12 @@ const SUMMARIZE_INSTRUCTION =
  */
 function compactionPolicyOf<R>(
   knob: DefineAgentCompaction,
+  partsOf: ToolPartsOf,
 ): CompactionPolicy<R, AgentMessage> {
   const keep = knob.keepTurns ?? 0;
   return {
     planCompaction: (conversation) =>
-      isCompactionDue(knob, conversation)
+      isCompactionDue(knob, compactionFactsOf(conversation, partsOf))
         ? Math.max(0, conversation.turns.length - keep)
         : 0,
     payloadOf: (conversation, folding): AgentPrompt<R> => ({
@@ -1076,23 +1101,98 @@ function compactionPolicyOf<R>(
   };
 }
 
-/**
- * Whether either configured trigger has been reached. A context size of `null`
- * — no reading since the last fold, or a turn that reported none — never
- * reaches a token threshold. PURE.
- */
-function isCompactionDue<R>(
+interface CompactionFacts {
+  readonly turns: number;
+  readonly contextTokens: number | null;
+  readonly inputTokens: number | null;
+  readonly imageBytes: number;
+  readonly imageCount: number;
+}
+
+const COMPACTION_TRIGGER_RULES = {
+  afterTurns: (facts, n) => facts.turns >= n,
+  afterContextTokens: (facts, n) =>
+    facts.contextTokens !== null && facts.contextTokens >= n,
+  afterInputTokens: (facts, n) =>
+    facts.inputTokens !== null && facts.inputTokens > n,
+  afterImageBytes: (facts, n) => facts.imageBytes > n,
+  afterImageCount: (facts, n) => facts.imageCount >= n,
+} satisfies Record<
+  CompactionTriggerTag,
+  (facts: CompactionFacts, threshold: number) => boolean
+>;
+
+/** Enabled rows request one fold; the planner owns how many turns. PURE. */
+function isCompactionDue(
   knob: DefineAgentCompaction,
-  conversation: Conversation<R>,
+  facts: CompactionFacts,
 ): boolean {
-  const { afterTurns, afterContextTokens } = knob;
-  const { contextTokens } = conversation;
-  return (
-    (afterTurns !== undefined && conversation.turns.length >= afterTurns) ||
-    (afterContextTokens !== undefined &&
-      contextTokens !== null &&
-      contextTokens >= afterContextTokens)
+  return (Object.keys(COMPACTION_TRIGGER_RULES) as CompactionTriggerTag[]).some(
+    (tag) => {
+      const threshold = knob[tag];
+      return (
+        threshold !== undefined &&
+        COMPACTION_TRIGGER_RULES[tag](facts, threshold)
+      );
+    },
   );
+}
+
+/** Read only live prompt parts and usage fresh since the last fold. PURE. */
+function compactionFactsOf<R>(
+  conversation: Conversation<R>,
+  partsOf: ToolPartsOf,
+): CompactionFacts {
+  const parts = conversation.toolRecords.flatMap(
+    (record) => partsOf(record.call, record.outcome) ?? [],
+  );
+  return {
+    turns: conversation.turns.length,
+    contextTokens: conversation.contextTokens,
+    inputTokens:
+      conversation.contextTokens === null
+        ? null
+        : (conversation.turns.at(-1)?.usage?.inputTokens ?? null),
+    ...imageUsageOf(parts),
+  };
+}
+
+function imageUsageOf(
+  parts: readonly ContentPart[],
+): Pick<CompactionFacts, "imageBytes" | "imageCount"> {
+  return parts.reduce(
+    (usage, part) =>
+      part.type === "image"
+        ? {
+            imageBytes: usage.imageBytes + mediaSourceBytes(part.source),
+            imageCount: usage.imageCount + 1,
+          }
+        : usage,
+    { imageBytes: 0, imageCount: 0 },
+  );
+}
+
+type SourceBytesRules = {
+  [K in MediaSource["type"]]: (
+    source: Extract<MediaSource, { type: K }>,
+  ) => number;
+};
+const MEDIA_SOURCE_BYTES = {
+  base64: (source) => {
+    const data = source.data.replace(/\s/g, "");
+    const padding = data.endsWith("==") ? 2 : data.endsWith("=") ? 1 : 0;
+    return Math.floor((data.length * 3) / 4) - padding;
+  },
+  bytes: (source) => source.data.byteLength,
+  url: () => 0,
+} satisfies SourceBytesRules & Record<MediaSource["type"], unknown>;
+
+function mediaSourceBytes(source: MediaSource): number {
+  // The tag selects the matching source arm; the table is exhaustive.
+  const read = MEDIA_SOURCE_BYTES[source.type] as (
+    source: MediaSource,
+  ) => number;
+  return read(source);
 }
 
 /**

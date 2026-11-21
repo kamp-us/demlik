@@ -115,13 +115,17 @@ governed by the `stopWhen` passed to that boot, exactly as it uses the
 
 tea never estimates a token. It reads only the `usage` the provider reported
 for a call, so a model that reports none gets a zero total and never triggers a
-size-based fold.
+token-triggered fold.
 
 The agent keeps two readings. `state.usage` is the run's running total, every
 turn's report summed. `conversation.contextTokens` is the last turn's
-`inputTokens + outputTokens`: how full the context window is now. A token budget
+`inputTokens + outputTokens`: the last brain turn's reported size. A token budget
 is a `stopWhen` over the first, and a size-based fold is
-`compaction.afterContextTokens` over the second.
+`compaction.afterContextTokens` over the second. `afterInputTokens` instead
+reads only the latest brain turn's provider-reported input, cached tokens
+included, and fires strictly above its limit. It does not read cumulative spend
+or subtract cached tokens. Both token readings become unavailable after a fold
+or a brain turn without usage.
 
 In the example's budgeted run, eleven brain turns went out and the eleventh took
 the total past 60k, so the run ended `cancelled` there, like any `stopWhen`.
@@ -149,6 +153,20 @@ sending a bigger prompt every turn". It is not a guard, because nothing fails.
 Once the conversation is too long, the oldest turns are replaced by one
 model-written summary before the next call, so the transcript stops growing
 while the run goes on.
+
+Held images are another independent pressure on a prompt. Image thresholds
+read the same tool content projections the brain receives, so they need no
+provider token report. Byte budgets measure decoded payloads held in base64 or
+byte views; URL payload sizes remain unknown and are counted as zero bytes
+without fetching. Count budgets include every image occurrence, even repeats
+and URLs. Files, text, opaque provider data and unprojected results do not count.
+A fold drops the old image records and the next reading counts only survivors,
+with no second image inventory to keep in sync.
+
+Configured thresholds use OR and request one fold together. This is a request
+to shrink the transcript, not a provider-limit guarantee: fewer than two folding
+turns are skipped, retained tails may still be too large, and summary failures
+continue with the existing transcript.
 
 Compaction keeps the prompt payable. Only a guard ends the run.
 
