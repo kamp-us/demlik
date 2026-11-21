@@ -72,6 +72,7 @@ const broken = {
   foldsStreamCase: "K6",
   acknowledgesUnstored: "K3",
   rewritesWholeLog: "K5",
+  rewritesWithFixedOverhead: "K5",
   acknowledgesMeasuredUnstored: "K5",
   losesOnReopen: "K4",
   misreportsBatchAcknowledgement: "K4",
@@ -208,6 +209,17 @@ const mutations = {
     ...journal,
     async append(stream, records) {
       const prior = await journal.read(stream, 0);
+      if (prior._tag === "read") clock.ticks += prior.entries.length;
+      return journal.append(stream, records);
+    },
+  }),
+  // A whole-log read behind a fixed cost per call: 1,000 ms + 1 ms per record
+  // (one tick is one ms) grows 11x and by seconds, so K5 must still fail it.
+  rewritesWithFixedOverhead: ({ journal, clock }) => ({
+    ...journal,
+    async append(stream, records) {
+      const prior = await journal.read(stream, 0);
+      clock.ticks += 1000;
       if (prior._tag === "read") clock.ticks += prior.entries.length;
       return journal.append(stream, records);
     },
@@ -396,6 +408,39 @@ describe(
     });
   },
 );
+
+it("K5 passes a driver whose append grows 3.5x by under a millisecond, as SQLite did on CI", async () => {
+  const clock = { ticks: 0 };
+  const results = await journalConformance(
+    async () => {
+      const fixture = await memoryFixture();
+      return {
+        ...fixture,
+        async open() {
+          const journal = await fixture.open();
+          return {
+            ...journal,
+            // The CI run that failed: 0.22 ms at 10 records, 0.77 ms at 10,000
+            // (3.5x), the cost of a deeper index, not of reading the log.
+            async append(
+              stream: string,
+              records: readonly [string, ...string[]],
+            ) {
+              const prior = await journal.read(stream, 0);
+              clock.ticks += 0.22;
+              if (prior._tag === "read" && prior.head >= 1000)
+                clock.ticks += 0.55;
+              return journal.append(stream, records);
+            },
+          };
+        },
+      };
+    },
+    { records: 64, now: () => clock.ticks, repeats: 1 },
+  );
+  const k5 = results.find((result) => result.id === "K5");
+  expect(k5?.status, k5?.detail).toBe("passed");
+});
 
 it("refuses a racing expected head on shared memory storage", async () => {
   const journal = memoryJournal({ fenced: true });

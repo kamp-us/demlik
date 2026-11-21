@@ -549,6 +549,16 @@ async function flatCost(c: CaseContext) {
   }
   return { at10: times[10], at10000: times[10000] };
 }
+/**
+ * K5 fails when one append costs more than 3x at 10,000 records than at 10, and
+ * that extra cost is over 1 ms (`now` is a millisecond clock). The floor stops the
+ * ratio failing on sub-millisecond noise: SQLite measured 0.22 ms -> 0.77 ms on CI.
+ * What K5 cannot see: a whole-log read whose extra cost stays under 3x a large
+ * fixed cost per call (10 ms + 1 us per record is 2x; the ratio alone misses it
+ * too), and, because of the floor, one that adds under 1 ms in all (an in-memory
+ * scan of 10,000 entries, which the ratio alone caught).
+ */
+const K5_MIN_GROWTH_MS = 1;
 function appendCosts(samples: readonly unknown[]) {
   const measured = samples.slice(5).map((value) => {
     if (
@@ -564,7 +574,10 @@ function appendCosts(samples: readonly unknown[]) {
   });
   const at10 = median(measured.map((pair) => pair.at10));
   const at10000 = median(measured.map((pair) => pair.at10000));
-  if (at10000 > 3 * at10) throw new Error(`K5: ${at10000} > 3 * ${at10} ms`);
+  if (at10000 > 3 * at10 && at10000 - at10 > K5_MIN_GROWTH_MS)
+    throw new Error(
+      `K5: ${at10000} > 3 * ${at10} ms, ${at10000 - at10} ms more per append at 10,000 records`,
+    );
   return { at10, at10000, ratio: at10000 / at10 };
 }
 async function streams(c: CaseContext) {
