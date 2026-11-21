@@ -1,6 +1,6 @@
 {
   "name": "@demlik/tea",
-  "version": "0.30.0",
+  "version": "0.31.0",
   "description": "TEA-faithful state machine substrate — one package, every host adapter. Core + subs + testing, plus React, Durable Object, Chrome extension, Node, in-memory, devtools, and property-testing modules as subpaths.",
   "keywords": [
     "tea",
@@ -148,6 +148,7 @@
     "typecheck:test": "tsc --noEmit -p tsconfig.test.json",
     "typecheck:consumers": "tsc -p tsconfig.consumers.json",
     "docs:reference": "TEA_DOCS_WRITE=1 vitest run src/docs/reference/generate-reference.test.ts",
+    "docs:versioned": "pnpm run docs:reference && pnpm run docs:agents",
     "docs:reference:strays": "vitest run src/docs/reference/generate-reference.test.ts -t 'holds nothing the generator does not write'",
     "api:ratchet": "node scripts/api-ratchet.mjs",
     "docs:reference:check": "pnpm run docs:reference:strays && pnpm run docs:reference && git diff --exit-code -- docs/reference",

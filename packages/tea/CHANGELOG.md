@@ -1,5 +1,48 @@
 # @demlik/tea
 
+## 0.31.0
+
+### Minor Changes
+
+- 48aaad9: **Breaking:** `createAgentHost().runtime()` now resolves once `agent_boot` is queued, not when the work it re-fired has finished, so a run parked on a tool nobody has answered no longer holds up a `/step` engine. A caller that read a finished run right after `await host.runtime()` now waits with `subscribe` or `status()`.
+
+  **Breaking:** A host that dispatched `agent_boot` by hand beside `createAgentHost` to cover a `running` run now boots it twice. Delete that dispatch.
+
+  **Breaking:** A `createAgentHost().runtime()` call still waiting when `reset()` arrives now rejects with a `DispatchDiscardedError` instead of resolving a stopped handle, and the build resumes nothing into the stopped runtime. A boot failure that races `reset()` is still reported to `onError` under `"boot"`; only the engine's own teardown refusal is not.
+
+  **Breaking:** `createAgentHost()` refuses a call that overlaps a `reset()`. A second `reset()` while one is stopping the run, a `reset()` from inside `run()`, and a `runtime()` while a `reset()` is stopping the run now throw a `HostOverlapError`. `reset()` is a test and lifecycle seam for one caller at a time: await it before the next call. To stop a run, give `run` a `cancellation` signal and abort it.
+
+- 48aaad9: **Additive (declaration only):** Add the optional `StepEngine.beforeResume` hook on `@demlik/tea/do`. An authenticated pull can return a terminal response before inline resume or deferred enqueue. Existing engines retain their current behavior when the hook is absent.
+
+  Resume restored agents whose status is `running` as well as `suspended`, reissuing the existing outstanding model or compaction command through agent boot. Idle and terminal agents are not resumed. Document run-start deadline arming with the existing `durableTimer.rearm()` API.
+
+  `createAgentHost`: `reset()` stops the run through the handle the host holds from the moment `run` returned it, so it resolves while a boot is still pending. Add the `HostOverlapError` class on `@demlik/tea/do`, thrown for an overlapping `reset()`. Add the optional `cancellation` option to the Promise engine's `run`: a `{ signal, cancel }` pair that stops a run the host holds. Once the signal aborts, the runtime queues the cancel Msg, starts no further Cmd and stops waiting on the handler in flight. A signal that is already aborted, or aborts while the store loads, settles the cancel before `ready` resolves, so `createAgentHost` re-fires nothing for a stopped run. `run` throws when it is given the option with a store that keeps a log. `bootResume` and `autoBoot` still resolve when the resumed work finishes.
+
+  Removed: the private copy of the boot rule inside `defineAgent`. That helper was not a public declaration. `defineAgent` and the exported `agentIsResumable` now read one table, so a new status kind is a compile error there. `agentIsResumable` keeps its signature and now answers true for a `running` run.
+
+- 719a1af: **Breaking:** Remove `EventSourcedStore.append` from `@demlik/tea/do`. Pass `doEventSourcedStore(...).store` directly to `run`; remove observer-based and manual pre-dispatch append wiring. The engine supplies each applied message through `save` and awaits its event write before commands run. Removing the old wiring avoids recording messages twice.
+
+  Existing raw message logs, metadata and snapshot envelopes remain readable without rewriting. Snapshot cadence and the public event reader retain their formats.
+
+  Removed: an unexported internal workflow wrapper that fed this store from `runtime.observe`. No export reached it, and the published `./flow` names are unchanged.
+
+- 719a1af: **Breaking:** `doEventSourcedStore` refuses a write that was called before a later `load()` of the same log on the same storage. A `save` or `snapshotNow()` that reaches its write point after that `load()` rejects with `StoreConflictError` and touches no cell. Before, a save that `stop()` gave up on at `disposeTimeoutMs` and that landed late wrote over what the run that replaced it had saved, and nothing reported it. Every `load()` counts, one on the same store included, so a store that a host hands to each run it rebuilds is covered. The check runs on every run of the storage transaction callback, so a write that was rolled back and retried after a later `load()` is refused too. A save with no later `load()` behind it still lands, whether or not its run was given up on. The check is one generation per log in the isolate: nothing new is written to storage, and a log written before this change reads unchanged. `doStore` and a custom store are unchanged; a custom store that waits between being called and writing checks at its own write point, or is a fenced store.
+- **Additive (declaration only):** `run` on `@demlik/tea/promise` takes an optional `cancellation: { signal, cancel }`. Once `signal` aborts, the runtime queues `cancel`'s Msg, starts no further Cmd, and stops waiting on the tool handler in flight. A signal that is already aborted, or that aborts while the store is loading, settles the cancel before `ready`. It is not available with a store that keeps a log: `run` throws.
+
+  `defineAgent`'s `run({ signal })` now passes the same pair, so an abort while a tool handler never answers resolves the run `cancelled`, as its documentation already said. Before, it waited on that handler. On a store with `logged: true` it keeps its previous path.
+
+  The deploy guide's stop is now this signal: one `AbortController` per run, a recorded stop aborts it on wake, and `StepEngine.beforeResume` answers a stopped pull after the cancel has folded.
+
+- 719a1af: **Additive (declaration only):** `Store.save` receives an optional applied message. `FencedStore.saveFenced` receives the same optional context after the expected version. Existing implementations can continue to ignore it. Both engines await saving before starting commands; boot and final flush have no applied message.
+
+### Patch Changes
+
+- 719a1af: An agent's start for the `runId` its State already holds is now a no-op, in every phase: `start` and `agent_start` return that State and no commands. A retried or concurrent start no longer fires the first model call again, resets the run's usage, or clears a finished run's output. A start for a different `runId`, or on a State with no run, begins a run as before. `@demlik/tea/agent` is experimental, so this is a behavior correction.
+- bbfaa18: `journalConformance` K5 no longer fails a driver at random on sub-millisecond timing. It failed whenever one append cost more than 3x at 10,000 records than at 10; SQLite measured 0.22 ms and 0.77 ms on CI and failed, though it truly appends. K5 now also requires that extra cost to be over 1 ms (`now` is a millisecond clock). K5 is a timing check on two sizes, so it still cannot see a whole-log read whose cost stays under 3x a large fixed cost per call (10 ms per call plus 1 µs per record is 2x), and it no longer sees one that adds under 1 ms in all, such as an in-memory scan.
+- 719a1af: `stepHost` now takes the requests of one run in turn, after the token check, and keeps its settle ledger per run. A result posted twice, or a pull that arrives while the first post is still resuming, waits and then reads the State that resume produced, where it used to be answered from the State in the middle of it. A `resume` that throws no longer leaves its `callId` marked as settled, so the same post is tried again. Two runs no longer share a ledger, so a `callId` they share is settled in each. A request with a bad token still returns at once. The queue is private to one `stepHost` instance and does not order two hosts over the same run.
+- e76c28e: The package ships AGENTS.md (an index of jobs to docs pages for coding agents) and a CLAUDE.md that imports it; a new how-to, Ignore an answer that arrives too late.
+- 196289d: The reference shows the members of the journal and kit types (Journal, FencedJournal, JournalKitFixture and ten more) instead of an alias line.
+
 ## 0.30.0
 
 ### Minor Changes
