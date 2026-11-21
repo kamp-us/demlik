@@ -16,14 +16,27 @@ const PIXELS = Array.from({ length: 25 }, (_, i) =>
   Buffer.alloc(96_000, i + 17).toString("base64"),
 );
 
-async function recordedRun(reference: boolean) {
+function expectNoPersistedPixels(serialized: Readonly<Record<string, string>>) {
+  for (const [location, value] of Object.entries(serialized))
+    for (const [index, pixels] of PIXELS.entries())
+      expect(
+        value.includes(pixels),
+        `${location} contains capture ${index + 1}`,
+      ).toBe(false);
+}
+
+async function recordedRun(reference: boolean, leakCapture?: number) {
   let capture = 0;
   const photo = tool(
     "photograph",
     {
       description: "Photograph the current scene",
       input: z.object({}),
-      ok: z.object({ key: z.string(), byteLength: z.number() }),
+      ok: z.object({
+        key: z.string(),
+        byteLength: z.number(),
+        leakedPixels: z.string().optional(),
+      }),
       err: [],
       content: (r) => [
         {
@@ -35,10 +48,16 @@ async function recordedRun(reference: boolean) {
         },
       ],
     },
-    async (_args, _ctx: { readonly task: string }, { ok }) =>
-      ok({ key: String(capture++), byteLength: 96_000 }),
+    async (_args, _ctx: { readonly task: string }, { ok }) => {
+      const key = capture++;
+      return ok({
+        key: String(key),
+        byteLength: 96_000,
+        ...(key === leakCapture ? { leakedPixels: PIXELS[key] } : {}),
+      });
+    },
   );
-  const requests: string[] = [];
+  const modelInputs: string[] = [];
   const resolve = vi.fn(async (source: { readonly key: string }) => ({
     type: "base64" as const,
     data: PIXELS[Number(source.key)] ?? "",
@@ -56,7 +75,7 @@ async function recordedRun(reference: boolean) {
         };
       }),
     );
-    requests.push(JSON.stringify(body));
+    modelInputs.push(JSON.stringify(body));
     return {
       content: `Observation ${capture}`,
       provider: {
@@ -79,6 +98,12 @@ async function recordedRun(reference: boolean) {
   const journal = doEventSourcedStore(storage, wired.machine, ctx, {
     snapshotEvery: 10,
   });
+  const serializedStates: string[] = [];
+  const save = journal.store.save;
+  journal.store.save = async (state, meta) => {
+    serializedStates.push(JSON.stringify(state));
+    await save(state, meta);
+  };
   const host = createAgentHost({
     buildMachine: () => wired,
     ctx,
@@ -93,25 +118,38 @@ async function recordedRun(reference: boolean) {
     const final = runtime.getState();
     expect(final.run.phase).toBe("done");
     expect(capture).toBe(25);
-    expect(requests).toHaveLength(26);
-    expect(JSON.stringify(final)).not.toContain(PIXELS[0]);
-    for (const value of backing.values())
-      expect(String(value)).not.toContain(PIXELS[0]);
+    expect(modelInputs).toHaveLength(26);
+    const serialized = {
+      state: JSON.stringify(serializedStates),
+      journal: JSON.stringify([...backing]),
+    };
     await runtime.stop();
-    return { requests, resolve };
+    return { modelInputs, resolve, serialized };
   } finally {
     await host.reset();
   }
 }
 
-it("keeps 25 append-only image turns out of durable state while preserving every provider request byte", async () => {
+it("keeps 25 append-only image turns out of durable state while preserving serialized resolved model-input projections", async () => {
   const inline = await recordedRun(false);
   const referenced = await recordedRun(true);
-  expect(referenced.requests).toEqual(inline.requests);
+  expectNoPersistedPixels(inline.serialized);
+  expectNoPersistedPixels(referenced.serialized);
+  expect(referenced.modelInputs).toEqual(inline.modelInputs);
   expect(inline.resolve).not.toHaveBeenCalled();
   expect(referenced.resolve).toHaveBeenCalledTimes(325);
-  for (const request of referenced.requests.slice(1))
+  for (const request of referenced.modelInputs.slice(1))
     expect(request).toContain("signature-0");
+});
+
+it("detects a deliberately leaked final capture in state and journal independently", async () => {
+  const leaked = await recordedRun(true, 24);
+  for (const location of ["state", "journal"] as const) {
+    expect(leaked.serialized[location]).toContain(PIXELS[24]);
+    expect(() =>
+      expectNoPersistedPixels({ [location]: leaked.serialized[location] }),
+    ).toThrow(`${location} contains capture 25`);
+  }
 });
 
 describe("resolveMediaParts", () => {

@@ -312,7 +312,9 @@ case "tool":
           tool_use_id: m.callId,
           // A tool that declared `content` sends parts the model should
           // see (a screenshot, say); every other outcome goes as data.
-          content: m.parts?.map(toBlock) ?? JSON.stringify(m.outcome),
+          content: m.parts === undefined
+            ? JSON.stringify(m.outcome)
+            : (await resolveMediaParts(m.parts, readMedia)).map(toBlock),
           is_error: m.outcome.kind !== "ok",
         },
       ],

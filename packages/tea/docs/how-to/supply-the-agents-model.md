@@ -73,12 +73,13 @@ subpath for it.
 
 ```ts
 // model.ts
-import type {
-  AgentMessage,
-  AgentTurn,
-  AnyToolDef,
-  ContentPart,
-  MediaSource,
+import {
+  resolveMediaParts,
+  type AgentMessage,
+  type AgentTurn,
+  type AnyToolDef,
+  type ResolvedContentPart,
+  type ResolvedMediaSource,
 } from "@demlik/tea/agent";
 import OpenAI from "openai";
 import type {
@@ -106,6 +107,7 @@ export interface Endpoint {
 export function openaiCompatible(
   endpoint: Endpoint,
   tools: readonly AnyToolDef[],
+  readMedia: Parameters<typeof resolveMediaParts>[1],
 ) {
   const client = new OpenAI({
     baseURL: endpoint.baseURL,
@@ -115,7 +117,7 @@ export function openaiCompatible(
   return async (messages: readonly AgentMessage[]): Promise<AgentTurn> => {
     const completion = await client.chat.completions.create({
       model: endpoint.model,
-      messages: await toParams(messages),
+      messages: await toParams(messages, readMedia),
       tools: declared,
     });
     const message = completion.choices[0]?.message;
@@ -184,6 +186,7 @@ function argsOf(json: string): Record<string, unknown> {
 /** tea's transcript as chat-completions messages. */
 async function toParams(
   messages: readonly AgentMessage[],
+  readMedia: Parameters<typeof resolveMediaParts>[1],
 ): Promise<ChatCompletionMessageParam[]> {
   const sent: ChatCompletionMessageParam[] = [];
   // A tool message carries text only, so the parts a tool shows the model (a
@@ -205,7 +208,9 @@ async function toParams(
           content:
             typeof m.content === "string"
               ? m.content
-              : await Promise.all(m.content.map(toPart)),
+              : await Promise.all(
+                  (await resolveMediaParts(m.content, readMedia)).map(toPart),
+                ),
         });
         break;
       case "assistant":
@@ -234,7 +239,12 @@ async function toParams(
               ? JSON.stringify(m.outcome)
               : `The ${m.name} result is in the next user message.`,
         });
-        shown = [...shown, ...(await Promise.all((m.parts ?? []).map(toPart)))];
+        shown = [
+          ...shown,
+          ...(await Promise.all(
+            (await resolveMediaParts(m.parts ?? [], readMedia)).map(toPart),
+          )),
+        ];
         break;
     }
   }
@@ -243,7 +253,9 @@ async function toParams(
 }
 
 /** One tea content part as a chat-completions part. */
-async function toPart(p: ContentPart): Promise<ChatCompletionContentPart> {
+async function toPart(
+  p: ResolvedContentPart,
+): Promise<ChatCompletionContentPart> {
   switch (p.type) {
     case "text":
       return { type: "text", text: p.text };
@@ -262,7 +274,9 @@ async function toPart(p: ContentPart): Promise<ChatCompletionContentPart> {
 }
 
 /** A linked file's bytes, fetched; a source that already holds them, as it is. */
-async function downloaded(source: MediaSource): Promise<MediaSource> {
+async function downloaded(
+  source: ResolvedMediaSource,
+): Promise<ResolvedMediaSource> {
   if (source.type !== "url") return source;
   const response = await fetch(source.url);
   if (!response.ok)
@@ -271,12 +285,8 @@ async function downloaded(source: MediaSource): Promise<MediaSource> {
 }
 
 /** A part's source as chat completions reads it: a link, or a data URL. */
-function urlOf(mediaType: string, source: MediaSource): string {
+function urlOf(mediaType: string, source: ResolvedMediaSource): string {
   switch (source.type) {
-    case "reference":
-      throw new Error(
-        "Resolve media references before building the provider request.",
-      );
     case "url":
       return source.url;
     case "base64":
@@ -287,7 +297,7 @@ function urlOf(mediaType: string, source: MediaSource): string {
 }
 ```
 
-Four details in this adapter carry the contract:
+These details in the adapter carry the contract:
 
 - `turnOf` maps the endpoint's `tool_calls` to `toolCalls`, parsing each call's
   JSON `arguments` into `args`. A refusal becomes the turn's `content`, so a run
@@ -296,6 +306,9 @@ Four details in this adapter carry the contract:
   name goes into `provider`. OpenRouter returns `reasoning_details` there, for
   example, and wants it back on the next request. `toParams` spreads the stored
   value back into the assistant message, so it replays unchanged.
+- `readMedia` is the host's blob reader. The wiring below treats keys as local
+  file paths; an object-store host supplies its own reader. `resolveMediaParts`
+  reads references before `toPart` converts them, without changing stored parts.
 - A `user` message's content may be a list of parts, and a `tool` message may
   carry `parts` the tool wants the model to see, such as a screenshot. `toPart`
   sends images as `image_url` and files as `file`, with bytes as a data URL.
@@ -328,6 +341,7 @@ import type { ModelStream } from "@demlik/tea/agent";
 export function openaiCompatibleStreaming(
   endpoint: Endpoint,
   tools: readonly AnyToolDef[],
+  readMedia: Parameters<typeof resolveMediaParts>[1],
 ) {
   const client = new OpenAI({
     baseURL: endpoint.baseURL,
@@ -340,7 +354,7 @@ export function openaiCompatibleStreaming(
   ): Promise<AgentTurn> => {
     const stream = await client.chat.completions.create({
       model: endpoint.model,
-      messages: await toParams(messages),
+      messages: await toParams(messages, readMedia),
       tools: declared,
       stream: true,
     });
@@ -389,6 +403,7 @@ OpenAI-compatible endpoint, the model id is `<provider>/<model>`:
 
 ```ts
 // agent.ts
+import { readFile as readBlob } from "node:fs/promises";
 import { defineAgent } from "@demlik/tea/agent";
 
 const { CF_ACCOUNT_ID, CF_GATEWAY_ID, CF_AIG_TOKEN = "" } = process.env;
@@ -401,6 +416,7 @@ export const agent = defineAgent({
       model: "openai/gpt-5",
     },
     [note],
+    async ({ key }) => ({ type: "bytes", data: await readBlob(key) }),
   ),
   tools: [note],
   instructions:

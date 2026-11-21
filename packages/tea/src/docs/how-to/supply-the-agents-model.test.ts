@@ -43,12 +43,13 @@ const tokenWasSet = vi.hoisted(() => {
 
 // #region model
 // model.ts
-import type {
-  AgentMessage,
-  AgentTurn,
-  AnyToolDef,
-  ContentPart,
-  MediaSource,
+import {
+  resolveMediaParts,
+  type AgentMessage,
+  type AgentTurn,
+  type AnyToolDef,
+  type ResolvedContentPart,
+  type ResolvedMediaSource,
 } from "@demlik/tea/agent";
 import OpenAI from "openai";
 import type {
@@ -76,6 +77,7 @@ export interface Endpoint {
 export function openaiCompatible(
   endpoint: Endpoint,
   tools: readonly AnyToolDef[],
+  readMedia: Parameters<typeof resolveMediaParts>[1],
 ) {
   const client = new OpenAI({
     baseURL: endpoint.baseURL,
@@ -85,7 +87,7 @@ export function openaiCompatible(
   return async (messages: readonly AgentMessage[]): Promise<AgentTurn> => {
     const completion = await client.chat.completions.create({
       model: endpoint.model,
-      messages: await toParams(messages),
+      messages: await toParams(messages, readMedia),
       tools: declared,
     });
     const message = completion.choices[0]?.message;
@@ -154,6 +156,7 @@ function argsOf(json: string): Record<string, unknown> {
 /** tea's transcript as chat-completions messages. */
 async function toParams(
   messages: readonly AgentMessage[],
+  readMedia: Parameters<typeof resolveMediaParts>[1],
 ): Promise<ChatCompletionMessageParam[]> {
   const sent: ChatCompletionMessageParam[] = [];
   // A tool message carries text only, so the parts a tool shows the model (a
@@ -175,7 +178,9 @@ async function toParams(
           content:
             typeof m.content === "string"
               ? m.content
-              : await Promise.all(m.content.map(toPart)),
+              : await Promise.all(
+                  (await resolveMediaParts(m.content, readMedia)).map(toPart),
+                ),
         });
         break;
       case "assistant":
@@ -204,7 +209,12 @@ async function toParams(
               ? JSON.stringify(m.outcome)
               : `The ${m.name} result is in the next user message.`,
         });
-        shown = [...shown, ...(await Promise.all((m.parts ?? []).map(toPart)))];
+        shown = [
+          ...shown,
+          ...(await Promise.all(
+            (await resolveMediaParts(m.parts ?? [], readMedia)).map(toPart),
+          )),
+        ];
         break;
     }
   }
@@ -213,7 +223,9 @@ async function toParams(
 }
 
 /** One tea content part as a chat-completions part. */
-async function toPart(p: ContentPart): Promise<ChatCompletionContentPart> {
+async function toPart(
+  p: ResolvedContentPart,
+): Promise<ChatCompletionContentPart> {
   switch (p.type) {
     case "text":
       return { type: "text", text: p.text };
@@ -232,7 +244,9 @@ async function toPart(p: ContentPart): Promise<ChatCompletionContentPart> {
 }
 
 /** A linked file's bytes, fetched; a source that already holds them, as it is. */
-async function downloaded(source: MediaSource): Promise<MediaSource> {
+async function downloaded(
+  source: ResolvedMediaSource,
+): Promise<ResolvedMediaSource> {
   if (source.type !== "url") return source;
   const response = await fetch(source.url);
   if (!response.ok)
@@ -241,12 +255,8 @@ async function downloaded(source: MediaSource): Promise<MediaSource> {
 }
 
 /** A part's source as chat completions reads it: a link, or a data URL. */
-function urlOf(mediaType: string, source: MediaSource): string {
+function urlOf(mediaType: string, source: ResolvedMediaSource): string {
   switch (source.type) {
-    case "reference":
-      throw new Error(
-        "Resolve media references before building the provider request.",
-      );
     case "url":
       return source.url;
     case "base64":
@@ -269,6 +279,7 @@ import type { ModelStream } from "@demlik/tea/agent";
 export function openaiCompatibleStreaming(
   endpoint: Endpoint,
   tools: readonly AnyToolDef[],
+  readMedia: Parameters<typeof resolveMediaParts>[1],
 ) {
   const client = new OpenAI({
     baseURL: endpoint.baseURL,
@@ -281,7 +292,7 @@ export function openaiCompatibleStreaming(
   ): Promise<AgentTurn> => {
     const stream = await client.chat.completions.create({
       model: endpoint.model,
-      messages: await toParams(messages),
+      messages: await toParams(messages, readMedia),
       tools: declared,
       stream: true,
     });
@@ -328,6 +339,7 @@ const note = tool(
 
 // #region wire
 // agent.ts
+import { readFile as readBlob } from "node:fs/promises";
 import { defineAgent } from "@demlik/tea/agent";
 
 const { CF_ACCOUNT_ID, CF_GATEWAY_ID, CF_AIG_TOKEN = "" } = process.env;
@@ -340,6 +352,7 @@ export const agent = defineAgent({
       model: "openai/gpt-5",
     },
     [note],
+    async ({ key }) => ({ type: "bytes", data: await readBlob(key) }),
   ),
   tools: [note],
   instructions:
@@ -354,6 +367,10 @@ const self = fileURLToPath(import.meta.url);
 
 /** A region of this file, which the page shows as one block. */
 const region = (name: string) => regionMirror(self, name);
+
+const noMedia: Parameters<typeof resolveMediaParts>[1] = async () => {
+  throw new Error("This fixture has no blobs");
+};
 
 const ENDPOINT: Endpoint = {
   baseURL: "https://gateway.test/compat",
@@ -450,9 +467,11 @@ describe("docs/how-to/supply-the-agents-model.md (#337)", () => {
         }),
       ),
     );
-    const turn = await openaiCompatible(ENDPOINT, [note])([
-      { role: "user", content: "go" },
-    ]);
+    const turn = await openaiCompatible(
+      ENDPOINT,
+      [note],
+      noMedia,
+    )([{ role: "user", content: "go" }]);
     expect(turn).toEqual({
       content: "",
       toolCalls: [{ callId: "call_1", name: "note", args: { text: "red" } }],
@@ -467,6 +486,7 @@ describe("docs/how-to/supply-the-agents-model.md (#337)", () => {
     const turn = await openaiCompatible(
       ENDPOINT,
       [],
+      noMedia,
     )([{ role: "user", content: "go" }]);
     expect(turn).toEqual({ content: "done", toolCalls: [] });
   });
@@ -475,7 +495,11 @@ describe("docs/how-to/supply-the-agents-model.md (#337)", () => {
     const bodies = stubFetch(() =>
       json(completion({ role: "assistant", content: "ok", refusal: null })),
     );
-    await openaiCompatible(ENDPOINT, [note])([
+    await openaiCompatible(
+      ENDPOINT,
+      [note],
+      noMedia,
+    )([
       { role: "system", content: "be brief" },
       { role: "user", content: "go" },
       {
@@ -532,7 +556,11 @@ describe("docs/how-to/supply-the-agents-model.md (#337)", () => {
       mediaType: "image/png",
       source: { type: "base64" as const, data: "AAAA" },
     };
-    await openaiCompatible(ENDPOINT, [note])([
+    await openaiCompatible(
+      ENDPOINT,
+      [note],
+      noMedia,
+    )([
       {
         role: "user",
         content: [
@@ -599,6 +627,77 @@ describe("docs/how-to/supply-the-agents-model.md (#337)", () => {
 
   // #356 — `file_data` takes data, so a linked file is fetched and sent as its
   // bytes; an image's link is one `image_url` reads, so it goes as it is.
+  it("resolves host-owned image and file references before sending the request", async () => {
+    const bodies = stubFetch(() =>
+      json(completion({ role: "assistant", content: "ok", refusal: null })),
+    );
+    const read = vi.fn(async ({ key }: { readonly key: string }) => ({
+      type: "bytes" as const,
+      data: new TextEncoder().encode(key),
+    }));
+    const messages: AgentMessage[] = [
+      {
+        role: "user",
+        content: [
+          {
+            type: "image",
+            mediaType: "image/png",
+            source: { type: "reference", key: "image", byteLength: 5 },
+          },
+        ],
+      },
+      {
+        role: "tool",
+        callId: "file-1",
+        name: "document",
+        outcome: { kind: "ok", result: {} },
+        parts: [
+          {
+            type: "file",
+            mediaType: "application/pdf",
+            source: { type: "reference", key: "file", byteLength: 4 },
+          },
+        ],
+      },
+    ];
+    const before = JSON.stringify(messages);
+    await openaiCompatible(ENDPOINT, [], read)(messages);
+    expect(read.mock.calls).toEqual([
+      [{ type: "reference", key: "image", byteLength: 5 }],
+      [{ type: "reference", key: "file", byteLength: 4 }],
+    ]);
+    expect(bodies).toEqual([
+      expect.objectContaining({
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "image_url",
+                image_url: { url: "data:image/png;base64,aW1hZ2U=" },
+              },
+            ],
+          },
+          {
+            role: "tool",
+            tool_call_id: "file-1",
+            content: "The document result is in the next user message.",
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "file",
+                file: { file_data: "data:application/pdf;base64,ZmlsZQ==" },
+              },
+            ],
+          },
+        ],
+      }),
+    ]);
+    expect(JSON.stringify(messages)).toBe(before);
+  });
+
   it("fetches a URL-sourced file and sends its bytes as file_data, never the link", async () => {
     const pdf = "https://files.test/report.pdf";
     const png = "https://files.test/chart.png";
@@ -610,6 +709,7 @@ describe("docs/how-to/supply-the-agents-model.md (#337)", () => {
     await openaiCompatible(
       ENDPOINT,
       [],
+      noMedia,
     )([
       {
         role: "user",
@@ -666,10 +766,13 @@ describe("docs/how-to/supply-the-agents-model.md (#337)", () => {
       ]),
     );
     const deltas: string[] = [];
-    const turn = await openaiCompatibleStreaming(ENDPOINT, [note])(
-      [{ role: "user", content: "go" }],
-      { onChunk: (c) => deltas.push(c.text) },
-    );
+    const turn = await openaiCompatibleStreaming(
+      ENDPOINT,
+      [note],
+      noMedia,
+    )([{ role: "user", content: "go" }], {
+      onChunk: (c) => deltas.push(c.text),
+    });
     expect(deltas).toEqual(["Sav", "ing."]);
     expect(turn).toEqual({
       content: "Saving.",
