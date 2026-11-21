@@ -551,11 +551,11 @@ async function flatCost(c: CaseContext) {
 }
 /**
  * K5 fails when one append costs more than 3x at 10,000 records than at 10, and
- * that extra cost is over 1 ms (`now` is a millisecond clock). The ratio alone
- * failed SQLite on CI at 0.22 ms -> 0.77 ms, which is index depth and timer noise,
- * not a whole-log read. A driver that reads or rewrites its whole log pays per
- * record, so at 10,000 records its extra cost is milliseconds, even under a slow
- * fixed cost per call: 1 ms + 1 us per record costs 11 ms, 10 ms more.
+ * that extra cost is over 1 ms (`now` is a millisecond clock). The floor stops the
+ * ratio failing on sub-millisecond noise: SQLite measured 0.22 ms -> 0.77 ms on CI.
+ * What K5 cannot see, with or without the floor: a whole-log read whose extra cost
+ * stays under 3x a large fixed cost per call (10 ms + 1 us per record is 2x), or
+ * under 1 ms in all (an in-memory scan of 10,000 entries).
  */
 const K5_MIN_GROWTH_MS = 1;
 function appendCosts(samples: readonly unknown[]) {

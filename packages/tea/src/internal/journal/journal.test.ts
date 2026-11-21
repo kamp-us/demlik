@@ -213,8 +213,8 @@ const mutations = {
       return journal.append(stream, records);
     },
   }),
-  // A slow fixed cost per call (a network round trip) hides a whole-log read from
-  // a two-size ratio: 1,000 ticks + 1 per record grows only 11x at 10,000 records.
+  // A whole-log read behind a fixed cost per call: 1,000 ms + 1 ms per record
+  // (one tick is one ms) grows 11x and by seconds, so K5 must still fail it.
   rewritesWithFixedOverhead: ({ journal, clock }) => ({
     ...journal,
     async append(stream, records) {
