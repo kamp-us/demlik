@@ -2,4 +2,4 @@
 "@demlik/tea": patch
 ---
 
-`journalConformance` K5 no longer fails a driver whose append cost grows with its index depth. It allowed 3× more cost per append at 10,000 records than at 10, which an indexed table such as SQLite can exceed (3.5× measured on CI) while still truly appending; it now allows 30×. A driver that rewrites or re-reads its whole log pays about 1,000× and still fails K5.
+`journalConformance` K5 no longer fails a driver at random on sub-millisecond timing. It failed when one append cost more than 3x at 10,000 records than at 10; SQLite measured 0.22 ms and 0.77 ms on CI and failed, though it truly appends. K5 now also requires that extra cost to be over 1 ms (`now` is a millisecond clock). A driver that reads or rewrites its whole log still fails, including one behind a slow fixed cost per call: 1 ms plus 1 us per record costs 10 ms more at 10,000 records.

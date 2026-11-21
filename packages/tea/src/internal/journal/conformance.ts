@@ -550,13 +550,14 @@ async function flatCost(c: CaseContext) {
   return { at10: times[10], at10000: times[10000] };
 }
 /**
- * How much more one append may cost at 10,000 records than at 10. A driver that
- * rewrites or re-reads its whole log pays about 1,000x (10,000 / 10); an indexed
- * table or a B-tree pays its depth, a few x (SQLite measured 3.5x on CI). 30x sits
- * between the two with room on both sides, so K5 catches a linear append and not
- * a logarithmic one, nor sub-millisecond timer noise.
+ * K5 fails when one append costs more than 3x at 10,000 records than at 10, and
+ * that extra cost is over 1 ms (`now` is a millisecond clock). The ratio alone
+ * failed SQLite on CI at 0.22 ms -> 0.77 ms, which is index depth and timer noise,
+ * not a whole-log read. A driver that reads or rewrites its whole log pays per
+ * record, so at 10,000 records its extra cost is milliseconds, even under a slow
+ * fixed cost per call: 1 ms + 1 us per record costs 11 ms, 10 ms more.
  */
-const K5_MAX_GROWTH = 30;
+const K5_MIN_GROWTH_MS = 1;
 function appendCosts(samples: readonly unknown[]) {
   const measured = samples.slice(5).map((value) => {
     if (
@@ -572,8 +573,10 @@ function appendCosts(samples: readonly unknown[]) {
   });
   const at10 = median(measured.map((pair) => pair.at10));
   const at10000 = median(measured.map((pair) => pair.at10000));
-  if (at10000 > K5_MAX_GROWTH * at10)
-    throw new Error(`K5: ${at10000} > ${K5_MAX_GROWTH} * ${at10} ms`);
+  if (at10000 > 3 * at10 && at10000 - at10 > K5_MIN_GROWTH_MS)
+    throw new Error(
+      `K5: ${at10000} > 3 * ${at10} ms, ${at10000 - at10} ms more per append at 10,000 records`,
+    );
   return { at10, at10000, ratio: at10000 / at10 };
 }
 async function streams(c: CaseContext) {

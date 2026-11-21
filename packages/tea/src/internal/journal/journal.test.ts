@@ -72,6 +72,7 @@ const broken = {
   foldsStreamCase: "K6",
   acknowledgesUnstored: "K3",
   rewritesWholeLog: "K5",
+  rewritesWithFixedOverhead: "K5",
   acknowledgesMeasuredUnstored: "K5",
   losesOnReopen: "K4",
   misreportsBatchAcknowledgement: "K4",
@@ -208,6 +209,17 @@ const mutations = {
     ...journal,
     async append(stream, records) {
       const prior = await journal.read(stream, 0);
+      if (prior._tag === "read") clock.ticks += prior.entries.length;
+      return journal.append(stream, records);
+    },
+  }),
+  // A slow fixed cost per call (a network round trip) hides a whole-log read from
+  // a two-size ratio: 1,000 ticks + 1 per record grows only 11x at 10,000 records.
+  rewritesWithFixedOverhead: ({ journal, clock }) => ({
+    ...journal,
+    async append(stream, records) {
+      const prior = await journal.read(stream, 0);
+      clock.ticks += 1000;
       if (prior._tag === "read") clock.ticks += prior.entries.length;
       return journal.append(stream, records);
     },
@@ -397,7 +409,7 @@ describe(
   },
 );
 
-it("K5 passes a driver whose append cost grows with its index depth, as SQLite's does", async () => {
+it("K5 passes a driver whose append grows 3.5x by under a millisecond, as SQLite did on CI", async () => {
   const clock = { ticks: 0 };
   const results = await journalConformance(
     async () => {
@@ -408,15 +420,16 @@ it("K5 passes a driver whose append cost grows with its index depth, as SQLite's
           const journal = await fixture.open();
           return {
             ...journal,
-            // Four times the cost once the stream is deep, as a B-tree pays its depth:
-            // a linear rewrite would pay a thousand times.
+            // The CI run that failed: 0.22 ms at 10 records, 0.77 ms at 10,000
+            // (3.5x), the cost of a deeper index, not of reading the log.
             async append(
               stream: string,
               records: readonly [string, ...string[]],
             ) {
               const prior = await journal.read(stream, 0);
-              clock.ticks += 1;
-              if (prior._tag === "read" && prior.head >= 1000) clock.ticks += 3;
+              clock.ticks += 0.22;
+              if (prior._tag === "read" && prior.head >= 1000)
+                clock.ticks += 0.55;
               return journal.append(stream, records);
             },
           };
@@ -425,7 +438,8 @@ it("K5 passes a driver whose append cost grows with its index depth, as SQLite's
     },
     { records: 64, now: () => clock.ticks, repeats: 1 },
   );
-  expect(results.find((result) => result.id === "K5")?.status).toBe("passed");
+  const k5 = results.find((result) => result.id === "K5");
+  expect(k5?.status, k5?.detail).toBe("passed");
 });
 
 it("refuses a racing expected head on shared memory storage", async () => {
