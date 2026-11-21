@@ -1429,6 +1429,21 @@ interface DefineAgentConfig<T extends AnyToolDef> {
    * Model.
    */
   readonly maxTurns?: number;
+  /**
+   * Retain images from the newest tool results in a stepwise window. Both
+   * numbers must be positive integers, with `floor < ceiling`.
+   * With ceiling 8 and floor 4, 1..13 image-bearing results show
+   * 1,2,3,4,5,6,7,4,5,6,7,4,5 results' images. Between drops the
+   * existing prompt prefix stays stable. Text and files always survive.
+   * Compaction image thresholds count only these visible image parts.
+   * Omit to render and count every projected image.
+   */
+  readonly media?: {
+    readonly retain: {
+      readonly ceiling: number;
+      readonly floor: number;
+    };
+  };
   /** The brain — either DefinedAgentModel shape. */
   readonly model: DefinedAgentModel;
   /**
@@ -2089,6 +2104,12 @@ type PlainModel<Msg, T = unknown> = (messages: readonly Msg[]) => Promise<T>
 function renderPrompt(
   prompt: AgentPrompt<unknown>,
   partsOf?: ToolPartsOf,
+  media?: {
+    readonly retain: {
+      readonly ceiling: number;
+      readonly floor: number;
+    };
+  },
 ): AgentMessage[]
 ```
 

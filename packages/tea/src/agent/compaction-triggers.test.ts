@@ -5,6 +5,7 @@ import {
   type AgentTurn,
   type ContentPart,
   type DefineAgentCompaction,
+  type DefineAgentConfig,
   defineAgent,
   IMAGE_OMITTED,
   tool,
@@ -32,6 +33,10 @@ async function scenario(
   turns: readonly AgentTurn[] = [turn(1), turn(2)],
   batches: readonly (readonly ContentPart[])[] = [[pixel], [pixel]],
   imageBudget = Number.POSITIVE_INFINITY,
+  media?: {
+    readonly retain: { readonly ceiling: number; readonly floor: number };
+  },
+  checkAtEnd = false,
 ) {
   let batch = 0;
   const capture = tool(
@@ -83,7 +88,21 @@ async function scenario(
     model,
     tools: [capture],
     instructions: INSTRUCTIONS,
-    compaction,
+    compaction: checkAtEnd
+      ? {
+          get afterImageBytes() {
+            return brain.length >= turns.length
+              ? (compaction.afterImageBytes ?? Infinity)
+              : Infinity;
+          },
+          get afterImageCount() {
+            return brain.length >= turns.length
+              ? (compaction.afterImageCount ?? Infinity)
+              : Infinity;
+          },
+        }
+      : compaction,
+    media,
   });
   const result = await agent.run("inspect", { ctx: { task: "inspect" } });
   expect(result.output?.content).toBe("done");
@@ -230,5 +249,184 @@ describe("independent compaction thresholds through defineAgent.run", () => {
     expect(summaries).toHaveLength(1);
     expect(brain[4]?.filter((m) => m.role === "assistant")).toHaveLength(3);
     expect(brain[5]?.filter((m) => m.role === "assistant")).toHaveLength(4);
+  });
+});
+
+describe("tool image retention", () => {
+  const media = { retain: { ceiling: 8, floor: 4 } };
+  const imagesOf = (messages: readonly AgentMessage[]) =>
+    messages
+      .flatMap((m) => (m.role === "tool" ? (m.parts ?? []) : []))
+      .filter((p) => p.type === "image");
+
+  it.each([
+    [7, [1, 2, 3, 4, 5, 6, 7]],
+    [8, [5, 6, 7, 8]],
+  ] as const)("keeps each result occurrence when one immutable call is reused across %i turns", async (n, expected) => {
+    const reused = Object.freeze(call(1));
+    const turns = Array.from({ length: n }, () => ({
+      content: "look",
+      toolCalls: [reused],
+    }));
+    const batches = Array.from({ length: n }, (_, i) => [
+      image({ type: "bytes", data: new Uint8Array(i + 1) }),
+    ]);
+    const { brain } = await scenario(BELOW, turns, batches, Infinity, media);
+    expect(
+      imagesOf(brain[n] ?? []).map((p) =>
+        p.source.type === "bytes" ? p.source.data.byteLength : null,
+      ),
+    ).toEqual(expected);
+    const bytes = expected.reduce((sum, size) => sum + size, 0);
+    for (const [knob, folds] of [
+      [{ afterImageBytes: bytes }, 0],
+      [{ afterImageBytes: bytes - 1 }, 1],
+      [{ afterImageCount: expected.length + 1 }, 0],
+      [{ afterImageCount: expected.length }, 1],
+    ] as const) {
+      const result = await scenario(
+        knob,
+        turns,
+        batches,
+        Infinity,
+        media,
+        true,
+      );
+      expect(result.summaries).toHaveLength(folds);
+    }
+  });
+
+  it("drops old image records in steps, preserving text and the prefix between drops", async () => {
+    const { brain } = await scenario(
+      BELOW,
+      Array.from({ length: 13 }, (_, i) => turn(i + 1)),
+      Array.from({ length: 13 }, () => [
+        { type: "text", text: "caption" },
+        pixel,
+      ]),
+      Infinity,
+      media,
+    );
+    expect(brain.slice(1).map((messages) => imagesOf(messages).length)).toEqual(
+      [1, 2, 3, 4, 5, 6, 7, 4, 5, 6, 7, 4, 5],
+    );
+    expect(brain[9]?.slice(0, brain[8]?.length)).toEqual(brain[8]);
+    expect(brain[8]?.filter((m) => m.role === "tool")[0]?.parts).toEqual([
+      { type: "text", text: "caption" },
+    ]);
+  });
+});
+
+describe("visible image compaction facts", () => {
+  const media = { retain: { ceiling: 8, floor: 4 } };
+  const emptyTurn: AgentTurn = { content: "context", toolCalls: [] };
+
+  it.each(
+    Array.from({ length: 21 }, (_, n) => n),
+  )("agrees with rendered count and bytes at %i records", async (n) => {
+    const turns = [
+      turn(-2),
+      turn(-1),
+      ...Array.from({ length: n }, (_, i) => turn(i)),
+    ];
+    const batches = [
+      [],
+      [],
+      ...Array.from({ length: n }, (_, i) => [
+        image({ type: "bytes", data: new Uint8Array(i + 1) }),
+        url,
+      ]),
+    ];
+    const baseline = await scenario(BELOW, turns, batches, Infinity, media);
+    const parts =
+      baseline.brain
+        .at(-1)
+        ?.flatMap((m) => (m.role === "tool" ? (m.parts ?? []) : [])) ?? [];
+    const images = parts.filter((p) => p.type === "image");
+    const bytes = images.reduce(
+      (sum, p) =>
+        sum + (p.source.type === "bytes" ? p.source.data.byteLength : 0),
+      0,
+    );
+    // Arm only at the final transcript, so earlier sawtooth peaks cannot fold.
+    for (const [knob, expected] of [
+      [{ afterImageCount: images.length + 1 }, 0],
+      [{ afterImageCount: images.length }, 1],
+      [{ afterImageBytes: bytes }, 0],
+      ...(bytes > 0 ? [[{ afterImageBytes: bytes - 1 }, 1] as const] : []),
+    ] as const) {
+      const result = await scenario(
+        knob,
+        turns,
+        batches,
+        Infinity,
+        media,
+        true,
+      );
+      expect(result.summaries).toHaveLength(expected);
+    }
+  });
+
+  it("folds once at screenshot 19 when the visible bytes first exceed 6 MiB", async () => {
+    const mib = 1024 * 1024;
+    const batches = Array.from({ length: 19 }, (_, i) => [
+      image({ type: "bytes", data: new Uint8Array(i < 13 ? mib / 2 : mib) }),
+    ]);
+    const result = await scenario(
+      { afterImageBytes: 6 * mib },
+      Array.from({ length: 19 }, (_, i) => turn(i)),
+      batches,
+      Infinity,
+      media,
+    );
+    expect(result.summaries).toHaveLength(1);
+    expect(result.brain[18]?.filter((m) => m.role === "tool")).toHaveLength(18);
+    expect(result.brain[19]?.filter((m) => m.role === "tool")).toHaveLength(0);
+    expect(
+      result.summaries[0]
+        ?.flatMap((m) => (m.role === "tool" ? (m.parts ?? []) : []))
+        .filter((p) => p.type === "text" && p.text === IMAGE_OMITTED),
+    ).toHaveLength(7);
+    expect(
+      result.summaries[0]?.filter((m) => m.role === "tool")[0],
+    ).not.toHaveProperty("parts");
+  });
+
+  it("selects the window before slicing the summary from the retained tail", async () => {
+    const result = await scenario(
+      { afterTurns: 8, keepTurns: 4 },
+      Array.from({ length: 8 }, (_, i) => turn(i)),
+      Array.from({ length: 8 }, () => [pixel]),
+      Infinity,
+      media,
+    );
+    expect(result.summaries).toHaveLength(1);
+    const foldedTools = result.summaries[0]?.filter((m) => m.role === "tool");
+    expect(foldedTools).toHaveLength(4);
+    expect(foldedTools?.every((m) => m.parts === undefined)).toBe(true);
+    expect(
+      result.brain[8]
+        ?.flatMap((m) => (m.role === "tool" ? (m.parts ?? []) : []))
+        .filter((p) => p.type === "image"),
+    ).toHaveLength(4);
+  });
+
+  it.each([
+    { ceiling: 8, floor: 8 },
+    { ceiling: 8, floor: 9 },
+    { ceiling: 8, floor: 0 },
+    { ceiling: 8.5, floor: 4 },
+    { ceiling: Infinity, floor: 4 },
+    { ceiling: 8, floor: NaN },
+  ])("refuses invalid retention: %j", (retain) => {
+    const config: DefineAgentConfig<never> = {
+      model: async () => emptyTurn,
+      tools: [],
+      instructions: INSTRUCTIONS,
+      media: { retain },
+    };
+    expect(() => defineAgent(config)).toThrow(
+      "positive integers with floor < ceiling",
+    );
   });
 });

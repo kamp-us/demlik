@@ -70,6 +70,7 @@ import {
   status,
   type ToolCall,
   type ToolOutcome,
+  type ToolRecord,
   type TurnChunk,
 } from "./types";
 
@@ -438,6 +439,18 @@ export interface DefineAgentConfig<T extends AnyToolDef> {
    */
   readonly compaction?: DefineAgentCompaction;
   /**
+   * Retain images from the newest tool results in a stepwise window. Both
+   * numbers must be positive integers, with `floor < ceiling`.
+   * With ceiling 8 and floor 4, 1..13 image-bearing results show
+   * 1,2,3,4,5,6,7,4,5,6,7,4,5 results' images. Between drops the
+   * existing prompt prefix stays stable. Text and files always survive.
+   * Compaction image thresholds count only these visible image parts.
+   * Omit to render and count every projected image.
+   */
+  readonly media?: {
+    readonly retain: { readonly ceiling: number; readonly floor: number };
+  };
+  /**
    * How many of ONE turn's tool calls a transition launches at once. At the
    * default `1` a turn's calls go out one at a time, each waiting for the last
    * to settle; raise it and up to that many are launched together, so they are
@@ -739,6 +752,18 @@ export interface DefinedAgent<T extends AnyToolDef> {
 export function defineAgent<T extends AnyToolDef>(
   config: DefineAgentConfig<T>,
 ): DefinedAgent<T> {
+  const retain = config.media?.retain;
+  if (
+    retain !== undefined &&
+    (!Number.isInteger(retain.ceiling) ||
+      !Number.isInteger(retain.floor) ||
+      retain.floor <= 0 ||
+      retain.floor >= retain.ceiling)
+  ) {
+    throw new Error(
+      "defineAgent media.retain requires positive integers with floor < ceiling",
+    );
+  }
   const router = toolRouter(config.tools);
   const { onToolError } = config;
   // No hook → the router is the plain one, so an omitted `onToolError` leaves
@@ -788,7 +813,7 @@ function definedAgent<T extends AnyToolDef>(
       model: brain,
       instructions: config.instructions,
       payloadOf: promptOf,
-      loadMessages: messagesOf(tools.partsOf),
+      loadMessages: messagesOf(tools.partsOf, config.media),
       toolOf: tools.toolOf,
       // The per-tool timeout / retry knob (#117). The lid grows no option for
       // it: the policy is declared on the `tool()` that needs it, and the
@@ -838,7 +863,7 @@ function definedAgent<T extends AnyToolDef>(
           >(core).toMachine<DefinedAgentCtx<T>, T>({
             tools,
           }) as unknown as DefinedAgentWired<T>)
-        : compactingMachine(core, compaction, brain, tools);
+        : compactingMachine(core, compaction, brain, tools, config.media);
     return overlaid(agent, overlays);
   };
   // The public way down carries no chunk sink: `machine(input)` is handed to
@@ -1031,6 +1056,7 @@ function compactingMachine<T extends AnyToolDef>(
   knob: DefineAgentCompaction,
   brain: PlainModel<AgentMessage, AgentTurn>,
   tools: ToolRouter<T>,
+  media: DefineAgentConfig<T>["media"],
 ): DefinedAgentWired<T> {
   const agent = createAgent<
     string,
@@ -1041,11 +1067,11 @@ function compactingMachine<T extends AnyToolDef>(
     AgentMessage
   >({
     ...core,
-    compaction: compactionPolicyOf<ToolResult<T>>(knob, tools.partsOf),
+    compaction: compactionPolicyOf<ToolResult<T>>(knob, tools.partsOf, media),
   });
   const wiring = {
     tools,
-    toolInterpret: { compact_run: summarizeWith(brain, tools.partsOf) },
+    toolInterpret: { compact_run: summarizeWith(brain, tools.partsOf, media) },
   } as Parameters<typeof agent.toMachine<DefinedAgentCtx<T>, T>>[0];
   return agent.toMachine<DefinedAgentCtx<T>, T>(
     wiring,
@@ -1081,23 +1107,34 @@ const SUMMARIZE_INSTRUCTION =
 function compactionPolicyOf<R>(
   knob: DefineAgentCompaction,
   partsOf: ToolPartsOf,
+  media: DefineAgentConfig<AnyToolDef>["media"],
 ): CompactionPolicy<R, AgentMessage> {
   const keep = knob.keepTurns ?? 0;
   return {
     planCompaction: (conversation) =>
-      isCompactionDue(knob, compactionFactsOf(conversation, partsOf))
+      isCompactionDue(knob, compactionFactsOf(conversation, partsOf, media))
         ? Math.max(0, conversation.turns.length - keep)
         : 0,
-    payloadOf: (conversation, folding): AgentPrompt<R> => ({
-      instructions: SUMMARIZE_INSTRUCTION,
-      input: null,
-      conversation: {
-        ...conversation,
-        turns: conversation.turns.slice(0, folding),
-        toolRecords: conversation.toolRecords.filter((r) => r.turn < folding),
-        nudges: conversation.nudges.filter((n) => n.turn < folding),
-      },
-    }),
+    payloadOf: (conversation, folding): AgentPrompt<R> | AgentMessage[] => {
+      const prompt: AgentPrompt<R> = {
+        instructions: SUMMARIZE_INSTRUCTION,
+        input: null,
+        conversation: {
+          ...conversation,
+          turns: conversation.turns.slice(0, folding),
+          toolRecords: conversation.toolRecords.filter((r) => r.turn < folding),
+          nudges: conversation.nudges.filter((n) => n.turn < folding),
+        },
+      };
+      // Preserve the durable summarize payload for agents without a media window.
+      if (media === undefined) return prompt;
+      return renderProjectedPrompt(
+        prompt,
+        visibleToolRecords(conversation, partsOf, media).filter(
+          ({ record }) => record.turn < folding,
+        ),
+      );
+    },
   };
 }
 
@@ -1142,9 +1179,10 @@ function isCompactionDue(
 function compactionFactsOf<R>(
   conversation: Conversation<R>,
   partsOf: ToolPartsOf,
+  media: DefineAgentConfig<AnyToolDef>["media"],
 ): CompactionFacts {
-  const parts = conversation.toolRecords.flatMap(
-    (record) => partsOf(record.call, record.outcome) ?? [],
+  const parts = visibleToolRecords(conversation, partsOf, media).flatMap(
+    (record) => record.parts ?? [],
   );
   return {
     turns: conversation.turns.length,
@@ -1218,10 +1256,14 @@ function mediaSourceBytes(source: MediaSource): number {
 function summarizeWith(
   model: PlainModel<AgentMessage, AgentTurn>,
   partsOf: ToolPartsOf,
+  media: DefineAgentConfig<AnyToolDef>["media"],
 ): (cmd: AgentCompactRunCmd) => Promise<AgentCompactOkMsg> {
   return async (cmd) => {
-    const payload = cmd.input.payload as AgentPrompt<unknown>;
-    const turn = await model(renderPrompt(payload, partsOf).map(withoutMedia));
+    const messages =
+      media === undefined
+        ? renderPrompt(cmd.input.payload as AgentPrompt<unknown>, partsOf)
+        : (cmd.input.payload as readonly AgentMessage[]);
+    const turn = await model(messages.map(withoutMedia));
     // `Date.now()` at the settle, exactly as the composed llm-call handler
     // stamps the brain call's own settle Msg.
     return {
@@ -1253,9 +1295,10 @@ function promptOf<R>(
  */
 function messagesOf(
   partsOf: ToolPartsOf,
+  media: DefineAgentConfig<AnyToolDef>["media"],
 ): MessageLoader<LidPurpose, AgentMessage> {
   return async (call: LlmCall<LidPurpose>) =>
-    renderPrompt(call.payload as AgentPrompt<unknown>, partsOf);
+    renderPrompt(call.payload as AgentPrompt<unknown>, partsOf, media);
 }
 
 /**
@@ -1267,6 +1310,23 @@ function messagesOf(
 export function renderPrompt(
   prompt: AgentPrompt<unknown>,
   partsOf: ToolPartsOf = noParts,
+  media?: DefineAgentConfig<AnyToolDef>["media"],
+): AgentMessage[] {
+  return renderProjectedPrompt(
+    prompt,
+    visibleToolRecords(prompt.conversation, partsOf, media),
+  );
+}
+
+interface ProjectedToolRecord<R> {
+  readonly record: ToolRecord<R>;
+  readonly parts: readonly ContentPart[] | null;
+}
+
+/** Render each projected occurrence beside its producing turn. PURE. */
+function renderProjectedPrompt(
+  prompt: AgentPrompt<unknown>,
+  records: readonly ProjectedToolRecord<unknown>[],
 ): AgentMessage[] {
   const head: AgentMessage[] = [];
   if (prompt.instructions !== null) {
@@ -1275,19 +1335,18 @@ export function renderPrompt(
   if (prompt.input !== null) {
     head.push({ role: "user", content: prompt.input });
   }
-  const { turns, toolRecords, nudges = [] } = prompt.conversation;
+  const { turns, nudges = [] } = prompt.conversation;
   const transcript = turns.flatMap<AgentMessage>((turn, i) => [
     assistantOf(turn),
-    ...toolRecords
-      .filter((r) => r.turn === i)
-      .map<AgentMessage>((r) => {
+    ...records
+      .filter(({ record }) => record.turn === i)
+      .map<AgentMessage>(({ record: r, parts }) => {
         const message = {
           role: "tool",
           callId: r.call.callId,
           name: r.call.name,
           outcome: r.outcome,
         } as const;
-        const parts = partsOf(r.call, r.outcome);
         return parts === null ? message : { ...message, parts };
       }),
     ...nudges
@@ -1295,6 +1354,36 @@ export function renderPrompt(
       .map<AgentMessage>((n) => ({ role: "user", content: n.text })),
   ]);
   return [...head, ...transcript];
+}
+
+/** Project once in prompt order; the same window feeds rendering and facts. PURE. */
+function visibleToolRecords<R>(
+  conversation: Conversation<R>,
+  partsOf: ToolPartsOf,
+  media: DefineAgentConfig<AnyToolDef>["media"],
+): readonly ProjectedToolRecord<R>[] {
+  const projected = conversation.turns.flatMap((_, turn) =>
+    conversation.toolRecords
+      .filter((record) => record.turn === turn)
+      .map((record) => ({
+        record,
+        parts: partsOf(record.call, record.outcome),
+      })),
+  );
+  if (media === undefined) return projected;
+  const imageIndices = projected.flatMap(({ parts }, index) =>
+    parts?.some((p) => p.type === "image") ? [index] : [],
+  );
+  const { ceiling, floor } = media.retain;
+  const n = imageIndices.length;
+  const visible = n < ceiling ? n : floor + ((n - ceiling) % (ceiling - floor));
+  const lastHidden = imageIndices[n - visible - 1] ?? -1;
+  return projected.map((entry, index) => {
+    if (index > lastHidden || !entry.parts?.some((p) => p.type === "image"))
+      return entry;
+    const parts = entry.parts.filter((p) => p.type !== "image");
+    return { ...entry, parts: parts.length === 0 ? null : parts };
+  });
 }
 
 /** The `partsOf` a render with no router gets: no call shows the model parts. PURE. */
