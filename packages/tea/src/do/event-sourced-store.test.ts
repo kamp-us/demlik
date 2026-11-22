@@ -30,7 +30,11 @@ import {
 } from "../index";
 import { arbMsg, arbMsgSequence, type MsgArbitraryTable } from "../pbt";
 import { run } from "../promise";
-import { doEventSourcedStore, RestoreInterruptedError } from "./index";
+import {
+  doEventLogReader,
+  doEventSourcedStore,
+  RestoreInterruptedError,
+} from "./index";
 
 // ── A tiny counter machine with a few Msg variants. ─────────────────────────
 // State folds every Msg, so an arbitrary Msg sequence exercises a real fold
@@ -1512,3 +1516,220 @@ describe("doEventSourcedStore — logs written by the observer-fed store", () =>
     expect(backing).toEqual(old);
   });
 });
+
+// ── doEventLogReader: a host reads the log without loading the agent. ───────
+
+// Wrap a storage so every method a reader calls is recorded by name. A read
+// that wrote, deleted, transacted or set an alarm would show up here.
+function recording(storage: DurableObjectStorage) {
+  const calls: string[] = [];
+  const watched = new Proxy(storage, {
+    get(target, prop, receiver) {
+      const value = Reflect.get(target, prop, receiver);
+      if (typeof value !== "function") return value;
+      return (...args: unknown[]) => {
+        calls.push(String(prop));
+        return value.apply(target, args);
+      };
+    },
+  });
+  // The fake has no alarm API; give the reader one to call if it ever tried.
+  const setAlarm = vi.fn();
+  Object.assign(storage, { setAlarm, getAlarm: vi.fn(), deleteAlarm: vi.fn() });
+  return { storage: watched, calls, setAlarm };
+}
+
+describe("doEventLogReader — a host reads an agent's history without waking it", () => {
+  it("reads head, committed sequence and a range of a multi-page log a live run wrote, twice, writing nothing", async () => {
+    const backing = new Map<string, string>();
+    const msgs: Msg[] = Array.from({ length: 300 }, (_, i) =>
+      i % 3 === 0 ? { _tag: "note", text: `n${i}` } : { _tag: "inc", by: i },
+    );
+    await liveRun(backing, msgs, 100);
+    const before = new Map(backing);
+    const { storage, calls, setAlarm } = recording(
+      fakeStorage(backing).storage,
+    );
+    const reader = doEventLogReader<Msg>(storage);
+
+    for (let pass = 0; pass < 2; pass++) {
+      expect(await reader.readHead()).toEqual({ lastSeq: 300, snapshot: true });
+      expect(await reader.readCommittedSeq()).toBe(300);
+      const all = await collect(reader.readEvents());
+      expect(all.map((e) => e.seq)).toEqual(
+        Array.from({ length: 300 }, (_, i) => i + 1),
+      );
+      expect(all.map((e) => e.event)).toEqual(msgs);
+      const window = await collect(
+        reader.readEvents({ fromSeq: 120, toSeq: 260 }),
+      );
+      expect(window.map((e) => e.seq)).toEqual(
+        Array.from({ length: 141 }, (_, i) => i + 120),
+      );
+      expect(window.map((e) => e.event)).toEqual(msgs.slice(119, 260));
+    }
+
+    expect(new Set(calls)).toEqual(new Set(["get", "list"]));
+    expect(setAlarm).not.toHaveBeenCalled();
+    expect(backing).toEqual(before);
+    expect(backing.has("@@es/meta/restore-attempt")).toBe(false);
+  });
+
+  it("reads the head fresh on every call", async () => {
+    const backing = new Map<string, string>();
+    const { storage } = fakeStorage(backing);
+    const get = vi.spyOn(storage, "get");
+    const reader = doEventLogReader<Msg>(storage);
+    expect(await reader.readHead()).toBeNull();
+    await liveRun(backing, sampleMsgs, 100);
+    expect(await reader.readHead()).toEqual({ lastSeq: 5, snapshot: false });
+    expect(await reader.readCommittedSeq()).toBe(5);
+    for (const call of get.mock.calls) {
+      expect(call[1]).toEqual({ noCache: true });
+    }
+  });
+
+  it("absent history reads as null, a committed sequence of 0 and no events", async () => {
+    const { storage, calls } = recording(fakeStorage(new Map()).storage);
+    const reader = doEventLogReader<Msg>(storage);
+    expect(await reader.readHead()).toBeNull();
+    expect(await reader.readCommittedSeq()).toBe(0);
+    expect(await collect(reader.readEvents())).toEqual([]);
+    expect(await collect(reader.readStoredEvents())).toEqual([]);
+    expect(new Set(calls)).toEqual(new Set(["get", "list"]));
+  });
+
+  it("a snapshot with no meta cell reads as a head at sequence 0", async () => {
+    const backing = new Map([
+      [
+        "@@es/snapshot",
+        '{"seq":0,"state":{"_tag":"counting","count":0,"log":[]}}',
+      ],
+    ]);
+    const reader = doEventLogReader<Msg>(fakeStorage(backing).storage);
+    expect(await reader.readHead()).toEqual({ lastSeq: 0, snapshot: true });
+  });
+
+  it("a range returns only its events", async () => {
+    const backing = new Map<string, string>();
+    await liveRun(backing, sampleMsgs, 2);
+    const reader = doEventLogReader<Msg>(fakeStorage(backing).storage);
+    expect(await collect(reader.readEvents({ fromSeq: 2, toSeq: 4 }))).toEqual([
+      { seq: 2, event: sampleMsgs[1] },
+      { seq: 3, event: sampleMsgs[2] },
+      { seq: 4, event: sampleMsgs[3] },
+    ]);
+    expect(await collect(reader.readEvents({ fromSeq: 6 }))).toEqual([]);
+    expect(await collect(reader.readEvents({ fromSeq: 4, toSeq: 3 }))).toEqual(
+      [],
+    );
+    const stored = await collect(
+      reader.readStoredEvents({ fromSeq: 3, toSeq: 5 }),
+    );
+    expect(stored.map((s) => s.seq)).toEqual([3, 4, 5]);
+  });
+
+  it("reads a log longer than one page completely, in pages of at most 128 rows with noCache", async () => {
+    const backing = new Map<string, string>();
+    for (let seq = 1; seq <= 300; seq++) {
+      backing.set(rowKey(seq), JSON.stringify({ _tag: "inc", by: seq }));
+    }
+    backing.set("@@es/meta", '{"lastSeq":300}');
+    const { storage } = fakeStorage(backing);
+    const list = vi.spyOn(storage, "list");
+    const reader = doEventLogReader<Msg>(storage);
+    const all = await collect(reader.readEvents());
+    expect(all.map((e) => e.seq)).toEqual(
+      Array.from({ length: 300 }, (_, i) => i + 1),
+    );
+    expect(list.mock.calls.length).toBe(3);
+    for (const [options] of list.mock.calls) {
+      expect(options?.limit).toBeLessThanOrEqual(128);
+      expect(options?.noCache).toBe(true);
+    }
+  });
+
+  it("caps stored cells read with limit, across pages", async () => {
+    const backing = new Map<string, string>();
+    for (let seq = 1; seq <= 300; seq++) {
+      backing.set(rowKey(seq), JSON.stringify({ _tag: "inc", by: seq }));
+    }
+    const { storage } = fakeStorage(backing);
+    const list = vi.spyOn(storage, "list");
+    const reader = doEventLogReader<Msg>(storage);
+    const capped = await collect(
+      reader.readStoredEvents({ fromSeq: 10, limit: 200 }),
+    );
+    expect(capped.map((s) => s.seq)).toEqual(
+      Array.from({ length: 200 }, (_, i) => i + 10),
+    );
+    expect(list.mock.calls.map(([o]) => o?.limit)).toEqual([128, 72]);
+    expect(await collect(reader.readStoredEvents({ limit: 0 }))).toEqual([]);
+  });
+
+  it("reports undecodable cells as refused instead of throwing", async () => {
+    const backing = new Map<string, unknown>([
+      [rowKey(1), JSON.stringify({ _tag: "inc", by: 1 })],
+      [rowKey(2), "{broken"],
+      [rowKey(3), JSON.stringify({ type: "inc" })],
+      [rowKey(4), 42],
+      [`${EVENT_PREFIX}not-a-seq`, "{}"],
+    ]);
+    const reader = doEventLogReader<Msg>(fakeDoStorageAny(backing));
+    const stored = await collect(reader.readStoredEvents());
+    expect(
+      stored.map((s) =>
+        s._tag === "decoded" ? ["decoded", s.seq] : [s.reason, s.seq],
+      ),
+    ).toEqual([
+      ["decoded", 1],
+      ["json", 2],
+      ["event", 3],
+      ["not-text", 4],
+      ["key", null],
+    ]);
+    expect(stored[0]?.serializedBytes).toBe(
+      new TextEncoder().encode(JSON.stringify({ _tag: "inc", by: 1 }))
+        .byteLength,
+    );
+    expect(stored[3]?.serializedBytes).toBe(0);
+    await expect(collect(reader.readEvents())).rejects.toBeInstanceOf(
+      SyntaxError,
+    );
+  });
+
+  it("reads under custom keys and a host parseEvent", async () => {
+    const keys = { snapshot: "a/snap", meta: "a/meta", eventPrefix: "a/evt/" };
+    const backing = new Map<string, string>([
+      ["a/meta", '{"lastSeq":2}'],
+      [rowKey(1, "a/evt/"), JSON.stringify({ type: "inc", by: 1 })],
+      [rowKey(2, "a/evt/"), JSON.stringify({ type: "reset" })],
+    ]);
+    const reader = doEventLogReader<Msg>(fakeStorage(backing).storage, {
+      keys,
+      parseEvent: (raw) => {
+        const { type, ...rest } = raw as { type: string };
+        return { _tag: type, ...rest } as Msg;
+      },
+    });
+    expect(await reader.readHead()).toEqual({ lastSeq: 2, snapshot: false });
+    expect(await collect(reader.readEvents())).toEqual([
+      { seq: 1, event: { _tag: "inc", by: 1 } },
+      { seq: 2, event: { _tag: "reset" } },
+    ]);
+  });
+
+  it("refuses an invalid committed sequence", async () => {
+    const reader = doEventLogReader<Msg>(
+      fakeStorage(new Map([["@@es/meta", '{"lastSeq":-1}']])).storage,
+    );
+    await expect(reader.readHead()).rejects.toThrow(/committed sequence/);
+    await expect(reader.readCommittedSeq()).rejects.toThrow(
+      /committed sequence/,
+    );
+  });
+});
+
+function fakeDoStorageAny(backing: Map<string, unknown>): DurableObjectStorage {
+  return fakeStorage<unknown>(backing).storage;
+}

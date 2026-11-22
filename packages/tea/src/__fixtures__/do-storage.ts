@@ -38,8 +38,18 @@ export function fakeDoStorage<V = string>(
   };
 
   const cells = {
-    async get<T = unknown>(key: string): Promise<T | undefined> {
-      return structuredClone(backing.get(key)) as T | undefined;
+    // One key reads its value; an array of keys reads a Map of the present ones.
+    async get<T = unknown>(
+      key: string | readonly string[],
+    ): Promise<T | undefined | Map<string, T>> {
+      if (typeof key === "string") {
+        return structuredClone(backing.get(key)) as T | undefined;
+      }
+      const found = new Map<string, T>();
+      for (const k of key) {
+        if (backing.has(k)) found.set(k, structuredClone(backing.get(k)) as T);
+      }
+      return found;
     },
     async put<T>(
       keyOrEntries: string | Record<string, T>,

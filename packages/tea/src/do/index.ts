@@ -75,14 +75,22 @@ export {
 // (snapshot-only, byte-for-byte unchanged); `doEventSourcedStore` is the
 // explicit alternative that appends each Msg to a log, snapshots periodically,
 // and rebuilds state by folding the log on the latest snapshot at activation.
+// `doEventLogReader` reads that same log read-only, without loading the agent.
 export {
+  doEventLogReader,
   doEventSourcedStore,
+  type EventLogHead,
   type EventLogRange,
+  type EventLogReader,
+  type EventLogReaderOptions,
   type EventSourcedOptions,
   type EventSourcedStore,
   type PersistedEvent,
   type RestoreAttempt,
   RestoreInterruptedError,
+  type StoredEvent,
+  type StoredEventRange,
+  type StoredEventRefusal,
 } from "./event-sourced-store";
 // The minimum-viable DO HOST for a `createAgent` runtime — the deferred-tool
 // gateway, auto-boot, WS accept + inbound bridge, runtime→SSE plumbing, the

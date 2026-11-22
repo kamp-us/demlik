@@ -130,9 +130,44 @@ function nextRestoreAttempt(
 }
 
 /**
+ * How a log's events are decoded and where its cells live: the part of
+ * {@link EventSourcedOptions} that {@link doEventLogReader} also takes. A
+ * reader given the writing store's options finds and decodes the cells that
+ * store wrote, so an `EventSourcedOptions` value is accepted as is.
+ */
+export interface EventLogReaderOptions<M> {
+  /**
+   * Boundary parse for a persisted EVENT (one logged `Msg`). Returns the `M` on
+   * a recognized shape; returning `null` DROPS the event from replay (use for a
+   * removed Msg variant). Must NOT throw. Default accepts any object carrying a
+   * string `_tag` as `M`.
+   */
+  readonly parseEvent?: (raw: unknown) => M | null;
+  /** Cell-key overrides (rarely needed; for coexisting actors in one DO). */
+  readonly keys?: {
+    readonly snapshot?: string;
+    readonly meta?: string;
+    readonly eventPrefix?: string;
+  };
+}
+
+/** The log's cell keys, each override falling back to its default. */
+function logKeys(keys: EventLogReaderOptions<never>["keys"] = {}): {
+  readonly snapshot: string;
+  readonly meta: string;
+  readonly eventPrefix: string;
+} {
+  return {
+    snapshot: keys.snapshot ?? DEFAULT_SNAPSHOT_KEY,
+    meta: keys.meta ?? DEFAULT_META_KEY,
+    eventPrefix: keys.eventPrefix ?? DEFAULT_EVENT_PREFIX,
+  };
+}
+
+/**
  * Options for {@link doEventSourcedStore}.
  */
-export interface EventSourcedOptions<S, M> {
+export interface EventSourcedOptions<S, M> extends EventLogReaderOptions<M> {
   /**
    * Take a snapshot every N appended events (count-based retention, mirrors
    * Akka `RetentionCriteria.snapshotEvery`). A snapshot bounds how many events
@@ -156,13 +191,6 @@ export interface EventSourcedOptions<S, M> {
    */
   readonly parse?: (raw: unknown) => S | null;
   /**
-   * Boundary parse for a persisted EVENT (one logged `Msg`). Returns the `M` on
-   * a recognized shape; returning `null` DROPS the event from replay (use for a
-   * removed Msg variant). Must NOT throw. Default accepts any object carrying a
-   * string `_tag` as `M`.
-   */
-  readonly parseEvent?: (raw: unknown) => M | null;
-  /**
    * End-of-recovery hook (recovery.md `RecoveryCompleted`). Fires EXACTLY ONCE
    * per activation, after the fold completes, carrying the recovered state —
    * even when the log was empty (fresh actor). It may fire again on a later
@@ -171,11 +199,7 @@ export interface EventSourcedOptions<S, M> {
    * replay).
    */
   readonly onReady?: (state: S) => void;
-  /** Cell-key overrides (rarely needed; for coexisting actors in one DO). */
-  readonly keys?: {
-    readonly snapshot?: string;
-    readonly meta?: string;
-    readonly eventPrefix?: string;
+  readonly keys?: EventLogReaderOptions<M>["keys"] & {
     /** Restore-attempt cell. Default: `${meta}/restore-attempt`. */
     readonly restoreAttempt?: string;
   };
@@ -303,6 +327,225 @@ const defaultParseEvent = <M>(raw: unknown): M | null =>
     : null;
 
 /**
+ * What a log's head cells say: the highest committed append sequence (0 when
+ * no event was committed) and whether a snapshot cell is present.
+ */
+export interface EventLogHead {
+  readonly lastSeq: number;
+  readonly snapshot: boolean;
+}
+
+/**
+ * An {@link EventLogRange} with an optional cap on how many stored cells are
+ * read. `limit` counts every cell in range, refused ones included.
+ */
+export interface StoredEventRange extends EventLogRange {
+  readonly limit?: number;
+}
+
+/**
+ * Why a stored event cell did not decode: its value is not text (`not-text`),
+ * its key carries no integer sequence (`key`), its text is not JSON (`json`),
+ * or `parseEvent` returned `null` (`event`).
+ */
+export type StoredEventRefusal = "not-text" | "key" | "json" | "event";
+
+/**
+ * One stored event cell as read, decoded or refused. `serializedBytes` is the
+ * UTF-8 size of the stored text (0 when the value is not text).
+ */
+export type StoredEvent<M> =
+  | {
+      readonly _tag: "decoded";
+      readonly key: string;
+      readonly seq: number;
+      readonly serializedBytes: number;
+      readonly event: M;
+    }
+  | {
+      readonly _tag: "refused";
+      readonly key: string;
+      readonly seq: number | null;
+      readonly serializedBytes: number;
+      readonly reason: StoredEventRefusal;
+      readonly cause?: unknown;
+    };
+
+/**
+ * A read-only view over a durable agent's event log, built by
+ * {@link doEventLogReader}. Every call reads storage afresh; none writes a
+ * cell, sets an alarm, or loads the agent.
+ */
+export interface EventLogReader<M> {
+  /** The log's head, or `null` when neither meta nor snapshot cell exists. */
+  readHead(): Promise<EventLogHead | null>;
+  /** Highest committed append sequence from the meta cell, or 0 when absent. */
+  readCommittedSeq(): Promise<number>;
+  /**
+   * Every stored event cell in range, in `seq` order, with refusals reported
+   * instead of thrown. Read in pages of at most 128 rows.
+   */
+  readStoredEvents(range?: StoredEventRange): AsyncIterable<StoredEvent<M>>;
+  /**
+   * Decoded events in range, in `seq` order, exactly as the store's
+   * {@link EventSourcedStore.readEvents}: events `parseEvent` refuses are
+   * dropped, and text that is not JSON throws.
+   */
+  readEvents(range?: EventLogRange): AsyncIterable<PersistedEvent<M>>;
+}
+
+const utf8 = new TextEncoder();
+
+function parseMeta(raw: string): number {
+  const meta = JSON.parse(raw) as MetaCell;
+  if (!Number.isSafeInteger(meta.lastSeq) || meta.lastSeq < 0) {
+    throw new Error("@demlik/tea/do: invalid committed sequence");
+  }
+  return meta.lastSeq;
+}
+
+function decodeStoredEvent<M>(
+  eventPrefix: string,
+  parseEvent: (raw: unknown) => M | null,
+  key: string,
+  value: unknown,
+): StoredEvent<M> {
+  const seq = Number(key.slice(eventPrefix.length));
+  const position = Number.isSafeInteger(seq) ? seq : null;
+  if (typeof value !== "string") {
+    return {
+      _tag: "refused",
+      key,
+      seq: position,
+      serializedBytes: 0,
+      reason: "not-text",
+    };
+  }
+  const serializedBytes = utf8.encode(value).byteLength;
+  if (position === null) {
+    return { _tag: "refused", key, seq: null, serializedBytes, reason: "key" };
+  }
+  let raw: unknown;
+  try {
+    raw = JSON.parse(value);
+  } catch (cause) {
+    return {
+      _tag: "refused",
+      key,
+      seq: position,
+      serializedBytes,
+      reason: "json",
+      cause,
+    };
+  }
+  const event = parseEvent(raw);
+  if (event === null) {
+    return {
+      _tag: "refused",
+      key,
+      seq: position,
+      serializedBytes,
+      reason: "event",
+    };
+  }
+  return { _tag: "decoded", key, seq: position, serializedBytes, event };
+}
+
+/**
+ * Read a durable agent's event log without waking it.
+ *
+ * A host holding the agent's `DurableObjectStorage` reads the log's head, its
+ * committed sequence and its events in a range. The reader never writes
+ * storage, never runs a restore or a fold, and sets no alarm. Every call reads
+ * the cells afresh (`noCache`), and events are listed in bounded pages.
+ *
+ * Cells the store cannot write — a value that is not a string, or a key whose
+ * suffix is not an integer sequence — are skipped by `readEvents` and reported
+ * as refused by `readStoredEvents`.
+ */
+export function doEventLogReader<M extends { _tag: string } = { _tag: string }>(
+  storage: DurableObjectStorage,
+  opts: EventLogReaderOptions<M> = {},
+): EventLogReader<M> {
+  const parseEvent = opts.parseEvent ?? defaultParseEvent<M>;
+  const {
+    snapshot: snapshotKey,
+    meta: metaKey,
+    eventPrefix,
+  } = logKeys(opts.keys);
+
+  async function readCommittedSeq(): Promise<number> {
+    const raw = await storage.get<string>(metaKey, { noCache: true });
+    if (raw === undefined || raw === null) return 0;
+    return parseMeta(raw);
+  }
+
+  async function readHead(): Promise<EventLogHead | null> {
+    const cells = await storage.get<string>([metaKey, snapshotKey], {
+      noCache: true,
+    });
+    const meta = cells.get(metaKey);
+    const snapshot = cells.get(snapshotKey);
+    const absent = (
+      cell: string | undefined | null,
+    ): cell is undefined | null => cell === undefined || cell === null;
+    if (absent(meta) && absent(snapshot)) return null;
+    return {
+      lastSeq: absent(meta) ? 0 : parseMeta(meta),
+      snapshot: !absent(snapshot),
+    };
+  }
+
+  async function* readStoredEvents(
+    range: StoredEventRange = {},
+  ): AsyncGenerator<StoredEvent<M>> {
+    const fromSeq = Math.max(1, Math.ceil(range.fromSeq ?? 1));
+    const toSeq = Math.floor(range.toSeq ?? Number.POSITIVE_INFINITY);
+    const limit = range.limit ?? Number.POSITIVE_INFINITY;
+    if (fromSeq > toSeq || fromSeq === Number.POSITIVE_INFINITY || limit < 1)
+      return;
+    const start = eventKey(eventPrefix, fromSeq);
+    const end = Number.isFinite(toSeq)
+      ? eventKey(eventPrefix, toSeq + 1)
+      : undefined;
+    let startAfter: string | undefined;
+    let yielded = 0;
+    while (true) {
+      const rows = await storage.list<unknown>({
+        prefix: eventPrefix,
+        ...(startAfter === undefined ? { start } : { startAfter }),
+        ...(end === undefined ? {} : { end }),
+        limit: Math.min(EVENT_PAGE_SIZE, limit - yielded),
+        noCache: true,
+      });
+      for (const [key, value] of rows) {
+        startAfter = key;
+        yielded += 1;
+        yield decodeStoredEvent(eventPrefix, parseEvent, key, value);
+      }
+      if (rows.size < EVENT_PAGE_SIZE || yielded >= limit) return;
+    }
+  }
+
+  async function* readEvents(
+    range: EventLogRange = {},
+  ): AsyncGenerator<PersistedEvent<M>> {
+    const fromSeq = Math.max(1, Math.ceil(range.fromSeq ?? 1));
+    const toSeq = Math.floor(range.toSeq ?? Number.POSITIVE_INFINITY);
+    for await (const stored of readStoredEvents(range)) {
+      if (stored._tag === "decoded") {
+        if (stored.seq < fromSeq || stored.seq > toSeq) continue;
+        yield { seq: stored.seq, event: stored.event };
+        continue;
+      }
+      if (stored.reason === "json") throw stored.cause;
+    }
+  }
+
+  return { readHead, readCommittedSeq, readStoredEvents, readEvents };
+}
+
+/**
  * Build an event-sourced `Store<S>` over `DurableObjectStorage`.
  *
  * The substrate calls `store.load()` once at boot — that is where the fold
@@ -354,10 +597,11 @@ export function doEventSourcedStore<
     );
   }
   const parse = opts.parse ?? defaultParse;
-  const parseEvent = opts.parseEvent ?? defaultParseEvent;
-  const snapshotKey = opts.keys?.snapshot ?? DEFAULT_SNAPSHOT_KEY;
-  const metaKey = opts.keys?.meta ?? DEFAULT_META_KEY;
-  const eventPrefix = opts.keys?.eventPrefix ?? DEFAULT_EVENT_PREFIX;
+  const {
+    snapshot: snapshotKey,
+    meta: metaKey,
+    eventPrefix,
+  } = logKeys(opts.keys);
   const restoreAttemptKey =
     opts.keys?.restoreAttempt ?? `${metaKey}/restore-attempt`;
 
@@ -381,15 +625,14 @@ export function doEventSourcedStore<
   // One write at a time: `snapshotNow()` is called by the host, outside the
   // engine's serial tail, and must not interleave with a save.
   let writing: Promise<unknown> = Promise.resolve();
+  // The read side of the log: the one owner of the event-key convention and
+  // the stored-event decode, shared with hosts that read without loading.
+  const reader = doEventLogReader<M>(storage, opts);
 
   async function readMeta(): Promise<number> {
     const raw = await storage.get<string>(metaKey);
     if (raw === undefined || raw === null) return 0;
-    const meta = JSON.parse(raw) as MetaCell;
-    if (!Number.isSafeInteger(meta.lastSeq) || meta.lastSeq < 0) {
-      throw new Error("@demlik/tea/do: invalid committed sequence");
-    }
-    return meta.lastSeq;
+    return parseMeta(raw);
   }
 
   /**
@@ -425,40 +668,12 @@ export function doEventSourcedStore<
 
   /**
    * Stream the persisted event log in `seq` order, bounded by the optional
-   * inclusive `[fromSeq, toSeq]` range. The single owner of the `@@es/evt/`
-   * key convention on the read side — both the public {@link EventSourcedStore.readEvents}
-   * and the private fold's `readLog` flow through it, so the prefix/decode rule
+   * inclusive `[fromSeq, toSeq]` range. Both the public
+   * {@link EventSourcedStore.readEvents} and the private fold's `readLog` flow
+   * through the shared {@link doEventLogReader}, so the prefix/decode rule
    * lives in exactly one place.
    */
-  async function* readEvents(
-    range: EventLogRange = {},
-  ): AsyncGenerator<PersistedEvent<M>> {
-    const fromSeq = Math.max(1, Math.ceil(range.fromSeq ?? 1));
-    const toSeq = Math.floor(range.toSeq ?? Number.POSITIVE_INFINITY);
-    if (fromSeq > toSeq || fromSeq === Number.POSITIVE_INFINITY) return;
-    const start = eventKey(eventPrefix, fromSeq);
-    const end = Number.isFinite(toSeq)
-      ? eventKey(eventPrefix, toSeq + 1)
-      : undefined;
-    let startAfter: string | undefined;
-    while (true) {
-      const rows = await storage.list<string>({
-        prefix: eventPrefix,
-        ...(startAfter === undefined ? { start } : { startAfter }),
-        ...(end === undefined ? {} : { end }),
-        limit: EVENT_PAGE_SIZE,
-        noCache: true,
-      });
-      for (const [key, value] of rows) {
-        startAfter = key;
-        const seq = Number(key.slice(eventPrefix.length));
-        if (!Number.isFinite(seq) || seq < fromSeq || seq > toSeq) continue;
-        const decoded = parseEvent(JSON.parse(value));
-        if (decoded !== null) yield { seq, event: decoded };
-      }
-      if (rows.size < EVENT_PAGE_SIZE) return;
-    }
-  }
+  const readEvents = reader.readEvents;
 
   /** Fold one decoded event at a time, retaining neither the tail nor its Cmds. */
   async function readLog(state: S, afterSeq: number): Promise<S> {
