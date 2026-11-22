@@ -341,6 +341,10 @@ logged store in steps 5–6.
    needed to rediscover the sequence. A projection with an older checkpoint
    must resume from its own saved sequence, rather than skipping to the head.
 
+A host that reads an agent's log without loading it — its head, committed
+sequence or events in a range — uses
+[`doEventLogReader`](../reference/do.md#doEventLogReader) with the store's options.
+
 See [`EventSourcedOptions`](../reference/do.md#EventSourcedOptions) for the
 restore-attempt key override and parsing options. Storage values remain JSON
 text; command handlers and host recovery actions stay outside the replay fold.

@@ -65,7 +65,7 @@ import { … } from "@demlik/tea/do";
 | [`EventLogHead`](#EventLogHead) | Interface | stable | What a log's head cells say: the highest committed append sequence (0 when no event was committed) and whether a snapshot cell is present. |
 | [`EventLogRange`](#EventLogRange) | Interface | stable | Optional inclusive bounds for EventSourcedStore.readEvents. |
 | [`EventLogReader`](#EventLogReader) | Interface | stable | A read-only view over a durable agent's event log, built by doEventLogReader. |
-| [`EventLogReaderOptions`](#EventLogReaderOptions) | Interface | stable | Options for doEventLogReader. |
+| [`EventLogReaderOptions`](#EventLogReaderOptions) | Interface | stable | How a log's events are decoded and where its cells live: the part of EventSourcedOptions that doEventLogReader also takes. |
 | [`EventSourcedOptions`](#EventSourcedOptions) | Interface | stable | Options for doEventSourcedStore. |
 | [`EventSourcedStore`](#EventSourcedStore) | Interface | stable | The handle returned by doEventSourcedStore: a `Store<S>` to hand to `run(...)`, plus the snapshot and read surface the cooperating DO drives. |
 | [`ExecutedStep`](#ExecutedStep) | Interface | stable | What ExecutedSteps holds for a step that ran. |
@@ -940,16 +940,17 @@ interface EventLogReader<M> {
 
 ```ts
 interface EventLogReaderOptions<M> {
-  /** Cell-key overrides; must match the writing store's. */
+  /** Cell-key overrides (rarely needed; for coexisting actors in one DO). */
   readonly keys?: {
     readonly eventPrefix?: string;
     readonly meta?: string;
     readonly snapshot?: string;
   };
   /**
-   * Boundary parse for one persisted event. Returns the `M` on a recognized
-   * shape and `null` on an unrecognized one; must NOT throw. Default accepts
-   * any object carrying a string `_tag`.
+   * Boundary parse for a persisted EVENT (one logged `Msg`). Returns the `M` on
+   * a recognized shape; returning `null` DROPS the event from replay (use for a
+   * removed Msg variant). Must NOT throw. Default accepts any object carrying a
+   * string `_tag` as `M`.
    */
   readonly parseEvent?: (raw: unknown) => M | null;
 }
@@ -960,14 +961,15 @@ interface EventLogReaderOptions<M> {
 ### `EventSourcedOptions`
 
 ```ts
-interface EventSourcedOptions<S, M> {
+interface EventSourcedOptions<S, M> extends EventLogReaderOptions<M> {
   /** Cell-key overrides (rarely needed; for coexisting actors in one DO). */
   readonly keys?: {
     readonly eventPrefix?: string;
     readonly meta?: string;
+    readonly snapshot?: string;
+  } & {
     /** Restore-attempt cell. Default: `${meta}/restore-attempt`. */
     readonly restoreAttempt?: string;
-    readonly snapshot?: string;
   };
   /**
    * End-of-recovery hook (recovery.md `RecoveryCompleted`). Fires EXACTLY ONCE
@@ -986,13 +988,6 @@ interface EventSourcedOptions<S, M> {
    * non-array object as `S`.
    */
   readonly parse?: (raw: unknown) => S | null;
-  /**
-   * Boundary parse for a persisted EVENT (one logged `Msg`). Returns the `M` on
-   * a recognized shape; returning `null` DROPS the event from replay (use for a
-   * removed Msg variant). Must NOT throw. Default accepts any object carrying a
-   * string `_tag` as `M`.
-   */
-  readonly parseEvent?: (raw: unknown) => M | null;
   /**
    * Automatic retries after an unfinished restore. Default 1: an initial
    * attempt and one retry; a second unfinished attempt refuses before reading

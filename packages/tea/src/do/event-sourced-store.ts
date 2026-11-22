@@ -130,9 +130,44 @@ function nextRestoreAttempt(
 }
 
 /**
+ * How a log's events are decoded and where its cells live: the part of
+ * {@link EventSourcedOptions} that {@link doEventLogReader} also takes. A
+ * reader given the writing store's options finds and decodes the cells that
+ * store wrote, so an `EventSourcedOptions` value is accepted as is.
+ */
+export interface EventLogReaderOptions<M> {
+  /**
+   * Boundary parse for a persisted EVENT (one logged `Msg`). Returns the `M` on
+   * a recognized shape; returning `null` DROPS the event from replay (use for a
+   * removed Msg variant). Must NOT throw. Default accepts any object carrying a
+   * string `_tag` as `M`.
+   */
+  readonly parseEvent?: (raw: unknown) => M | null;
+  /** Cell-key overrides (rarely needed; for coexisting actors in one DO). */
+  readonly keys?: {
+    readonly snapshot?: string;
+    readonly meta?: string;
+    readonly eventPrefix?: string;
+  };
+}
+
+/** The log's cell keys, each override falling back to its default. */
+function logKeys(keys: EventLogReaderOptions<never>["keys"] = {}): {
+  readonly snapshot: string;
+  readonly meta: string;
+  readonly eventPrefix: string;
+} {
+  return {
+    snapshot: keys.snapshot ?? DEFAULT_SNAPSHOT_KEY,
+    meta: keys.meta ?? DEFAULT_META_KEY,
+    eventPrefix: keys.eventPrefix ?? DEFAULT_EVENT_PREFIX,
+  };
+}
+
+/**
  * Options for {@link doEventSourcedStore}.
  */
-export interface EventSourcedOptions<S, M> {
+export interface EventSourcedOptions<S, M> extends EventLogReaderOptions<M> {
   /**
    * Take a snapshot every N appended events (count-based retention, mirrors
    * Akka `RetentionCriteria.snapshotEvery`). A snapshot bounds how many events
@@ -156,13 +191,6 @@ export interface EventSourcedOptions<S, M> {
    */
   readonly parse?: (raw: unknown) => S | null;
   /**
-   * Boundary parse for a persisted EVENT (one logged `Msg`). Returns the `M` on
-   * a recognized shape; returning `null` DROPS the event from replay (use for a
-   * removed Msg variant). Must NOT throw. Default accepts any object carrying a
-   * string `_tag` as `M`.
-   */
-  readonly parseEvent?: (raw: unknown) => M | null;
-  /**
    * End-of-recovery hook (recovery.md `RecoveryCompleted`). Fires EXACTLY ONCE
    * per activation, after the fold completes, carrying the recovered state —
    * even when the log was empty (fresh actor). It may fire again on a later
@@ -172,10 +200,7 @@ export interface EventSourcedOptions<S, M> {
    */
   readonly onReady?: (state: S) => void;
   /** Cell-key overrides (rarely needed; for coexisting actors in one DO). */
-  readonly keys?: {
-    readonly snapshot?: string;
-    readonly meta?: string;
-    readonly eventPrefix?: string;
+  readonly keys?: EventLogReaderOptions<M>["keys"] & {
     /** Restore-attempt cell. Default: `${meta}/restore-attempt`. */
     readonly restoreAttempt?: string;
   };
@@ -301,27 +326,6 @@ const defaultParseEvent = <M>(raw: unknown): M | null =>
   typeof (raw as { _tag?: unknown })._tag === "string"
     ? (raw as M)
     : null;
-
-/**
- * Options for {@link doEventLogReader}. The same `parseEvent` and `keys` the
- * writing {@link doEventSourcedStore} was built with, so the reader finds and
- * decodes the cells that store wrote. An {@link EventSourcedOptions} value is
- * accepted as is.
- */
-export interface EventLogReaderOptions<M> {
-  /**
-   * Boundary parse for one persisted event. Returns the `M` on a recognized
-   * shape and `null` on an unrecognized one; must NOT throw. Default accepts
-   * any object carrying a string `_tag`.
-   */
-  readonly parseEvent?: (raw: unknown) => M | null;
-  /** Cell-key overrides; must match the writing store's. */
-  readonly keys?: {
-    readonly snapshot?: string;
-    readonly meta?: string;
-    readonly eventPrefix?: string;
-  };
-}
 
 /**
  * What a log's head cells say: the highest committed append sequence (0 when
@@ -455,15 +459,21 @@ function decodeStoredEvent<M>(
  * committed sequence and its events in a range. The reader never writes
  * storage, never runs a restore or a fold, and sets no alarm. Every call reads
  * the cells afresh (`noCache`), and events are listed in bounded pages.
+ *
+ * Cells the store cannot write — a value that is not a string, or a key whose
+ * suffix is not an integer sequence — are skipped by `readEvents` and reported
+ * as refused by `readStoredEvents`.
  */
 export function doEventLogReader<M extends { _tag: string } = { _tag: string }>(
   storage: DurableObjectStorage,
   opts: EventLogReaderOptions<M> = {},
 ): EventLogReader<M> {
   const parseEvent = opts.parseEvent ?? defaultParseEvent<M>;
-  const snapshotKey = opts.keys?.snapshot ?? DEFAULT_SNAPSHOT_KEY;
-  const metaKey = opts.keys?.meta ?? DEFAULT_META_KEY;
-  const eventPrefix = opts.keys?.eventPrefix ?? DEFAULT_EVENT_PREFIX;
+  const {
+    snapshot: snapshotKey,
+    meta: metaKey,
+    eventPrefix,
+  } = logKeys(opts.keys);
 
   async function readCommittedSeq(): Promise<number> {
     const raw = await storage.get<string>(metaKey, { noCache: true });
@@ -588,9 +598,11 @@ export function doEventSourcedStore<
     );
   }
   const parse = opts.parse ?? defaultParse;
-  const snapshotKey = opts.keys?.snapshot ?? DEFAULT_SNAPSHOT_KEY;
-  const metaKey = opts.keys?.meta ?? DEFAULT_META_KEY;
-  const eventPrefix = opts.keys?.eventPrefix ?? DEFAULT_EVENT_PREFIX;
+  const {
+    snapshot: snapshotKey,
+    meta: metaKey,
+    eventPrefix,
+  } = logKeys(opts.keys);
   const restoreAttemptKey =
     opts.keys?.restoreAttempt ?? `${metaKey}/restore-attempt`;
 
