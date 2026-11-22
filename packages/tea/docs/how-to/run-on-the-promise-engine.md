@@ -106,18 +106,19 @@ What each piece does:
   `onError` and dispatches no Msg.
 - **`driveToDone` rejects with the throw that stalled it.** To run a machine
   to its terminal State in one call, hand `run`'s handle to `driveToDone` from
-  this same import. A handler's throw on a later hop, or any throw of a
-  `Cmd.define`d handler, has no caller to reject at, so it would go to
-  `onError` and leave the drive with nothing to wait for. While the drive waits
-  it holds that throw instead. If the drive then stalls, it rejects with the
+  this same import. A handler's throw on a later hop, or any throw or contract
+  breach of a `Cmd.define`d handler, has no caller to reject at, so it would go
+  to `onError` and leave the drive with nothing to wait for. While
+  `dispatch(start)` runs, the drive holds that throw and decides it at one stall
+  check, when the dispatch quiesces. If the drive stalls, it rejects with the
   first held throw, the same object, in place of `DriveStalledError`, and every
-  other held throw goes to `onError`. If the drive resolves anyway, because a
-  Sub delivers the terminal Msg or an abort lands the cancelled State, every
-  held throw goes to `onError` and the drive resolves as before. A throw that
-  comes after the drive ended goes to `onError` too. A hand-written Cmd's throw
-  on the first hop still rejects the drive at once. A failure that is not a
-  handler's, such as a store that refuses a later save, still reaches `onError`
-  and the drive stalls. A run you dispatch to yourself is unchanged.
+  other held throw goes to `onError`, in order. If the drive resolves, or keeps
+  waiting on a live Sub or Cmd, every held throw goes to `onError` at once. After
+  that check nothing is held: a throw goes to `onError` as it happens, under its
+  own phase. A hand-written Cmd's throw on the first hop still rejects the
+  drive at once. A failure that is not a handler's, such as a store that refuses
+  a later save, still reaches `onError` and the drive stalls. A run you dispatch
+  to yourself is unchanged.
 - **A hand-written Cmd's handler returns Msgs.** It returns one Msg, a list of
   Msgs, or nothing. The engine dispatches a list in order, like Elm's
   `Cmd.batch`.

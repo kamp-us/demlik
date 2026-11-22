@@ -7,6 +7,7 @@ import {
   DriveStalledError,
   defineMachine,
   type Interpret,
+  OutcomeContractError,
   QuiescenceTimeoutError,
   type Reducer,
   type Runtime,
@@ -275,22 +276,51 @@ describe("driveToDone — typed rejections (#57)", () => {
       init: (_loaded) => [{ phase: "idle" }, []],
       update,
     });
-    // The same machine with a timer armed while it waits in `second`, so a live
-    // Sub can still finish the run after the handler threw.
-    const timed = defineMachine({
-      types: { model: {} as S6, msg: {} as M6, cmd: {} as C6, ctx: undefined },
+    // A machine that parks in `second` behind a Sub the test opens by hand, and
+    // can move on to `waiting` (a State nothing leaves) or to `done`: a Sub that
+    // is live when the dispatch quiesces, so the drive keeps waiting on it.
+    type S9 = {
+      readonly phase:
+        | "idle"
+        | "first"
+        | "second"
+        | "waiting"
+        | "done"
+        | "halted";
+    };
+    type M9 =
+      | { readonly _tag: "start" }
+      | { readonly _tag: "advance" }
+      | { readonly _tag: "tick" }
+      | { readonly _tag: "finish" }
+      | { readonly _tag: "halt" };
+    type U9 = Sub<"gate", { readonly armed: true }>;
+    const update9: Reducer<S9, M9, C6> = {
+      start: () => [{ phase: "first" }, [{ _tag: "first" }]],
+      advance: () => [{ phase: "second" }, [{ _tag: "second" }]],
+      tick: () => [{ phase: "waiting" }, [{ _tag: "third" }]],
+      finish: () => [{ phase: "done" }, []],
+      halt: () => [{ phase: "halted" }, []],
+    };
+    const gated = defineMachine({
+      types: {
+        model: {} as S9,
+        msg: {} as M9,
+        cmd: {} as C6,
+        sub: {} as U9,
+        ctx: undefined,
+      },
       init: (_loaded) => [{ phase: "idle" }, []],
-      update,
+      update: update9,
       subs: [
         {
-          _tag: "timer",
-          deps: (s) =>
-            s.phase === "second"
-              ? { ms: 5, msg: { _tag: "finish" } as const }
-              : null,
+          _tag: "gate",
+          deps: (s) => (s.phase === "second" ? { armed: true } : null),
         },
       ],
     });
+    const isSettled9 = (s: S9): boolean =>
+      s.phase === "done" || s.phase === "halted";
     const isDone6 = (s: S6): boolean => s.phase === "done";
     const boom = new Error("boom");
     const later = new Error("later");
@@ -313,6 +343,10 @@ describe("driveToDone — typed rejections (#57)", () => {
     };
     // Let a rejection that lands after the drive returned reach the sink.
     const settleSink = () => new Promise<void>((done) => setTimeout(done, 0));
+    // Wait, a turn at a time and never for ever, until `ready` holds.
+    const until = async (ready: () => boolean): Promise<void> => {
+      for (let turn = 0; turn < 200 && !ready(); turn += 1) await settleSink();
+    };
 
     it("rejects with the handler's own error when it throws on the second hop, and onError does not hear it", async () => {
       const heard = sink();
@@ -338,22 +372,25 @@ describe("driveToDone — typed rejections (#57)", () => {
       expect(probe.stopped).toBe(true);
     });
 
-    it("rejects with the raw error when a Cmd.define'd handler throws on the second hop", async () => {
-      // The engine catches a defined Cmd's throw and sends it to the sink, so
-      // no dispatch ever rejects with it: the drive stalled on it unnamed.
-      const first = Cmd.define("first", {
-        input: z.object({ n: z.number() }),
-        ok: z.object({ v: z.string() }),
-        err: ["down"],
-      });
-      const second = Cmd.define("second", {
-        input: z.object({ n: z.number() }),
-        ok: z.object({ v: z.string() }),
-        err: ["down"],
-      });
-      type S7 = { readonly phase: "idle" | "first" | "second" | "done" };
-      const defined = defineMachine({
-        types: { model: {} as S7, msg: {} as { readonly _tag: "start" } },
+    // `Cmd.define`d handlers: the engine catches their throws, so no dispatch
+    // ever rejects with one. The gated machine holds `second` behind a Sub the
+    // test opens by hand.
+    const first = Cmd.define("first", {
+      input: z.object({ n: z.number() }),
+      ok: z.object({ v: z.string() }),
+      err: ["down"],
+    });
+    const second = Cmd.define("second", {
+      input: z.object({ n: z.number() }),
+      ok: z.object({ v: z.string() }),
+      err: ["down"],
+    });
+    type S7 = { readonly phase: "idle" | "first" | "second" | "done" };
+    type M7 = { readonly _tag: "start" } | { readonly _tag: "finish" };
+    type U7 = Sub<"gate", { readonly armed: true }>;
+    const definedMachine = (armed: boolean) =>
+      defineMachine({
+        types: { model: {} as S7, msg: {} as M7, sub: {} as U7 },
         cmds: [first, second],
         init: (loaded) => [loaded ?? { phase: "idle" }, []],
         update: {
@@ -362,11 +399,23 @@ describe("driveToDone — typed rejections (#57)", () => {
           first_err: (s) => [{ ...s, phase: "done" }, []],
           second_ok: (s) => [{ ...s, phase: "done" }, []],
           second_err: (s) => [{ ...s, phase: "done" }, []],
+          finish: (s) => [{ ...s, phase: "done" }, []],
         },
+        subs: [
+          {
+            _tag: "gate",
+            deps: (s) =>
+              armed && s.phase === "second" ? { armed: true } : null,
+          },
+        ],
       });
+    const isDone7 = (s: S7): boolean => s.phase === "done";
+
+    it("rejects with the raw error when a Cmd.define'd handler throws on the second hop", async () => {
       const heard = sink();
       const probe = instrument(
-        run(defined, {
+        run(definedMachine(false), {
+          subscribe: { gate: () => () => {} },
           interpret: {
             first: async (_cmd, { ok }) => ok({ v: "x" }),
             second: async () => {
@@ -378,11 +427,66 @@ describe("driveToDone — typed rejections (#57)", () => {
       );
 
       await expect(
-        driveToDone(probe.handle, { _tag: "start" }, (s) => s.phase === "done"),
+        driveToDone(probe.handle, { _tag: "start" }, isDone7),
       ).rejects.toBe(boom);
       await settleSink();
       expect(heard.errors()).toEqual([]);
       expect(probe.stopped).toBe(true);
+    });
+
+    it("rejects with the OutcomeContractError when a Cmd.define'd handler dispatches its own outcome Msg on the second hop", async () => {
+      // The engine refuses that Msg and sends the breach to the sink under
+      // `"interpret"`: the same road as a defined handler's throw, so the drive
+      // holds it and the stall names it.
+      const heard = sink();
+      const probe = instrument(
+        run(definedMachine(false), {
+          subscribe: { gate: () => () => {} },
+          interpret: {
+            first: async (_cmd, { ok }) => ok({ v: "x" }),
+            second: async (cmd, _ctx, dispatch) => {
+              dispatch?.(second.ok(cmd, { v: "own" }));
+            },
+          },
+          onError: heard.onError,
+        }),
+      );
+
+      await expect(
+        driveToDone(probe.handle, { _tag: "start" }, isDone7),
+      ).rejects.toBeInstanceOf(OutcomeContractError);
+      await settleSink();
+      expect(heard.errors()).toEqual([]);
+      expect(probe.stopped).toBe(true);
+    });
+
+    it("sends a held Cmd.define'd throw to onError under its own phase when a live Sub finishes the run", async () => {
+      const heard = sink();
+      let land: ((msg: M7) => void) | undefined;
+      const probe = instrument(
+        run(definedMachine(true), {
+          interpret: {
+            first: async (_cmd, { ok }) => ok({ v: "x" }),
+            second: async () => {
+              throw boom;
+            },
+          },
+          subscribe: {
+            gate: (_sub, _ctx, dispatch) => {
+              land = dispatch;
+              return () => {};
+            },
+          },
+          onError: heard.onError,
+        }),
+      );
+
+      const drive = driveToDone(probe.handle, { _tag: "start" }, isDone7);
+      await until(() => heard.heard.length === 1);
+      land?.({ _tag: "finish" });
+
+      await expect(drive).resolves.toEqual({ phase: "done" });
+      expect(heard.heard).toEqual([{ error: boom, phase: "interpret" }]);
     });
 
     it("rejects with the same error when a hand-written handler throws on the first hop", async () => {
@@ -433,15 +537,113 @@ describe("driveToDone — typed rejections (#57)", () => {
       expect(heard.heard).toEqual([{ error: later, phase: "follow-up" }]);
     });
 
-    it("resolves when a live Sub finishes the run after the handler threw, and onError hears the throw once", async () => {
-      // The run was not stalled: a timer was armed. The drive keeps waiting, as
-      // it always did, and the held throw goes to the sink when it resolves.
+    it("resolves when a live Sub finishes the run after the handler threw, and onError heard the throw at quiescence, not at the end", async () => {
+      // The run was not stalled: the gate is live. The drive keeps waiting, as
+      // it always did, and the one stall check sends the held throw to the sink
+      // then, however long the Sub takes to deliver `finish`.
       const heard = sink();
+      let land: ((msg: M9) => void) | undefined;
       const probe = instrument(
-        run(timed, {
+        run(gated, {
           ctx: undefined,
           interpret: {
             ...noop,
+            second: async () => {
+              throw boom;
+            },
+          },
+          subscribe: {
+            gate: (_sub, _ctx, dispatch) => {
+              land = dispatch;
+              return () => {};
+            },
+          },
+          onError: heard.onError,
+        }),
+      );
+      let ended = false;
+      const drive = driveToDone(
+        probe.handle,
+        { _tag: "start" },
+        isSettled9,
+      ).finally(() => {
+        ended = true;
+      });
+
+      await until(() => heard.heard.length === 1);
+      expect(heard.heard).toEqual([{ error: boom, phase: "follow-up" }]);
+      expect(ended).toBe(false);
+
+      land?.({ _tag: "finish" });
+      await expect(drive).resolves.toEqual({ phase: "done" });
+      expect(heard.heard).toHaveLength(1);
+      expect(probe.stopped).toBe(true);
+    });
+
+    it("keeps waiting on a live Sub that moves the run to a State nothing leaves, hears the held throw at quiescence, and hears a later throw as it happens", async () => {
+      // Nothing is held after the stall check. The drive waits here for ever
+      // (a dispatch from outside it is not live work), so only an abort ends it.
+      const heard = sink();
+      const controller = new AbortController();
+      let land: ((msg: M9) => void) | undefined;
+      const probe = instrument(
+        run(gated, {
+          ctx: undefined,
+          interpret: {
+            ...noop,
+            second: async () => {
+              throw boom;
+            },
+            third: async () => {
+              throw later;
+            },
+          },
+          subscribe: {
+            gate: (_sub, _ctx, dispatch) => {
+              land = dispatch;
+              return () => {};
+            },
+          },
+          onError: heard.onError,
+        }),
+      );
+      let ended = false;
+      const drive = driveToDone(probe.handle, { _tag: "start" }, isSettled9, {
+        signal: controller.signal,
+        cancel: () => ({ _tag: "halt" }),
+      }).finally(() => {
+        ended = true;
+      });
+
+      await until(() => heard.heard.length === 1);
+      expect(heard.heard).toEqual([{ error: boom, phase: "follow-up" }]);
+      expect(ended).toBe(false);
+
+      land?.({ _tag: "tick" });
+      await until(() => heard.heard.length === 2);
+      expect(heard.heard).toEqual([
+        { error: boom, phase: "follow-up" },
+        { error: later, phase: "follow-up" },
+      ]);
+      expect(ended).toBe(false);
+
+      controller.abort();
+      await expect(drive).resolves.toEqual({ phase: "halted" });
+      expect(heard.heard).toHaveLength(2);
+    });
+
+    it("resolves when the same chain settles the run after the handler threw, and onError hears the throw once", async () => {
+      // `first` sends two Msgs: the first one's Cmd throws and is held, and the
+      // second lands `done`. The chain quiesces on a settled State with nothing
+      // live, so the check decides a resolve, never a stall, and the held throw
+      // is the sink's.
+      const heard = sink();
+      const probe = instrument(
+        run(toy, {
+          ctx: undefined,
+          interpret: {
+            ...noop,
+            first: async () => [{ _tag: "advance" }, { _tag: "finish" }],
             second: async () => {
               throw boom;
             },
@@ -455,7 +657,68 @@ describe("driveToDone — typed rejections (#57)", () => {
       ).resolves.toEqual({ phase: "done" });
       await settleSink();
       expect(heard.heard).toEqual([{ error: boom, phase: "follow-up" }]);
+    });
+
+    it("resolves on a settling State, and onError hears a handler's throw that lands after the drive ended", async () => {
+      // `finish` settles the run before `advance` folds, and `second` throws a
+      // turn later. The drive is over by then, and its stop waits for the
+      // handler, so the failure arrives with nobody left to hold it.
+      const heard = sink();
+      const probe = instrument(
+        run(toy, {
+          ctx: undefined,
+          interpret: {
+            ...noop,
+            first: async () => [{ _tag: "finish" }, { _tag: "advance" }],
+            second: async () => {
+              await settleSink();
+              throw boom;
+            },
+          },
+          onError: heard.onError,
+        }),
+      );
+
+      await expect(
+        driveToDone(probe.handle, { _tag: "start" }, isDone6),
+      ).resolves.toEqual({ phase: "done" });
+      expect(heard.heard).toEqual([{ error: boom, phase: "follow-up" }]);
       expect(probe.stopped).toBe(true);
+    });
+
+    it("resolves on a settled State, and never reads it as a stall, when the observer reports it after the dispatch quiesced", async () => {
+      // The check reads the State itself: a State the predicate settles on is
+      // not a stall however late a wrapped observer tells the drive about it.
+      const heard = sink();
+      const inner = run(toy, {
+        ctx: undefined,
+        interpret: {
+          ...noop,
+          first: async () => [{ _tag: "advance" }, { _tag: "finish" }],
+          second: async () => {
+            throw boom;
+          },
+        },
+        onError: heard.onError,
+      });
+      const late: BootingRuntime<S6, M6> = {
+        ...inner,
+        ready: inner.ready.then(
+          (rt): Runtime<S6, M6> => ({
+            ...rt,
+            observe: (observer) =>
+              rt.observe((msg, state) => {
+                setTimeout(() => observer(msg, state), 5);
+              }),
+          }),
+        ),
+      };
+
+      await expect(
+        driveToDone(late, { _tag: "start" }, isDone6),
+      ).resolves.toEqual({ phase: "done" });
+      await settleSink();
+      expect(heard.heard).toEqual([{ error: boom, phase: "follow-up" }]);
     });
 
     it("resolves on the cancelled State when an abort lands while the handler is in flight, and onError hears the throw once", async () => {
@@ -493,7 +756,8 @@ describe("driveToDone — typed rejections (#57)", () => {
 
     it("resolves on a settling State, and onError hears a throw of that State's Cmd that lands after it", async () => {
       // `finish` lands the State the drive settles on, and its Cmd throws on a
-      // later hop. The drive is already over by then, so the sink hears it.
+      // later hop. The observer hears a State after its Cmds, so the throw is
+      // held when the drive settles, and the sink hears it then.
       const heard = sink();
       const probe = instrument(
         run(toy, {

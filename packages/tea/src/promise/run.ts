@@ -402,28 +402,28 @@ export type DriveToDoneOptions<
  *     quiesces keeps the drive waiting, and it resolves on that State. What the
  *     runtime cannot see — a dispatch from outside it after quiescence — does
  *     not count as live; a machine that depends on one declares it as a Sub. A
- *     stall that a Cmd handler's failure caused is the last bullet's, not this
- *     one's.
+ *     stall that a Cmd handler's failure left rejects with that failure instead
+ *     (the bullet after next).
  *   - `QuiescenceTimeoutError` when `start`'s follow-up chain never settles —
  *     the SAME cap `dispatch` and `idle()` already reject on (invariant 6), not a
  *     second clock. A livelocking machine surfaces as its own failure class.
  *   - the Cmd handler failure that left the drive stalled, as the handler threw
- *     it (the same object), in place of `DriveStalledError`. A handler's failure
- *     has no caller to reject at when it is a throw on a later hop, or any throw
- *     of a `Cmd.define`d handler (the engine sends that one to `onError`). While
- *     the drive waits, it holds such a failure instead of sending it to
- *     `onError`. If the drive then stalls, it rejects with the first held
- *     failure, and every other held failure goes to `onError`. If the drive
- *     resolves instead (a Sub delivers the terminal Msg, or an abort lands the
- *     cancelled State), every held failure goes to `onError` and the drive
- *     resolves exactly as it did before. A failure that arrives after the drive
- *     ended goes to `onError`, and so does a first-hop `dispatch(start)`
- *     rejection that lands after the drive resolved. Each failure is heard
- *     once, by the caller or by `onError`. A hand-written Cmd's throw on the
- *     first hop still rejects the drive at once, as `dispatch(start)` does. A
- *     failure that is not a handler's, such as a store that refuses a later
- *     hop's save, goes to `onError` and the drive stalls as before. A run no one
- *     drives is unchanged.
+ *     it (the same object), in place of `DriveStalledError`. A failure with no
+ *     caller to reject at (a throw on a later hop, or any throw or contract
+ *     breach of a `Cmd.define`d handler) goes to `onError` by itself, and the
+ *     drive would then find nothing live and stall with the cause gone. So while
+ *     `dispatch(start)` runs, the drive holds such a failure, and decides it at
+ *     its one stall check, when that dispatch quiesces. A stall rejects with the
+ *     first held failure, and every other held failure goes to `onError`, in
+ *     order. A drive that resolves, or keeps waiting on a live Sub or Cmd, sends
+ *     every held failure to `onError` at once. After that check nothing is held:
+ *     a failure goes to `onError` as it happens, so each is heard once, under
+ *     its own phase, as soon as its outcome is known. A hand-written Cmd's throw
+ *     on the first hop rejects the drive at once, as `dispatch(start)` does; if
+ *     it lands after the drive resolved, `onError` hears it. A failure that is
+ *     not a handler's, such as a store that refuses a later hop's save, goes to
+ *     `onError` and the drive stalls as before. A run no one drives is
+ *     unchanged.
  *   - the boot error, or whatever `dispatch(start)` rejects with, otherwise.
  *
  * `isTerminal` is caller-supplied, exactly as `run()`'s `terminal` option is —
@@ -546,11 +546,11 @@ export async function driveToDone<
     }
     // A Cmd handler's failure with no caller to reject at would go to `onError`
     // and leave this drive to find nothing live and stall, its cause gone. Watch
-    // the run instead: the loop holds such a failure while the drive waits, and
-    // the stall below rejects with it. Every other way out of the drive hands
-    // the held failures to the sink, so none is lost or heard twice. A handle
-    // that lost the probe (a wrapper that rebuilt the object without spreading
-    // it) holds nothing and behaves as it did before.
+    // the run instead: the loop holds such a failure until the stall check
+    // below, which rejects with the first one if the drive stalls. Whatever way
+    // the drive ends first, the held failures go to the sink, so none is lost or
+    // heard twice. A handle that lost the probe (a wrapper that rebuilt the
+    // object without spreading it) holds nothing and behaves as it did before.
     watch = (runtime as Partial<DriveFailureProbe>)[driveFailure]?.();
     // The race lets a dispatch rejection (reducer / interpret throw, the
     // quiescence cap) surface here instead of floating as an unhandled rejection
@@ -565,11 +565,14 @@ export async function driveToDone<
       // Quiesced. A settling State already went through the observer, so
       // `terminal` is resolved; otherwise the wait is legitimate only while the
       // runtime itself can still transition. With no live Sub and no Cmd in
-      // flight nothing is coming, and the wait becomes the hang #68 names. A
-      // handler failure held on the way is what left it there.
+      // flight nothing is coming, and the wait becomes the hang #68 names. This
+      // is the one check, and it decides every Cmd handler failure held on the
+      // way: a stall rejects with the first, and anything else sends them all
+      // to `onError`.
       const parked = runtime.getState();
-      if (!settles(parked) && isStalled(runtime)) {
-        const cause = watch?.held();
+      const stalled = !settles(parked) && isStalled(runtime);
+      const cause = watch?.release(stalled);
+      if (stalled) {
         throw cause === undefined ? new DriveStalledError(parked) : cause.error;
       }
       return terminal;
@@ -590,7 +593,7 @@ export async function driveToDone<
     // it has already finished.
     unlisten?.();
     over = true;
-    watch?.end(rejection);
+    watch?.release(false);
     hearLateDispatchFailure();
     // `stop()` resolves by contract, so awaiting it here cannot mask the error
     // a rejecting branch above is carrying. It can delay it, by up to

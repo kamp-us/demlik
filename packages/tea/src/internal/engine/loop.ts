@@ -128,7 +128,7 @@ export interface LoopServices<S> {
   report(error: unknown, phase: RuntimeErrorPhase): void;
   /**
    * Route a Cmd handler's failure with no caller to the sink, unless a drive
-   * waiting on this run holds it (`driveFailure`).
+   * waiting on this run holds it until its stall check (`driveFailure`).
    */
   reportHandlerFailure(error: unknown, phase: RuntimeErrorPhase): void;
   /** Call `fn` for each item, routing every throw to the sink under `phase`. */
@@ -274,31 +274,34 @@ export interface LiveWorkProbe {
   readonly [liveWork]: () => LiveWork;
 }
 
-// === driveFailure: "who holds a Cmd handler's failure until the drive ends?" ===
+// === driveFailure: "who holds a Cmd handler's failure until the drive decides?" ===
 //
 // A Cmd handler's failure that has no caller to reject at (a throw on a later
-// hop, or any throw of a `Cmd.define`d handler, which routes it to the sink)
-// goes to `onError`. A `driveToDone` waiting on that run would then find
-// nothing live and stall, with its cause already gone. While a drive watches,
-// the loop holds such a failure instead; the drive decides how it ends:
+// hop, or a `Cmd.define`d handler's throw or contract breach, which the engine
+// sends to the sink) goes to `onError`. A `driveToDone` waiting on that run
+// would then find nothing live and stall, its cause already gone. So while
+// `dispatch(start)` runs to quiescence the loop holds such a failure for the
+// drive, and the drive's one stall check decides what becomes of it:
 //
-//   - it stalls: it rejects with the first held failure, and every other one goes to the sink.
-//   - it resolves, or any other way out: every held failure goes to the sink.
+//   - it stalls: the drive rejects with the first held failure, and every
+//     other one goes to the sink, in order.
+//   - it resolves, or keeps waiting on live work: every held failure goes to
+//     the sink now.
 //
-// So each failure is reported exactly once. Module-private and symbol-keyed for
-// the same reason `liveWork` is.
+// After that check nothing is held: a failure goes to the sink as it happens.
+// Each failure is heard once, under the phase it had, as soon as its outcome is
+// known. Module-private and symbol-keyed for the same reason `liveWork` is.
 
-/** What `driveToDone` holds on the run while it waits. */
+/** What `driveToDone` holds on the run until its stall check. */
 export interface DriveWatch {
-  /** The first handler failure held since the watch began, if there is one. */
-  held(): { readonly error: unknown } | undefined;
-  /** A failure the drive can no longer reject with: to the sink, as if no drive waited. */
-  late(error: unknown): void;
   /**
-   * Stop watching. Every held failure goes to the sink, except the one the
-   * drive rejected with (`rejection`), which the caller already has.
+   * Stop holding, and decide the failures held so far. With `take`, the first
+   * one is returned to the drive, which rejects with it. Every other one goes
+   * to the sink under the phase it had. A later call finds nothing held.
    */
-  end(rejection?: { readonly error: unknown }): void;
+  release(take: boolean): { readonly error: unknown } | undefined;
+  /** A failure the drive did not reject with, and can no longer hold: to the sink. */
+  late(error: unknown): void;
 }
 
 export const driveFailure: unique symbol = Symbol("demlik-tea.driveFailure");
@@ -465,14 +468,19 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
   // a failed boot.
   const reportedThenRejected = new WeakSet<object>();
 
-  // The drives waiting on this run (`driveFailure`), the Cmd handler failures
-  // they hold, and the errors a handler threw while one waited. A handler's
-  // error is marked where the step that ran it sees it, so `reportUndelivered`
-  // can tell it from every other failure with no caller (a save, a stopped
-  // gate, detached work). Marks and holds exist only while a drive waits.
-  let drives = 0;
-  const handlerFailures = new Set<unknown>();
-  const heldFailures: { error: unknown; phase: RuntimeErrorPhase }[] = [];
+  // The drives waiting on this run for their stall check (`driveFailure`). Each
+  // holds the Cmd handler failures that reach the sink while it waits, and
+  // `marked`, the errors a handler threw on a step with no caller, so that
+  // `reportUndelivered` can tell one from every other failure with no caller (a
+  // save, a stopped gate, detached work).
+  interface DriveHold {
+    readonly marked: Set<unknown>;
+    readonly held: {
+      readonly error: unknown;
+      readonly phase: RuntimeErrorPhase;
+    }[];
+  }
+  const drives = new Set<DriveHold>();
 
   // A throwing sink routes THAT throw through `defaultOnError`, with the context
   // the sink was handling, so it cannot re-create a silent failure.
@@ -892,52 +900,49 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
     ) {
       return;
     }
-    if (handlerFailures.delete(error) && holdForDrive(error, "follow-up")) {
-      return;
-    }
+    if (holdMarked(error)) return;
     report(
       error,
       error instanceof DispatchDiscardedError ? "discard" : "follow-up",
     );
   }
 
-  function holdForDrive(error: unknown, phase: RuntimeErrorPhase): boolean {
-    if (drives === 0) return false;
-    heldFailures.push({ error, phase });
-    return true;
+  // A marked error goes to the drive that marked it, once, under `"follow-up"`.
+  function holdMarked(error: unknown): boolean {
+    for (const drive of drives) {
+      if (drive.marked.delete(error)) {
+        drive.held.push({ error, phase: "follow-up" });
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function failedHandler(error: unknown): void {
+    for (const drive of drives) drive.marked.add(error);
   }
 
   function reportHandlerFailure(
     error: unknown,
     phase: RuntimeErrorPhase,
   ): void {
-    if (!holdForDrive(error, phase)) report(error, phase);
-  }
-
-  function failedHandler(error: unknown): void {
-    if (drives > 0) handlerFailures.add(error);
+    const [drive] = drives;
+    if (drive === undefined) report(error, phase);
+    else drive.held.push({ error, phase });
   }
 
   function watchForDrive(): DriveWatch {
-    drives += 1;
-    let ended = false;
+    const drive: DriveHold = { marked: new Set(), held: [] };
+    drives.add(drive);
     return {
-      held: () => heldFailures[0],
-      late: reportUndelivered,
-      end: (rejection) => {
-        if (ended) return;
-        ended = true;
-        drives -= 1;
-        if (drives > 0) return;
-        handlerFailures.clear();
-        const held = heldFailures.splice(0);
-        const taken = held.findIndex(
-          ({ error }) =>
-            rejection !== undefined && Object.is(error, rejection.error),
-        );
-        if (taken >= 0) held.splice(taken, 1);
+      release: (take) => {
+        drives.delete(drive);
+        const held = drive.held.splice(0);
+        const taken = take ? held.shift() : undefined;
         for (const { error, phase } of held) report(error, phase);
+        return taken;
       },
+      late: reportUndelivered,
     };
   }
 
