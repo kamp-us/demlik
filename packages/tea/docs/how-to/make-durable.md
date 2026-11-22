@@ -346,5 +346,7 @@ sequence or events in a range — uses
 [`doEventLogReader`](../reference/do.md#doEventLogReader) with the store's options.
 
 See [`EventSourcedOptions`](../reference/do.md#EventSourcedOptions) for the
-restore-attempt key override and parsing options. Storage values remain JSON
+restore-attempt key override and parsing options, and
+[`EventLogReaderOptions`](../reference/do.md#EventLogReaderOptions) for the
+event parse option. Storage values remain JSON
 text; command handlers and host recovery actions stay outside the replay fold.

@@ -199,7 +199,6 @@ export interface EventSourcedOptions<S, M> extends EventLogReaderOptions<M> {
    * replay).
    */
   readonly onReady?: (state: S) => void;
-  /** Cell-key overrides (rarely needed; for coexisting actors in one DO). */
   readonly keys?: EventLogReaderOptions<M>["keys"] & {
     /** Restore-attempt cell. Default: `${meta}/restore-attempt`. */
     readonly restoreAttempt?: string;
