@@ -14,6 +14,9 @@ import {
   refuseFencedRunWithoutSink,
 } from "../internal/engine/builtins";
 import {
+  type DriveFailureProbe,
+  type DriveWatch,
+  driveFailure,
   type LiveWorkProbe,
   type LoopHandler,
   type LoopRunner,
@@ -398,10 +401,29 @@ export type DriveToDoneOptions<
  *     that delivers the terminal Msg after the dispatch
  *     quiesces keeps the drive waiting, and it resolves on that State. What the
  *     runtime cannot see — a dispatch from outside it after quiescence — does
- *     not count as live; a machine that depends on one declares it as a Sub.
+ *     not count as live; a machine that depends on one declares it as a Sub. A
+ *     stall that a Cmd handler's failure left rejects with that failure instead
+ *     (the bullet after next).
  *   - `QuiescenceTimeoutError` when `start`'s follow-up chain never settles —
  *     the SAME cap `dispatch` and `idle()` already reject on (invariant 6), not a
  *     second clock. A livelocking machine surfaces as its own failure class.
+ *   - the Cmd handler failure that left the drive stalled, as the handler threw
+ *     it (the same object), in place of `DriveStalledError`. A failure with no
+ *     caller to reject at (a throw on a later hop, or any throw or contract
+ *     breach of a `Cmd.define`d handler) goes to `onError` by itself, and the
+ *     drive would then find nothing live and stall with the cause gone. So while
+ *     `dispatch(start)` runs, the drive holds such a failure, and decides it at
+ *     its one stall check, when that dispatch quiesces. A stall rejects with the
+ *     first held failure, and every other held failure goes to `onError`, in
+ *     order. A drive that resolves, or keeps waiting on a live Sub or Cmd, sends
+ *     every held failure to `onError` at once. After that check nothing is held:
+ *     a failure goes to `onError` as it happens, so each is heard once, under
+ *     its own phase, as soon as its outcome is known. A hand-written Cmd's throw
+ *     on the first hop rejects the drive at once, as `dispatch(start)` does; if
+ *     it lands after the drive resolved, `onError` hears it. A failure that is
+ *     not a handler's, such as a store that refuses a later hop's save, goes to
+ *     `onError` and the drive stalls as before. A run no one drives is
+ *     unchanged.
  *   - the boot error, or whatever `dispatch(start)` rejects with, otherwise.
  *
  * `isTerminal` is caller-supplied, exactly as `run()`'s `terminal` option is —
@@ -445,6 +467,21 @@ export async function driveToDone<
   const settles = (state: S): boolean => isTerminal(state) || failed(state);
   let detach: (() => void) | undefined;
   let unlisten: (() => void) | undefined;
+  let watch: DriveWatch | undefined;
+  // What the drive rejected with, and what `dispatch(start)` rejected with. A
+  // dispatch failure the drive did not reject with has no caller left; once the
+  // drive is over it goes to the sink, so each failure is heard once.
+  let rejection: { readonly error: unknown } | undefined;
+  let dispatchFailure: { readonly error: unknown } | undefined;
+  let over = false;
+  const hearLateDispatchFailure = (): void => {
+    if (!over || dispatchFailure === undefined) return;
+    const { error } = dispatchFailure;
+    dispatchFailure = undefined;
+    if (rejection === undefined || !Object.is(rejection.error, error)) {
+      watch?.late(error);
+    }
+  };
   try {
     const runtime = await handle.ready;
     // A run that rehydrated already terminal has nothing to start: resolve on
@@ -507,18 +544,36 @@ export async function driveToDone<
       signal.addEventListener("abort", onAbort, { once: true });
       unlisten = () => signal.removeEventListener("abort", onAbort);
     }
+    // A Cmd handler's failure with no caller to reject at would go to `onError`
+    // and leave this drive to find nothing live and stall, its cause gone. Watch
+    // the run instead: the loop holds such a failure until the stall check
+    // below, which rejects with the first one if the drive stalls. Whatever way
+    // the drive ends first, the held failures go to the sink, so none is lost or
+    // heard twice. A handle that lost the probe (a wrapper that rebuilt the
+    // object without spreading it) holds nothing and behaves as it did before.
+    watch = (runtime as Partial<DriveFailureProbe>)[driveFailure]?.();
     // The race lets a dispatch rejection (reducer / interpret throw, the
     // quiescence cap) surface here instead of floating as an unhandled rejection
     // while the terminal await parks forever.
     const msg = typeof start === "function" ? start(booted) : start;
-    const started = runtime.dispatch(msg).then(() => {
+    const dispatched = runtime.dispatch(msg);
+    dispatched.catch((error: unknown) => {
+      dispatchFailure = { error };
+      hearLateDispatchFailure();
+    });
+    const started = dispatched.then(() => {
       // Quiesced. A settling State already went through the observer, so
       // `terminal` is resolved; otherwise the wait is legitimate only while the
       // runtime itself can still transition. With no live Sub and no Cmd in
-      // flight nothing is coming, and the wait becomes the hang #68 names.
+      // flight nothing is coming, and the wait becomes the hang #68 names. This
+      // is the one check, and it decides every Cmd handler failure held on the
+      // way: a stall rejects with the first, and anything else sends them all
+      // to `onError`.
       const parked = runtime.getState();
-      if (!settles(parked) && isStalled(runtime)) {
-        throw new DriveStalledError(parked);
+      const stalled = !settles(parked) && isStalled(runtime);
+      const cause = watch?.release(stalled);
+      if (stalled) {
+        throw cause === undefined ? new DriveStalledError(parked) : cause.error;
       }
       return terminal;
     });
@@ -528,12 +583,18 @@ export async function driveToDone<
     const racers: Promise<S>[] = [terminal, started];
     if (cancelFailed !== undefined) racers.push(cancelFailed);
     return outcome(await Promise.race(racers));
+  } catch (error) {
+    rejection = { error };
+    throw error;
   } finally {
     detach?.();
     // The abort listener outlives this call unless it is removed: a signal a
     // caller reuses across runs would otherwise accumulate one dispatch per run
     // it has already finished.
     unlisten?.();
+    over = true;
+    watch?.release(false);
+    hearLateDispatchFailure();
     // `stop()` resolves by contract, so awaiting it here cannot mask the error
     // a rejecting branch above is carrying. It can delay it, by up to
     // `disposeTimeoutMs` per wait, while a Cmd handler has not returned.

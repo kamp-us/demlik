@@ -126,6 +126,11 @@ type SaveStatus =
 export interface LoopServices<S> {
   /** Route a failure with no caller to the `onError` sink. */
   report(error: unknown, phase: RuntimeErrorPhase): void;
+  /**
+   * Route a Cmd handler's failure with no caller to the sink, unless a drive
+   * waiting on this run holds it until its stall check (`driveFailure`).
+   */
+  reportHandlerFailure(error: unknown, phase: RuntimeErrorPhase): void;
   /** Call `fn` for each item, routing every throw to the sink under `phase`. */
   fanout<T>(
     items: Iterable<T>,
@@ -269,6 +274,42 @@ export interface LiveWorkProbe {
   readonly [liveWork]: () => LiveWork;
 }
 
+// === driveFailure: "who holds a Cmd handler's failure until the drive decides?" ===
+//
+// A Cmd handler's failure that has no caller to reject at (a throw on a later
+// hop, or a `Cmd.define`d handler's throw or contract breach, which the engine
+// sends to the sink) goes to `onError`. A `driveToDone` waiting on that run
+// would then find nothing live and stall, its cause already gone. So while
+// `dispatch(start)` runs to quiescence the loop holds such a failure for the
+// drive, and the drive's one stall check decides what becomes of it:
+//
+//   - it stalls: the drive rejects with the first held failure, and every
+//     other one goes to the sink, in order.
+//   - it resolves, or keeps waiting on live work: every held failure goes to
+//     the sink now.
+//
+// After that check nothing is held: a failure goes to the sink as it happens.
+// Each failure is heard once, under the phase it had, as soon as its outcome is
+// known. Module-private and symbol-keyed for the same reason `liveWork` is.
+
+/** What `driveToDone` holds on the run until its stall check. */
+export interface DriveWatch {
+  /**
+   * Stop holding, and decide the failures held so far. With `take`, the first
+   * one is returned to the drive, which rejects with it. Every other one goes
+   * to the sink under the phase it had. A later call finds nothing held.
+   */
+  release(take: boolean): { readonly error: unknown } | undefined;
+  /** A failure the drive did not reject with, and can no longer hold: to the sink. */
+  late(error: unknown): void;
+}
+
+export const driveFailure: unique symbol = Symbol("demlik-tea.driveFailure");
+
+export interface DriveFailureProbe {
+  readonly [driveFailure]: () => DriveWatch;
+}
+
 // === post: the one entry onto the line that waits for nothing ===
 //
 // What `tell` stands on (ADR 0029, item 5). Module-private and symbol-keyed for
@@ -297,6 +338,7 @@ export interface Postable<S, M> {
 /** The members the core itself puts on the run handle. */
 export interface LoopHandle<S, M>
   extends LiveWorkProbe,
+    DriveFailureProbe,
     Postable<S, M>,
     InstalledStateRead<S> {
   dispatch(msg: M, opts?: DispatchOptions): Promise<void>;
@@ -426,6 +468,20 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
   // a failed boot.
   const reportedThenRejected = new WeakSet<object>();
 
+  // The drives waiting on this run for their stall check (`driveFailure`). Each
+  // holds the Cmd handler failures that reach the sink while it waits, and
+  // `marked`, the errors a handler threw on a step with no caller, so that
+  // `reportUndelivered` can tell one from every other failure with no caller (a
+  // save, a stopped gate, detached work).
+  interface DriveHold {
+    readonly marked: Set<unknown>;
+    readonly held: {
+      readonly error: unknown;
+      readonly phase: RuntimeErrorPhase;
+    }[];
+  }
+  const drives = new Set<DriveHold>();
+
   // A throwing sink routes THAT throw through `defaultOnError`, with the context
   // the sink was handling, so it cannot re-create a silent failure.
   function report(error: unknown, phase: RuntimeErrorPhase): void {
@@ -551,6 +607,7 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
 
   const services: LoopServices<S> = {
     report,
+    reportHandlerFailure,
     fanout,
     halt(error) {
       // Only a run that was open still needs stopping: past that, a Sub failure
@@ -843,10 +900,50 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
     ) {
       return;
     }
+    if (holdMarked(error)) return;
     report(
       error,
       error instanceof DispatchDiscardedError ? "discard" : "follow-up",
     );
+  }
+
+  // A marked error goes to the drive that marked it, once, under `"follow-up"`.
+  function holdMarked(error: unknown): boolean {
+    for (const drive of drives) {
+      if (drive.marked.delete(error)) {
+        drive.held.push({ error, phase: "follow-up" });
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function failedHandler(error: unknown): void {
+    for (const drive of drives) drive.marked.add(error);
+  }
+
+  function reportHandlerFailure(
+    error: unknown,
+    phase: RuntimeErrorPhase,
+  ): void {
+    const [drive] = drives;
+    if (drive === undefined) report(error, phase);
+    else drive.held.push({ error, phase });
+  }
+
+  function watchForDrive(): DriveWatch {
+    const drive: DriveHold = { marked: new Set(), held: [] };
+    drives.add(drive);
+    return {
+      release: (take) => {
+        drives.delete(drive);
+        const held = drive.held.splice(0);
+        const taken = take ? held.shift() : undefined;
+        for (const { error, phase } of held) report(error, phase);
+        return taken;
+      },
+      late: reportUndelivered,
+    };
   }
 
   /**
@@ -954,10 +1051,17 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
   async function runCmds(cmds: readonly C[]): Promise<void> {
     for (const cmd of cmds) {
       if (gate === "abandoned" || aborted) return;
-      const call = interpret(cmd, dispatchUnawaited);
-      const returned = await (released === undefined
-        ? call
-        : Promise.race([call, released]));
+      let call: Promise<unknown>;
+      let returned: unknown;
+      try {
+        call = interpret(cmd, dispatchUnawaited);
+        returned = await (released === undefined
+          ? call
+          : Promise.race([call, released]));
+      } catch (error) {
+        failedHandler(error);
+        throw error;
+      }
       if (aborted) call.catch(reportUndelivered);
       for (const follow of followUps<M>(returned)) dispatchUnawaited(follow);
     }
@@ -1009,6 +1113,7 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
         for (const follow of follows) send(follow, !Array.isArray(returned));
       } catch (error) {
         own.failed = true;
+        failedHandler(error);
         throw error;
       } finally {
         invocation = undefined;
@@ -1539,6 +1644,7 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
 
   const core: LoopHandle<S, M> = {
     [liveWork]: () => ({ subs: subRegistry.size, cmds: inFlight.size }),
+    [driveFailure]: watchForDrive,
     [post]: postMsg,
     [installedState]: () => installed,
     dispatch: dispatchToQuiescence,

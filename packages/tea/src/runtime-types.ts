@@ -376,7 +376,9 @@ export class DriveFailedError<S> extends Error {
  *
  * A machine that CAN still move — a Sub that will deliver the terminal Msg after
  * the dispatch quiesces — is not stalled and the drive keeps waiting; this names
- * only the case where the runtime itself can prove nothing is coming.
+ * only the case where the runtime itself can prove nothing is coming. When a Cmd
+ * handler's failure is what left the run with nothing to do, the drive rejects
+ * with that failure itself instead.
  */
 export class DriveStalledError<S> extends Error {
   override readonly name = "DriveStalledError";

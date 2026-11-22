@@ -186,7 +186,7 @@ export function cmdDefinitions<S, M extends { _tag: string }, C>(
                 check(cmd as { _tag: string }, msg);
               } catch (err) {
                 failed?.();
-                loop.report(err, "interpret");
+                loop.reportHandlerFailure(err, "interpret");
                 return;
               }
               dispatch(msg);
@@ -200,7 +200,7 @@ export function cmdDefinitions<S, M extends { _tag: string }, C>(
         } catch (err) {
           if (!defined.has(type)) throw err;
           failed?.();
-          loop.report(err, "interpret");
+          loop.reportHandlerFailure(err, "interpret");
           return undefined;
         }
       },
