@@ -200,7 +200,7 @@ export function cmdDefinitions<S, M extends { _tag: string }, C>(
         } catch (err) {
           if (!defined.has(type)) throw err;
           failed?.();
-          loop.report(err, "interpret");
+          loop.reportHandlerFailure(err, "interpret");
           return undefined;
         }
       },

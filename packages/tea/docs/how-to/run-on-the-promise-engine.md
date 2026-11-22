@@ -104,14 +104,20 @@ What each piece does:
 - **Return a failure, don't throw it.** `err` only takes a tag the Cmd
   declares. A throw, or an `err` with a tag the Cmd does not declare, goes to
   `onError` and dispatches no Msg.
-- **`driveToDone` rejects with a handler's throw.** To run a machine to its
-  terminal State in one call, hand `run`'s handle to `driveToDone` from this
-  same import. When a handler throws, on the first hop or on a later one, the
-  drive rejects with that error itself, the same object, and `onError` does not
-  hear it. It takes only the first throw: a second one, and one that comes after
-  the drive has seen a settling State, still reach `onError`. A
-  `DriveStalledError` says only that nothing is left to run. A run you
-  dispatch to yourself is unchanged.
+- **`driveToDone` rejects with the throw that stalled it.** To run a machine
+  to its terminal State in one call, hand `run`'s handle to `driveToDone` from
+  this same import. A handler's throw on a later hop, or any throw of a
+  `Cmd.define`d handler, has no caller to reject at, so it would go to
+  `onError` and leave the drive with nothing to wait for. While the drive waits
+  it holds that throw instead. If the drive then stalls, it rejects with the
+  first held throw, the same object, in place of `DriveStalledError`, and every
+  other held throw goes to `onError`. If the drive resolves anyway, because a
+  Sub delivers the terminal Msg or an abort lands the cancelled State, every
+  held throw goes to `onError` and the drive resolves as before. A throw that
+  comes after the drive ended goes to `onError` too. A hand-written Cmd's throw
+  on the first hop still rejects the drive at once. A failure that is not a
+  handler's, such as a store that refuses a later save, still reaches `onError`
+  and the drive stalls. A run you dispatch to yourself is unchanged.
 - **A hand-written Cmd's handler returns Msgs.** It returns one Msg, a list of
   Msgs, or nothing. The engine dispatches a list in order, like Elm's
   `Cmd.batch`.

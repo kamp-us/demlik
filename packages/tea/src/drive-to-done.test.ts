@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import {
   type BootingRuntime,
+  Cmd,
   DriveFailedError,
   DriveStalledError,
   defineMachine,
@@ -251,11 +252,14 @@ describe("driveToDone — typed rejections (#57)", () => {
     // runs the Cmd that throws. The throw is on the second hop: nothing awaits
     // that dispatch, so it used to reach `onError` as a "follow-up" and leave the
     // drive to find nothing live and reject with a `DriveStalledError` instead.
-    type S6 = { readonly phase: "idle" | "first" | "second" | "done" };
+    type S6 = {
+      readonly phase: "idle" | "first" | "second" | "done" | "halted";
+    };
     type M6 =
       | { readonly _tag: "start" }
       | { readonly _tag: "advance" }
-      | { readonly _tag: "finish" };
+      | { readonly _tag: "finish" }
+      | { readonly _tag: "halt" };
     type C6 =
       | { readonly _tag: "first" }
       | { readonly _tag: "second" }
@@ -264,172 +268,375 @@ describe("driveToDone — typed rejections (#57)", () => {
       start: () => [{ phase: "first" }, [{ _tag: "first" }]],
       advance: () => [{ phase: "second" }, [{ _tag: "second" }]],
       finish: () => [{ phase: "done" }, [{ _tag: "third" }]],
+      halt: () => [{ phase: "halted" }, []],
     };
     const toy = defineMachine({
       types: { model: {} as S6, msg: {} as M6, cmd: {} as C6, ctx: undefined },
       init: (_loaded) => [{ phase: "idle" }, []],
       update,
     });
+    // The same machine with a timer armed while it waits in `second`, so a live
+    // Sub can still finish the run after the handler threw.
+    const timed = defineMachine({
+      types: { model: {} as S6, msg: {} as M6, cmd: {} as C6, ctx: undefined },
+      init: (_loaded) => [{ phase: "idle" }, []],
+      update,
+      subs: [
+        {
+          _tag: "timer",
+          deps: (s) =>
+            s.phase === "second"
+              ? { ms: 5, msg: { _tag: "finish" } as const }
+              : null,
+        },
+      ],
+    });
     const isDone6 = (s: S6): boolean => s.phase === "done";
     const boom = new Error("boom");
+    const later = new Error("later");
 
-    it("rejects the drive with the handler's own error when it throws on the second hop, and onError is not called for it", async () => {
-      const reported: unknown[] = [];
+    const noop: Interpret<M6, C6, undefined> = {
+      first: async () => ({ _tag: "advance" }),
+      second: async () => undefined,
+      third: async () => undefined,
+    };
+    // A sink that keeps what it heard, in order, and the phase of each.
+    const sink = () => {
+      const heard: { error: unknown; phase: string }[] = [];
+      return {
+        heard,
+        errors: () => heard.map(({ error }) => error),
+        onError: (error: unknown, context: { readonly phase: string }) => {
+          heard.push({ error, phase: context.phase });
+        },
+      };
+    };
+    // Let a rejection that lands after the drive returned reach the sink.
+    const settleSink = () => new Promise<void>((done) => setTimeout(done, 0));
+
+    it("rejects with the handler's own error when it throws on the second hop, and onError does not hear it", async () => {
+      const heard = sink();
       const probe = instrument(
         run(toy, {
           ctx: undefined,
           interpret: {
-            first: async () => ({ _tag: "advance" }),
+            ...noop,
             second: async () => {
               throw boom;
             },
-            third: async () => undefined,
           },
-          onError: (error) => {
-            reported.push(error);
-          },
+          onError: heard.onError,
         }),
       );
 
       await expect(
         driveToDone(probe.handle, { _tag: "start" }, isDone6),
       ).rejects.toBe(boom);
-      expect(reported).toEqual([]);
+      await settleSink();
+      expect(heard.errors()).toEqual([]);
       expect(probe.attached).toBe(0);
       expect(probe.stopped).toBe(true);
     });
 
-    it("rejects with the same error when the handler throws on the first hop, and onError is not called", async () => {
-      const reported: unknown[] = [];
+    it("rejects with the raw error when a Cmd.define'd handler throws on the second hop", async () => {
+      // The engine catches a defined Cmd's throw and sends it to the sink, so
+      // no dispatch ever rejects with it: the drive stalled on it unnamed.
+      const first = Cmd.define("first", {
+        input: z.object({ n: z.number() }),
+        ok: z.object({ v: z.string() }),
+        err: ["down"],
+      });
+      const second = Cmd.define("second", {
+        input: z.object({ n: z.number() }),
+        ok: z.object({ v: z.string() }),
+        err: ["down"],
+      });
+      type S7 = { readonly phase: "idle" | "first" | "second" | "done" };
+      const defined = defineMachine({
+        types: { model: {} as S7, msg: {} as { readonly _tag: "start" } },
+        cmds: [first, second],
+        init: (loaded) => [loaded ?? { phase: "idle" }, []],
+        update: {
+          start: (s) => [{ ...s, phase: "first" }, [first({ n: 1 })]],
+          first_ok: (s) => [{ ...s, phase: "second" }, [second({ n: 2 })]],
+          first_err: (s) => [{ ...s, phase: "done" }, []],
+          second_ok: (s) => [{ ...s, phase: "done" }, []],
+          second_err: (s) => [{ ...s, phase: "done" }, []],
+        },
+      });
+      const heard = sink();
+      const probe = instrument(
+        run(defined, {
+          interpret: {
+            first: async (_cmd, { ok }) => ok({ v: "x" }),
+            second: async () => {
+              throw boom;
+            },
+          },
+          onError: heard.onError,
+        }),
+      );
+
+      await expect(
+        driveToDone(probe.handle, { _tag: "start" }, (s) => s.phase === "done"),
+      ).rejects.toBe(boom);
+      await settleSink();
+      expect(heard.errors()).toEqual([]);
+      expect(probe.stopped).toBe(true);
+    });
+
+    it("rejects with the same error when a hand-written handler throws on the first hop", async () => {
+      const heard = sink();
       const probe = instrument(
         run(toy, {
           ctx: undefined,
           interpret: {
+            ...noop,
             first: async () => {
               throw boom;
             },
-            second: async () => undefined,
-            third: async () => undefined,
           },
-          onError: (error) => {
-            reported.push(error);
-          },
+          onError: heard.onError,
         }),
       );
 
       await expect(
         driveToDone(probe.handle, { _tag: "start" }, isDone6),
       ).rejects.toBe(boom);
-      expect(reported).toEqual([]);
+      await settleSink();
+      expect(heard.errors()).toEqual([]);
       expect(probe.stopped).toBe(true);
     });
 
-    it("takes only the first handler failure; a later one still reaches onError", async () => {
-      const later = new Error("later");
+    it("rejects with the first held error and sends the others to onError, once each", async () => {
       const thrown = [boom, later];
-      const reported: unknown[] = [];
+      const heard = sink();
       const probe = instrument(
         run(toy, {
           ctx: undefined,
           interpret: {
-            // Two Msgs, so two hops each run `second` and each throws.
+            ...noop,
+            // Two Msgs, so two hops each run `second`, and each throws.
             first: async () => [{ _tag: "advance" }, { _tag: "advance" }],
             second: async () => {
               throw thrown.shift();
             },
-            third: async () => undefined,
           },
-          onError: (error) => {
-            reported.push(error);
-          },
+          onError: heard.onError,
         }),
       );
 
       await expect(
         driveToDone(probe.handle, { _tag: "start" }, isDone6),
       ).rejects.toBe(boom);
-      expect(reported).toEqual([later]);
+      await settleSink();
+      expect(heard.heard).toEqual([{ error: later, phase: "follow-up" }]);
     });
 
-    it("resolves on a settling State and still reports a Cmd of that State that throws on a later hop", async () => {
-      const reported: unknown[] = [];
+    it("resolves when a live Sub finishes the run after the handler threw, and onError hears the throw once", async () => {
+      // The run was not stalled: a timer was armed. The drive keeps waiting, as
+      // it always did, and the held throw goes to the sink when it resolves.
+      const heard = sink();
       const probe = instrument(
-        run(toy, {
+        run(timed, {
           ctx: undefined,
           interpret: {
-            first: async () => ({ _tag: "advance" }),
-            // `finish` lands the State the drive settles on, and its Cmd throws.
-            second: async () => ({ _tag: "finish" }),
-            third: async () => {
+            ...noop,
+            second: async () => {
               throw boom;
             },
           },
-          onError: (error) => {
-            reported.push(error);
-          },
+          onError: heard.onError,
         }),
       );
 
       await expect(
         driveToDone(probe.handle, { _tag: "start" }, isDone6),
       ).resolves.toEqual({ phase: "done" });
-      expect(reported).toEqual([boom]);
+      await settleSink();
+      expect(heard.heard).toEqual([{ error: boom, phase: "follow-up" }]);
+      expect(probe.stopped).toBe(true);
+    });
+
+    it("resolves on the cancelled State when an abort lands while the handler is in flight, and onError hears the throw once", async () => {
+      // The cancel Msg waits behind the step the handler is in. The handler
+      // throws, the step ends, and the cancel folds: that is a cancelled run,
+      // never a rejection (`{ signal, cancel }` never rejects on an abort).
+      const controller = new AbortController();
+      const heard = sink();
+      const probe = instrument(
+        run(toy, {
+          ctx: undefined,
+          interpret: {
+            ...noop,
+            second: async () => {
+              controller.abort();
+              await Promise.resolve();
+              throw boom;
+            },
+          },
+          onError: heard.onError,
+        }),
+      );
+
+      await expect(
+        driveToDone(
+          probe.handle,
+          { _tag: "start" },
+          (s) => s.phase === "halted",
+          { signal: controller.signal, cancel: () => ({ _tag: "halt" }) },
+        ),
+      ).resolves.toEqual({ phase: "halted" });
+      await settleSink();
+      expect(heard.heard).toEqual([{ error: boom, phase: "follow-up" }]);
+    });
+
+    it("resolves on a settling State, and onError hears a throw of that State's Cmd that lands after it", async () => {
+      // `finish` lands the State the drive settles on, and its Cmd throws on a
+      // later hop. The drive is already over by then, so the sink hears it.
+      const heard = sink();
+      const probe = instrument(
+        run(toy, {
+          ctx: undefined,
+          interpret: {
+            ...noop,
+            second: async () => ({ _tag: "finish" }),
+            third: async () => {
+              throw boom;
+            },
+          },
+          onError: heard.onError,
+        }),
+      );
+
+      await expect(
+        driveToDone(probe.handle, { _tag: "start" }, isDone6),
+      ).resolves.toEqual({ phase: "done" });
+      await settleSink();
+      expect(heard.heard).toEqual([{ error: boom, phase: "follow-up" }]);
+    });
+
+    it("resolves on a settling State, and onError hears the first-hop throw of that State's Cmd", async () => {
+      // The throw rejects `dispatch(start)`, but the settling State won the race
+      // before it did, so the rejection has no caller left: it goes to the sink.
+      type S8 = { readonly phase: "idle" | "done" };
+      type M8 = { readonly _tag: "start" };
+      type C8 = { readonly _tag: "notify" };
+      const finishUpdate: Reducer<S8, M8, C8> = {
+        start: () => [{ phase: "done" }, [{ _tag: "notify" }]],
+      };
+      const finishing = defineMachine({
+        types: {
+          model: {} as S8,
+          msg: {} as M8,
+          cmd: {} as C8,
+          ctx: undefined,
+        },
+        init: (_loaded) => [{ phase: "idle" }, []],
+        update: finishUpdate,
+      });
+      const heard = sink();
+      const probe = instrument(
+        run(finishing, {
+          ctx: undefined,
+          interpret: {
+            notify: async () => {
+              throw boom;
+            },
+          },
+          onError: heard.onError,
+        }),
+      );
+
+      await expect(
+        driveToDone(probe.handle, { _tag: "start" }, (s) => s.phase === "done"),
+      ).resolves.toEqual({ phase: "done" });
+      await settleSink();
+      expect(heard.heard).toEqual([{ error: boom, phase: "follow-up" }]);
+    });
+
+    it("leaves a store's refused save to onError, and the drive still stalls", async () => {
+      // A save is not a Cmd handler: it is heard by the sink at once and the
+      // drive has no cause to reject with.
+      const saveFailure = new Error("storage refused");
+      const inner = memoryStore<S6>();
+      let saves = 0;
+      const store: Store<S6> = {
+        load: () => inner.load(),
+        save: async (state, msg) => {
+          saves += 1;
+          // boot, `start`, then `advance`
+          if (saves === 3) throw saveFailure;
+          await inner.save(state, msg);
+        },
+        migrate: (raw) => inner.migrate(raw),
+      };
+      const heard = sink();
+      const probe = instrument(
+        run(toy, {
+          ctx: undefined,
+          interpret: noop,
+          store,
+          onError: heard.onError,
+        }),
+      );
+
+      await expect(
+        driveToDone(probe.handle, { _tag: "start" }, isDone6),
+      ).rejects.toBeInstanceOf(DriveStalledError);
+      await settleSink();
+      expect(heard.heard).toEqual([{ error: saveFailure, phase: "follow-up" }]);
     });
 
     it("rejects the same way on a store that keeps a log", async () => {
-      const reported: unknown[] = [];
+      const heard = sink();
       const probe = instrument(
         run(toy, {
           ctx: undefined,
           store: eventSourcedStore(memoryJournal(), {
             state: z.object({
-              phase: z.enum(["idle", "first", "second", "done"]),
+              phase: z.enum(["idle", "first", "second", "done", "halted"]),
             }),
             message: z.object({
-              _tag: z.enum(["start", "advance", "finish"]),
+              _tag: z.enum(["start", "advance", "finish", "halt"]),
             }),
             command: z.object({ _tag: z.enum(["first", "second", "third"]) }),
           }),
           interpret: {
-            first: async () => ({ _tag: "advance" }),
+            ...noop,
             second: async () => {
               throw boom;
             },
-            third: async () => undefined,
           },
-          onError: (error) => {
-            reported.push(error);
-          },
+          onError: heard.onError,
         }),
       );
 
       await expect(
         driveToDone(probe.handle, { _tag: "start" }, isDone6),
       ).rejects.toBe(boom);
-      expect(reported).toEqual([]);
+      await settleSink();
+      expect(heard.errors()).toEqual([]);
       expect(probe.stopped).toBe(true);
     });
 
     it("outside a drive, a second-hop throw still reaches onError as a follow-up and rejects nothing", async () => {
-      const reported: { error: unknown; phase: string }[] = [];
+      const heard = sink();
       const runtime = await run(toy, {
         ctx: undefined,
         interpret: {
-          first: async () => ({ _tag: "advance" }),
+          ...noop,
           second: async () => {
             throw boom;
           },
-          third: async () => undefined,
         },
-        onError: (error, context) => {
-          reported.push({ error, phase: context.phase });
-        },
+        onError: heard.onError,
       }).ready;
 
       await runtime.dispatch({ _tag: "start" });
       await runtime.stop();
 
-      expect(reported).toEqual([{ error: boom, phase: "follow-up" }]);
+      expect(heard.heard).toEqual([{ error: boom, phase: "follow-up" }]);
     });
   });
 
