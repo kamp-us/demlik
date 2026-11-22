@@ -8,7 +8,7 @@ Tier: `stable`
 import { … } from "@demlik/tea/do";
 ```
 
-## Exports (111)
+## Exports (118)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -43,6 +43,7 @@ import { … } from "@demlik/tea/do";
 | [`DeferResumeHook`](#DeferResumeHook) | Interface | stable | The DEFER-RESUME hook — the opt-in seam that drives `engine.resume` OUT of the held `/step` request. |
 | [`DeferStepHostConfig`](#DeferStepHostConfig) | Interface | stable | `StepHostConfig` with the defer-resume hook engaged — the presence of `deferResume` is the type-level switch that selects the 3-arm response (see the `stepHost` overloads). |
 | [`DeliveryId`](#DeliveryId) | Type | stable | Positive safe-integer delivery identity, increasing monotonically with optional gaps. |
+| [`doEventLogReader`](#doEventLogReader) | Function | stable | Read a durable agent's event log without waking it. |
 | [`doEventSourcedStore`](#doEventSourcedStore) | Function | stable | Build an event-sourced `Store<S>` over `DurableObjectStorage`. |
 | [`doStore`](#doStore) | Function | stable | `Store<S>` over `DurableObjectStorage`. |
 | [`DoStoreOptions`](#DoStoreOptions) | Interface | stable | Options for doStore. |
@@ -61,7 +62,10 @@ import { … } from "@demlik/tea/do";
 | [`EffectOwed`](#EffectOwed) | Interface | stable | An effect is now OWED: it has been decided but its delivery is not yet confirmed. |
 | [`emptyApplied`](#emptyApplied) | Function | stable | The empty applied set — the fold's starting value (a fresh actor has applied nothing). |
 | [`emptyLedger`](#emptyLedger) | Function | stable | The empty ledger — the fold's starting value (a fresh actor owes nothing). |
+| [`EventLogHead`](#EventLogHead) | Interface | stable | What a log's head cells say: the highest committed append sequence (0 when no event was committed) and whether a snapshot cell is present. |
 | [`EventLogRange`](#EventLogRange) | Interface | stable | Optional inclusive bounds for EventSourcedStore.readEvents. |
+| [`EventLogReader`](#EventLogReader) | Interface | stable | A read-only view over a durable agent's event log, built by doEventLogReader. |
+| [`EventLogReaderOptions`](#EventLogReaderOptions) | Interface | stable | Options for doEventLogReader. |
 | [`EventSourcedOptions`](#EventSourcedOptions) | Interface | stable | Options for doEventSourcedStore. |
 | [`EventSourcedStore`](#EventSourcedStore) | Interface | stable | The handle returned by doEventSourcedStore: a `Store<S>` to hand to `run(...)`, plus the snapshot and read surface the cooperating DO drives. |
 | [`ExecutedStep`](#ExecutedStep) | Interface | stable | What ExecutedSteps holds for a step that ran. |
@@ -121,6 +125,9 @@ import { … } from "@demlik/tea/do";
 | [`StepResult`](#StepResult) | Interface | stable | The tool result the hands POST back for the step they just executed. |
 | [`StepTransport`](#StepTransport) | Type | stable | The `/step` transport the hands POST through (injected; faked in tests). |
 | [`StepWorking`](#StepWorking) | Interface | stable | The NOT-READY arm — the run is computing OUT-OF-BAND under a defer-resume host (a production incident: a non-blocking pull carrier must answer a pull with an explicit "computing, poll again" instead of holding the request across a multi-second step). |
+| [`StoredEvent`](#StoredEvent) | Type | stable | One stored event cell as read, decoded or refused. |
+| [`StoredEventRange`](#StoredEventRange) | Interface | stable | An EventLogRange with an optional cap on how many stored cells are read. |
+| [`StoredEventRefusal`](#StoredEventRefusal) | Type | stable | Why a stored event cell did not decode: its value is not text (`not-text`), its key carries no integer sequence (`key`), its text is not JSON (`json`), or `parseEvent` returned `null` (`event`). |
 | [`survivingEffects`](#survivingEffects) | Function | stable | RE-EMIT ON ACTIVATION. |
 | [`WS_READY_STATE_OPEN`](#WS_READY_STATE_OPEN) | Variable | stable | The OPEN `readyState` value (`WebSocket.READY_STATE_OPEN` in the Cloudflare runtime). |
 
@@ -603,6 +610,17 @@ interface DeferStepHostConfig<R> extends StepHostConfig {
 type DeliveryId = number
 ```
 
+<a id="doEventLogReader"></a>
+
+### `doEventLogReader`
+
+```ts
+function doEventLogReader<M extends { _tag: string } = { _tag: string }>(
+  storage: DurableObjectStorage,
+  opts?: EventLogReaderOptions<M>,
+): EventLogReader<M>
+```
+
 <a id="doEventSourcedStore"></a>
 
 ### `doEventSourcedStore`
@@ -868,6 +886,17 @@ function emptyApplied(): AppliedEffects
 function emptyLedger<E>(): PendingEffectsLedger<E>
 ```
 
+<a id="EventLogHead"></a>
+
+### `EventLogHead`
+
+```ts
+interface EventLogHead {
+  readonly lastSeq: number;
+  readonly snapshot: boolean;
+}
+```
+
 <a id="EventLogRange"></a>
 
 ### `EventLogRange`
@@ -878,6 +907,51 @@ interface EventLogRange {
   readonly fromSeq?: number;
   /** Highest `seq` to include (inclusive). Default: the last event. */
   readonly toSeq?: number;
+}
+```
+
+<a id="EventLogReader"></a>
+
+### `EventLogReader`
+
+```ts
+interface EventLogReader<M> {
+  /** Highest committed append sequence from the meta cell, or 0 when absent. */
+  readCommittedSeq(): Promise<number>;
+  /**
+   * Decoded events in range, in `seq` order, exactly as the store's
+   * EventSourcedStore.readEvents: events `parseEvent` refuses are
+   * dropped, and text that is not JSON throws.
+   */
+  readEvents(range?: EventLogRange): AsyncIterable<PersistedEvent<M>>;
+  /** The log's head, or `null` when neither meta nor snapshot cell exists. */
+  readHead(): Promise<EventLogHead | null>;
+  /**
+   * Every stored event cell in range, in `seq` order, with refusals reported
+   * instead of thrown. Read in pages of at most 128 rows.
+   */
+  readStoredEvents(range?: StoredEventRange): AsyncIterable<StoredEvent<M>>;
+}
+```
+
+<a id="EventLogReaderOptions"></a>
+
+### `EventLogReaderOptions`
+
+```ts
+interface EventLogReaderOptions<M> {
+  /** Cell-key overrides; must match the writing store's. */
+  readonly keys?: {
+    readonly eventPrefix?: string;
+    readonly meta?: string;
+    readonly snapshot?: string;
+  };
+  /**
+   * Boundary parse for one persisted event. Returns the `M` on a recognized
+   * shape and `null` on an unrecognized one; must NOT throw. Default accepts
+   * any object carrying a string `_tag`.
+   */
+  readonly parseEvent?: (raw: unknown) => M | null;
 }
 ```
 
@@ -1853,6 +1927,47 @@ interface StepWorking {
   readonly retryAfterMs?: number;
   readonly working: true;
 }
+```
+
+<a id="StoredEvent"></a>
+
+### `StoredEvent`
+
+```ts
+type StoredEvent<M> =
+  | {
+    readonly _tag: "decoded";
+    readonly event: M;
+    readonly key: string;
+    readonly seq: number;
+    readonly serializedBytes: number;
+  }
+  | {
+    readonly _tag: "refused";
+    readonly cause?: unknown;
+    readonly key: string;
+    readonly reason: StoredEventRefusal;
+    readonly seq: number | null;
+    readonly serializedBytes: number;
+  }
+```
+
+<a id="StoredEventRange"></a>
+
+### `StoredEventRange`
+
+```ts
+interface StoredEventRange extends EventLogRange {
+  readonly limit?: number;
+}
+```
+
+<a id="StoredEventRefusal"></a>
+
+### `StoredEventRefusal`
+
+```ts
+type StoredEventRefusal = "event" | "json" | "key" | "not-text"
 ```
 
 <a id="survivingEffects"></a>
