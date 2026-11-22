@@ -222,7 +222,16 @@ export function createLlmCall<P extends string, O extends Record<P, unknown>>(
   const resilientConfig: ResilientConfig = {
     ...(config.retry === undefined ? {} : { retry: config.retry }),
   };
-  const rc = createResilientCall<LlmCall<P>, LlmOk<P, O>>(resilientConfig, rng);
+  const rc = createResilientCall<LlmCall<P>, LlmOk<P, O>>(
+    {
+      ...resilientConfig,
+      settledCmd: (cmd) => ({
+        ...cmd,
+        input: { ...cmd.input, payload: null },
+      }),
+    },
+    rng,
+  );
 
   /** The slice this knob owns — resilient-call's slice verbatim. */
   type State = ResilientState<LlmCall<P>, LlmOk<P, O>>;

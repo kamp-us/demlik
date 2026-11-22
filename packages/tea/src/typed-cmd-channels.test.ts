@@ -36,7 +36,7 @@ import {
   UndeclaredFailureError,
 } from "./index";
 import { run } from "./promise";
-import { cmdEdgeOf } from "./pure/core";
+import { cmdContractOver, cmdEdgeOf } from "./pure/core";
 
 type Http = { readonly get: (url: string) => Promise<unknown> };
 type HttpCtx = { readonly http: Http };
@@ -629,5 +629,132 @@ describe("a handler's own `dispatch` (ADR 0021, #298)", () => {
     );
     expect(seen).toEqual(["kick", "poke_ok", "progress"]);
     expect(reports).toEqual([]);
+  });
+});
+
+describe("a def's `settledCmd` projects the Cmd its settled Msg carries", () => {
+  const ask = Cmd.define("ask", {
+    input: z.object({ id: z.string(), prompt: z.string().nullable() }),
+    ok: z.object({ answer: z.string().min(1) }),
+    err: ["refused"],
+    settledCmd: (cmd) => ({ ...cmd, prompt: null }),
+  });
+  type AskCmd = ReturnType<typeof ask>;
+  type AskSettled = Settled<typeof ask>;
+  type AskMsg = { readonly _tag: "ask_many"; readonly ids: readonly string[] };
+
+  const askMachine = defineMachine({
+    types: { model: {} as { readonly n: number }, msg: {} as AskMsg },
+    cmds: [ask],
+    init: () => [{ n: 0 }, []],
+    update: {
+      ask_many: (m, msg) => [
+        m,
+        msg.ids.map((id) => ask({ id, prompt: `long prompt for ${id}` })),
+      ],
+      ask_ok: (m) => [{ n: m.n + 1 }, []],
+      ask_err: (m) => [{ n: m.n + 1 }, []],
+    },
+  });
+
+  async function settleAll(
+    answer: (cmd: AskCmd) => { answer: string } | "refuse",
+  ) {
+    const handed: AskCmd[] = [];
+    const rt = await run(askMachine, {
+      interpret: {
+        ask: async (cmd, { ok, err }) => {
+          handed.push(cmd);
+          const a = answer(cmd);
+          return a === "refuse" ? err({ _tag: "refused" }) : ok(a);
+        },
+      },
+      clock: fixedClock(5),
+    }).ready;
+    const seen: AskSettled[] = [];
+    rt.observe((msg) => {
+      if (msg._tag !== "ask_many") seen.push(msg);
+    });
+    await rt.dispatch({ _tag: "ask_many", ids: ["a", "b", "c", "d"] });
+    await rt.idle();
+    return { handed, seen };
+  }
+
+  it("success: the handler gets the full prompt, every settled Msg carries `prompt: null`", async () => {
+    const { handed, seen } = await settleAll((cmd) => ({ answer: cmd.id }));
+    expect(handed.map((c) => c.prompt)).toEqual([
+      "long prompt for a",
+      "long prompt for b",
+      "long prompt for c",
+      "long prompt for d",
+    ]);
+    expect(seen.map((m) => m._tag)).toEqual([
+      "ask_ok",
+      "ask_ok",
+      "ask_ok",
+      "ask_ok",
+    ]);
+    expect(seen.map((m) => m.cmd)).toEqual(
+      ["a", "b", "c", "d"].map((id) => ({ _tag: "ask", id, prompt: null })),
+    );
+  });
+
+  it("declared failure and malformed success carry the projected Cmd too", async () => {
+    const { handed, seen } = await settleAll((cmd) =>
+      cmd.id === "a" || cmd.id === "c" ? "refuse" : { answer: "" },
+    );
+    expect(handed.every((c) => c.prompt === `long prompt for ${c.id}`)).toBe(
+      true,
+    );
+    expect(
+      seen.map((m) => (m._tag === "ask_err" ? m.error._tag : m._tag)),
+    ).toEqual(["refused", "malformed_result", "refused", "malformed_result"]);
+    expect(seen.every((m) => m.cmd.prompt === null)).toBe(true);
+  });
+
+  it("a later answer is checked against the full Cmd and settles with the projected one", () => {
+    const contract = cmdContractOver([ask], fixedClock(0));
+    const issued = ask({ id: "a", prompt: "long prompt for a" });
+    const settled = contract.answer(issued, {
+      _tag: "ask_ok",
+      cmd: issued,
+      value: { answer: "x" },
+      at: 9,
+    });
+    expect(settled).toEqual({
+      _tag: "ask_ok",
+      cmd: { _tag: "ask", id: "a", prompt: null },
+      value: { answer: "x" },
+      at: 9,
+    });
+    expect(issued.prompt).toBe("long prompt for a");
+    expect(() =>
+      contract.answer(issued, {
+        _tag: "ask_ok",
+        cmd: { ...issued, prompt: null },
+        value: { answer: "x" },
+        at: 9,
+      }),
+    ).toThrow("Answer Cmd mismatch");
+    expect(() =>
+      contract.answer(issued, {
+        _tag: "ask_ok",
+        cmd: { ...issued, prompt: "another prompt" },
+        value: { answer: "x" },
+        at: 9,
+      }),
+    ).toThrow("Answer Cmd mismatch");
+  });
+
+  it("a def without `settledCmd` still settles with the issued Cmd", () => {
+    expect("settledCmd" in fetch).toBe(false);
+    const contract = cmdContractOver([fetch], fixedClock(3));
+    const issued = fetch({ url: "/full" });
+    expect(contract.settle(issued, Outcome.ok({ body: "b" }))).toEqual({
+      _tag: "fetch_ok",
+      cmd: issued,
+      value: { body: "b" },
+      at: 3,
+    });
   });
 });

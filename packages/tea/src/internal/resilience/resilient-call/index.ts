@@ -146,7 +146,7 @@ import {
   type TimerDeps,
 } from "../../../index";
 import type { MsgType } from "../../../protocol";
-import { without } from "../../../pure/core";
+import { type CmdValue, without } from "../../../pure/core";
 import {
   type AnyRetryPolicy,
   asRng,
@@ -428,13 +428,28 @@ export type RunErr = TaggedError<"port_rejected" | "deadline_exceeded">;
  */
 export function runCmdDef<I, R, N extends string = DefaultResilientName>(
   name: N = DEFAULT_RESILIENT_NAME as N,
+  settledCmd?: (
+    cmd: CmdValue<
+      ResilientRunType<N>,
+      { readonly key: string; readonly input: I },
+      R,
+      RunErr
+    >,
+  ) => CmdValue<
+    ResilientRunType<N>,
+    { readonly key: string; readonly input: I },
+    R,
+    RunErr
+  >,
 ) {
   return Cmd.define(`${name}_run` as ResilientRunType<N>, {
     input: unchecked<{ readonly key: string; readonly input: I }>(),
     ok: unchecked<R>(),
     err: ["port_rejected", "deadline_exceeded"],
+    ...(settledCmd === undefined ? {} : { settledCmd }),
   });
 }
+
 /**
  * The type of the `Cmd.define` definition that `runCmdDef` returns for a
  * resilient call's run Cmd.
@@ -654,7 +669,24 @@ export function createResilientCall<
   I,
   R,
   N extends string = DefaultResilientName,
->(config: ResilientConfig<N>, rng: () => number = Math.random) {
+>(
+  config: ResilientConfig<N> & {
+    readonly settledCmd?: (
+      cmd: CmdValue<
+        ResilientRunType<N>,
+        { readonly key: string; readonly input: I },
+        R,
+        RunErr
+      >,
+    ) => CmdValue<
+      ResilientRunType<N>,
+      { readonly key: string; readonly input: I },
+      R,
+      RunErr
+    >;
+  },
+  rng: () => number = Math.random,
+) {
   const name = config.name ?? (DEFAULT_RESILIENT_NAME as N);
   const cPolicy = circuitPolicy(config);
   // Re-affirm the `[0, 1)` contract at the seam where the injected generator
@@ -662,7 +694,7 @@ export function createResilientCall<
   // public param stays a plain `() => number` so transitive callers are
   // unchanged; `asRng` is the single point it's branded for `nextDelayMs`.
   const rngBranded = asRng(rng);
-  const runCmd = runCmdDef<I, R, N>(name);
+  const runCmd = runCmdDef<I, R, N>(name, config.settledCmd);
   // The name each deadline carries, which is what fixes the Msg tag it
   // dispatches. `undefined` for the DEFAULT family: an unnamed knob must keep
   // dispatching the bare `deadline_exceeded` literal every existing machine is

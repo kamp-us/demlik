@@ -477,6 +477,9 @@ export interface CmdDef<
   };
   /** The declared `_tag` list, verbatim. */
   readonly errTags: ReadonlyArray<E["_tag"]>;
+  readonly settledCmd?: (
+    cmd: CmdValue<Name, Input, Ok, E>,
+  ) => CmdValue<Name, Input, Ok, E>;
 }
 
 /**
@@ -491,6 +494,7 @@ export type AnyCmdDef = {
   readonly errType: string;
   readonly schema: { readonly ok: StandardSchemaV1 };
   readonly errTags: ReadonlyArray<string>;
+  settledCmd?(cmd: unknown): unknown;
 };
 
 // === The interpret edge — the boundary a `Cmd.define`d result crosses ===
@@ -668,7 +672,12 @@ function mint(
     if (typeof tag !== "string" || !def.errTags.includes(tag)) {
       throw new UndeclaredFailureError(def.cmdType, outcome.error, def.errTags);
     }
-    return { _tag: def.errType, cmd, error: outcome.error, at };
+    return {
+      _tag: def.errType,
+      cmd: settledCmdOf(def, cmd),
+      error: outcome.error,
+      at,
+    };
   }
   const parsed = validateSync(
     def.schema.ok,
@@ -678,12 +687,21 @@ function mint(
   if (parsed.issues !== undefined) {
     return {
       _tag: def.errType,
-      cmd,
+      cmd: settledCmdOf(def, cmd),
       error: malformedResult(parsed.issues),
       at,
     };
   }
-  return { _tag: def.okType, cmd, value: parsed.value, at };
+  return {
+    _tag: def.okType,
+    cmd: settledCmdOf(def, cmd),
+    value: parsed.value,
+    at,
+  };
+}
+
+function settledCmdOf(def: AnyCmdDef, cmd: unknown): unknown {
+  return def.settledCmd === undefined ? cmd : def.settledCmd(cmd);
 }
 
 /**
@@ -796,6 +814,9 @@ function defineCmd<
     readonly input: StandardSchemaV1<unknown, Input>;
     readonly ok: StandardSchemaV1<unknown, Ok>;
     readonly err: Tags;
+    readonly settledCmd?: (
+      cmd: CmdValue<Name, Input, Ok, TaggedError<Tags[number]>>,
+    ) => CmdValue<Name, Input, Ok, TaggedError<Tags[number]>>;
   },
 ): CmdDef<Name, Input, Ok, TaggedError<Tags[number]>> {
   type E = TaggedError<Tags[number]>;
@@ -813,6 +834,7 @@ function defineCmd<
       stamp({ _tag: errType, cmd, error }, at),
     schema: { input: spec.input, ok: spec.ok },
     errTags: spec.err,
+    ...(spec.settledCmd === undefined ? {} : { settledCmd: spec.settledCmd }),
   });
 }
 

@@ -516,7 +516,11 @@ function createAuthedCall<I, R>(
 
 ```ts
 function createResilientCall<I, R, N extends string = "resilient">(
-  config: ResilientConfig<N>,
+  config: ResilientConfig<N> & {
+    readonly settledCmd?: (
+      cmd: CmdValue<`${N}_run`, { readonly input: I; readonly key: string }, R, RunErr>,
+    ) => CmdValue<`${N}_run`, { readonly input: I; readonly key: string }, R, RunErr>;
+  },
   rng?: () => number,
 ): {
   /**
@@ -1341,6 +1345,9 @@ type RunCmd<I, N extends string = DefaultResilientName, R = unknown> = CmdOf<Run
 ```ts
 function runCmdDef<I, R, N extends string = "resilient">(
   name?: N,
+  settledCmd?: (
+    cmd: CmdValue<`${N}_run`, { readonly input: I; readonly key: string }, R, RunErr>,
+  ) => CmdValue<`${N}_run`, { readonly input: I; readonly key: string }, R, RunErr>,
 ): CmdDef<`${N}_run`, { readonly input: I; readonly key: string }, R, {
   readonly [detail: string]: unknown;
   readonly _tag: "deadline_exceeded";
