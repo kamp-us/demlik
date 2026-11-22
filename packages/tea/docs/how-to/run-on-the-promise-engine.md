@@ -115,10 +115,14 @@ What each piece does:
   other held throw goes to `onError`, in order. If the drive resolves, or keeps
   waiting on a live Sub or Cmd, every held throw goes to `onError` at once. After
   that check nothing is held: a throw goes to `onError` as it happens, under its
-  own phase. A hand-written Cmd's throw on the first hop still rejects the
-  drive at once. A failure that is not a handler's, such as a store that refuses
-  a later save, still reaches `onError` and the drive stalls. A run you dispatch
-  to yourself is unchanged.
+  own phase. The cost is that a held throw is heard when `dispatch(start)`
+  quiesces, not when it happens: a long start chain delays it (a throw on the
+  second hop is heard after 303 ms instead of 2 ms when another hop runs for
+  300 ms), and a start chain that never quiesces keeps it held until the drive
+  ends some other way, such as the quiescence cap or an abort. A hand-written
+  Cmd's throw on the first hop still rejects the drive at once. A failure that
+  is not a handler's, such as a store that refuses a later save, still reaches
+  `onError` and the drive stalls. A run you dispatch to yourself is unchanged.
 - **A hand-written Cmd's handler returns Msgs.** It returns one Msg, a list of
   Msgs, or nothing. The engine dispatches a list in order, like Elm's
   `Cmd.batch`.
