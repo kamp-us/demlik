@@ -14,6 +14,8 @@ import {
   refuseFencedRunWithoutSink,
 } from "../internal/engine/builtins";
 import {
+  type DriveFailureProbe,
+  driveFailure,
   type LiveWorkProbe,
   type LoopHandler,
   type LoopRunner,
@@ -359,7 +361,9 @@ export type DriveToDoneOptions<
    * like any terminal one — the runtime is stopped — but the drive REJECTS with
    * `DriveFailedError` carrying it instead of resolving. A failed State is
    * terminal by definition; it need not also satisfy `isTerminal`. Omit → the
-   * drive never rejects on State, only on a runtime error.
+   * drive never rejects on State, only on a runtime error. A Cmd handler that
+   * throws is one: the drive rejects with that error itself, whichever hop it
+   * threw on.
    */
   readonly failed?: (state: S) => boolean;
 };
@@ -402,6 +406,14 @@ export type DriveToDoneOptions<
  *   - `QuiescenceTimeoutError` when `start`'s follow-up chain never settles —
  *     the SAME cap `dispatch` and `idle()` already reject on (invariant 6), not a
  *     second clock. A livelocking machine surfaces as its own failure class.
+ *   - the first Cmd handler failure of the drive, as the handler threw it (the
+ *     same object), on whichever hop it threw. On the first hop that is what
+ *     `dispatch(start)` rejects with. A later hop has no caller to reject at, so
+ *     the drive claims the failure before it reaches `onError`, and `onError`
+ *     does not hear it. A handler's throw never reads as `DriveStalledError`,
+ *     which says only that nothing is left to run. The drive claims one failure:
+ *     a second one, and one that arrives after the drive has seen a settling
+ *     State, still go to `onError`. A run no one drives is unchanged.
  *   - the boot error, or whatever `dispatch(start)` rejects with, otherwise.
  *
  * `isTerminal` is caller-supplied, exactly as `run()`'s `terminal` option is —
@@ -445,6 +457,7 @@ export async function driveToDone<
   const settles = (state: S): boolean => isTerminal(state) || failed(state);
   let detach: (() => void) | undefined;
   let unlisten: (() => void) | undefined;
+  let unclaim: (() => void) | undefined;
   try {
     const runtime = await handle.ready;
     // A run that rehydrated already terminal has nothing to start: resolve on
@@ -462,9 +475,13 @@ export async function driveToDone<
     if (settles(booted)) return outcome(booted);
     // Attach BEFORE dispatching so a terminal transition landing inside the
     // start dispatch is caught.
+    let settled = false;
     const terminal = new Promise<S>((resolve) => {
       detach = runtime.observe((_msg, state) => {
-        if (settles(state)) resolve(state);
+        if (settles(state)) {
+          settled = true;
+          resolve(state);
+        }
       });
     });
     // An abort mid-run enqueues the cancel Msg on the SAME serial tail every
@@ -507,6 +524,26 @@ export async function driveToDone<
       signal.addEventListener("abort", onAbort, { once: true });
       unlisten = () => signal.removeEventListener("abort", onAbort);
     }
+    // A Cmd handler that throws on a later hop has no caller to reject at, so
+    // the loop would send it to `onError` and this drive would find nothing live
+    // and stall. Claim the first such failure instead: the drive rejects with it
+    // and the sink is not told. A claim is refused once a settling State has
+    // been seen, because the race below is then already decided and a claimed
+    // failure would be heard by no one. A handle that lost the probe (a wrapper
+    // that rebuilt the object without spreading it) claims nothing and behaves
+    // as it did before.
+    let claimed = false;
+    const handlerFailed = new Promise<never>((_resolve, reject) => {
+      unclaim = (runtime as Partial<DriveFailureProbe>)[driveFailure]?.(
+        (error) => {
+          if (settled || claimed) return false;
+          claimed = true;
+          reject(error);
+          return true;
+        },
+      );
+    });
+    handlerFailed.catch(() => {});
     // The race lets a dispatch rejection (reducer / interpret throw, the
     // quiescence cap) surface here instead of floating as an unhandled rejection
     // while the terminal await parks forever.
@@ -525,7 +562,7 @@ export async function driveToDone<
     // `cancelFailed` rides the race for the mid-run abort: `started` cannot
     // carry the cancel's rejection, having usually resolved long before the
     // abort arrives.
-    const racers: Promise<S>[] = [terminal, started];
+    const racers: Promise<S>[] = [terminal, started, handlerFailed];
     if (cancelFailed !== undefined) racers.push(cancelFailed);
     return outcome(await Promise.race(racers));
   } finally {
@@ -534,6 +571,7 @@ export async function driveToDone<
     // caller reuses across runs would otherwise accumulate one dispatch per run
     // it has already finished.
     unlisten?.();
+    unclaim?.();
     // `stop()` resolves by contract, so awaiting it here cannot mask the error
     // a rejecting branch above is carrying. It can delay it, by up to
     // `disposeTimeoutMs` per wait, while a Cmd handler has not returned.

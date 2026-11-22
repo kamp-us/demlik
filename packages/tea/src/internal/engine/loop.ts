@@ -269,6 +269,28 @@ export interface LiveWorkProbe {
   readonly [liveWork]: () => LiveWork;
 }
 
+// === driveFailure: "who may take a Cmd handler's failure before the sink?" ===
+//
+// A handler that throws on the first hop of a dispatch rejects that dispatch
+// with its own error. On a later hop nobody awaits the step, so the failure goes
+// to `onError` as a follow-up and the drive that is waiting on it finds nothing
+// live and stalls. `driveToDone` registers a claim here so the failure reaches
+// it instead. Module-private and symbol-keyed for the same reason `liveWork` is.
+
+/**
+ * A drive's claim on a handler's failure. Called once per failure with the
+ * error the handler threw; answers whether the drive took it, which means it
+ * rejects with that error and the sink is not told.
+ */
+export type DriveClaim = (error: unknown) => boolean;
+
+export const driveFailure: unique symbol = Symbol("demlik-tea.driveFailure");
+
+export interface DriveFailureProbe {
+  /** Register a claim; the function it returns removes it. */
+  readonly [driveFailure]: (claim: DriveClaim) => () => void;
+}
+
 // === post: the one entry onto the line that waits for nothing ===
 //
 // What `tell` stands on (ADR 0029, item 5). Module-private and symbol-keyed for
@@ -297,6 +319,7 @@ export interface Postable<S, M> {
 /** The members the core itself puts on the run handle. */
 export interface LoopHandle<S, M>
   extends LiveWorkProbe,
+    DriveFailureProbe,
     Postable<S, M>,
     InstalledStateRead<S> {
   dispatch(msg: M, opts?: DispatchOptions): Promise<void>;
@@ -425,6 +448,14 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
   // again on rejection. Other phases stay visible, including each refusal after
   // a failed boot.
   const reportedThenRejected = new WeakSet<object>();
+
+  // The drives waiting on this run (`driveFailure`), and the errors a Cmd
+  // handler threw while one waited. A handler's error is marked where the step
+  // that ran it sees it, so `reportUndelivered` can tell it from every other
+  // failure with no caller (a save, a stopped gate, detached work). Kept only
+  // while a drive waits: the marks go when the last one leaves.
+  const driveClaims = new Set<DriveClaim>();
+  const handlerFailures = new Set<unknown>();
 
   // A throwing sink routes THAT throw through `defaultOnError`, with the context
   // the sink was handling, so it cannot re-create a silent failure.
@@ -843,10 +874,19 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
     ) {
       return;
     }
+    if (handlerFailures.delete(error) && claimedByDrive(error)) return;
     report(
       error,
       error instanceof DispatchDiscardedError ? "discard" : "follow-up",
     );
+  }
+
+  function failedHandler(error: unknown): void {
+    if (driveClaims.size > 0) handlerFailures.add(error);
+  }
+
+  function claimedByDrive(error: unknown): boolean {
+    return [...driveClaims].map((claim) => claim(error)).includes(true);
   }
 
   /**
@@ -954,10 +994,17 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
   async function runCmds(cmds: readonly C[]): Promise<void> {
     for (const cmd of cmds) {
       if (gate === "abandoned" || aborted) return;
-      const call = interpret(cmd, dispatchUnawaited);
-      const returned = await (released === undefined
-        ? call
-        : Promise.race([call, released]));
+      let call: Promise<unknown>;
+      let returned: unknown;
+      try {
+        call = interpret(cmd, dispatchUnawaited);
+        returned = await (released === undefined
+          ? call
+          : Promise.race([call, released]));
+      } catch (error) {
+        failedHandler(error);
+        throw error;
+      }
       if (aborted) call.catch(reportUndelivered);
       for (const follow of followUps<M>(returned)) dispatchUnawaited(follow);
     }
@@ -1009,6 +1056,7 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
         for (const follow of follows) send(follow, !Array.isArray(returned));
       } catch (error) {
         own.failed = true;
+        failedHandler(error);
         throw error;
       } finally {
         invocation = undefined;
@@ -1539,6 +1587,13 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
 
   const core: LoopHandle<S, M> = {
     [liveWork]: () => ({ subs: subRegistry.size, cmds: inFlight.size }),
+    [driveFailure]: (claim) => {
+      driveClaims.add(claim);
+      return () => {
+        driveClaims.delete(claim);
+        if (driveClaims.size === 0) handlerFailures.clear();
+      };
+    },
     [post]: postMsg,
     [installedState]: () => installed,
     dispatch: dispatchToQuiescence,

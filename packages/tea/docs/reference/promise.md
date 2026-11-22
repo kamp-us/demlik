@@ -75,7 +75,9 @@ type DriveToDoneOptions<S, M extends { _tag: string } = never> = DriveCancellati
    * like any terminal one — the runtime is stopped — but the drive REJECTS with
    * `DriveFailedError` carrying it instead of resolving. A failed State is
    * terminal by definition; it need not also satisfy `isTerminal`. Omit → the
-   * drive never rejects on State, only on a runtime error.
+   * drive never rejects on State, only on a runtime error. A Cmd handler that
+   * throws is one: the drive rejects with that error itself, whichever hop it
+   * threw on.
    */
   readonly failed?: (state: S) => boolean;
 }

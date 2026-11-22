@@ -104,6 +104,14 @@ What each piece does:
 - **Return a failure, don't throw it.** `err` only takes a tag the Cmd
   declares. A throw, or an `err` with a tag the Cmd does not declare, goes to
   `onError` and dispatches no Msg.
+- **`driveToDone` rejects with a handler's throw.** To run a machine to its
+  terminal State in one call, hand `run`'s handle to `driveToDone` from this
+  same import. When a handler throws, on the first hop or on a later one, the
+  drive rejects with that error itself, the same object, and `onError` does not
+  hear it. It takes only the first throw: a second one, and one that comes after
+  the drive has seen a settling State, still reach `onError`. A
+  `DriveStalledError` says only that nothing is left to run. A run you
+  dispatch to yourself is unchanged.
 - **A hand-written Cmd's handler returns Msgs.** It returns one Msg, a list of
   Msgs, or nothing. The engine dispatches a list in order, like Elm's
   `Cmd.batch`.

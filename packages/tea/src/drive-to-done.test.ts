@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import {
   type BootingRuntime,
   DriveFailedError,
@@ -12,7 +13,8 @@ import {
   StoreRefusedError,
   type Sub,
 } from "./index";
-import { memoryStore } from "./mem";
+import { memoryJournal, memoryStore } from "./mem";
+import { eventSourcedStore } from "./persistence";
 import { driveToDone, run } from "./promise";
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -242,6 +244,193 @@ describe("driveToDone — typed rejections (#57)", () => {
     });
     expect(probe.attached).toBe(0);
     expect(probe.stopped).toBe(true);
+  });
+
+  describe("a Cmd handler that throws", () => {
+    // `start` runs `first`, whose Msg moves the machine to `second`, and `second`
+    // runs the Cmd that throws. The throw is on the second hop: nothing awaits
+    // that dispatch, so it used to reach `onError` as a "follow-up" and leave the
+    // drive to find nothing live and reject with a `DriveStalledError` instead.
+    type S6 = { readonly phase: "idle" | "first" | "second" | "done" };
+    type M6 =
+      | { readonly _tag: "start" }
+      | { readonly _tag: "advance" }
+      | { readonly _tag: "finish" };
+    type C6 =
+      | { readonly _tag: "first" }
+      | { readonly _tag: "second" }
+      | { readonly _tag: "third" };
+    const update: Reducer<S6, M6, C6> = {
+      start: () => [{ phase: "first" }, [{ _tag: "first" }]],
+      advance: () => [{ phase: "second" }, [{ _tag: "second" }]],
+      finish: () => [{ phase: "done" }, [{ _tag: "third" }]],
+    };
+    const toy = defineMachine({
+      types: { model: {} as S6, msg: {} as M6, cmd: {} as C6, ctx: undefined },
+      init: (_loaded) => [{ phase: "idle" }, []],
+      update,
+    });
+    const isDone6 = (s: S6): boolean => s.phase === "done";
+    const boom = new Error("boom");
+
+    it("rejects the drive with the handler's own error when it throws on the second hop, and onError is not called for it", async () => {
+      const reported: unknown[] = [];
+      const probe = instrument(
+        run(toy, {
+          ctx: undefined,
+          interpret: {
+            first: async () => ({ _tag: "advance" }),
+            second: async () => {
+              throw boom;
+            },
+            third: async () => undefined,
+          },
+          onError: (error) => {
+            reported.push(error);
+          },
+        }),
+      );
+
+      await expect(
+        driveToDone(probe.handle, { _tag: "start" }, isDone6),
+      ).rejects.toBe(boom);
+      expect(reported).toEqual([]);
+      expect(probe.attached).toBe(0);
+      expect(probe.stopped).toBe(true);
+    });
+
+    it("rejects with the same error when the handler throws on the first hop, and onError is not called", async () => {
+      const reported: unknown[] = [];
+      const probe = instrument(
+        run(toy, {
+          ctx: undefined,
+          interpret: {
+            first: async () => {
+              throw boom;
+            },
+            second: async () => undefined,
+            third: async () => undefined,
+          },
+          onError: (error) => {
+            reported.push(error);
+          },
+        }),
+      );
+
+      await expect(
+        driveToDone(probe.handle, { _tag: "start" }, isDone6),
+      ).rejects.toBe(boom);
+      expect(reported).toEqual([]);
+      expect(probe.stopped).toBe(true);
+    });
+
+    it("takes only the first handler failure; a later one still reaches onError", async () => {
+      const later = new Error("later");
+      const thrown = [boom, later];
+      const reported: unknown[] = [];
+      const probe = instrument(
+        run(toy, {
+          ctx: undefined,
+          interpret: {
+            // Two Msgs, so two hops each run `second` and each throws.
+            first: async () => [{ _tag: "advance" }, { _tag: "advance" }],
+            second: async () => {
+              throw thrown.shift();
+            },
+            third: async () => undefined,
+          },
+          onError: (error) => {
+            reported.push(error);
+          },
+        }),
+      );
+
+      await expect(
+        driveToDone(probe.handle, { _tag: "start" }, isDone6),
+      ).rejects.toBe(boom);
+      expect(reported).toEqual([later]);
+    });
+
+    it("resolves on a settling State and still reports a Cmd of that State that throws on a later hop", async () => {
+      const reported: unknown[] = [];
+      const probe = instrument(
+        run(toy, {
+          ctx: undefined,
+          interpret: {
+            first: async () => ({ _tag: "advance" }),
+            // `finish` lands the State the drive settles on, and its Cmd throws.
+            second: async () => ({ _tag: "finish" }),
+            third: async () => {
+              throw boom;
+            },
+          },
+          onError: (error) => {
+            reported.push(error);
+          },
+        }),
+      );
+
+      await expect(
+        driveToDone(probe.handle, { _tag: "start" }, isDone6),
+      ).resolves.toEqual({ phase: "done" });
+      expect(reported).toEqual([boom]);
+    });
+
+    it("rejects the same way on a store that keeps a log", async () => {
+      const reported: unknown[] = [];
+      const probe = instrument(
+        run(toy, {
+          ctx: undefined,
+          store: eventSourcedStore(memoryJournal(), {
+            state: z.object({
+              phase: z.enum(["idle", "first", "second", "done"]),
+            }),
+            message: z.object({
+              _tag: z.enum(["start", "advance", "finish"]),
+            }),
+            command: z.object({ _tag: z.enum(["first", "second", "third"]) }),
+          }),
+          interpret: {
+            first: async () => ({ _tag: "advance" }),
+            second: async () => {
+              throw boom;
+            },
+            third: async () => undefined,
+          },
+          onError: (error) => {
+            reported.push(error);
+          },
+        }),
+      );
+
+      await expect(
+        driveToDone(probe.handle, { _tag: "start" }, isDone6),
+      ).rejects.toBe(boom);
+      expect(reported).toEqual([]);
+      expect(probe.stopped).toBe(true);
+    });
+
+    it("outside a drive, a second-hop throw still reaches onError as a follow-up and rejects nothing", async () => {
+      const reported: { error: unknown; phase: string }[] = [];
+      const runtime = await run(toy, {
+        ctx: undefined,
+        interpret: {
+          first: async () => ({ _tag: "advance" }),
+          second: async () => {
+            throw boom;
+          },
+          third: async () => undefined,
+        },
+        onError: (error, context) => {
+          reported.push({ error, phase: context.phase });
+        },
+      }).ready;
+
+      await runtime.dispatch({ _tag: "start" });
+      await runtime.stop();
+
+      expect(reported).toEqual([{ error: boom, phase: "follow-up" }]);
+    });
   });
 
   it("a boot failure rejects with the boot error and still stops", async () => {
