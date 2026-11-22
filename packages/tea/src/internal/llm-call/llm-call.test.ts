@@ -2,6 +2,7 @@ import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { defineMachine, Outcome } from "../../index";
 import { run } from "../../promise";
+import { cmdContractOver } from "../../pure/core";
 import { bindMachine } from "../../testing";
 import { deadlineSub } from "../resilience/deadline";
 import {
@@ -635,5 +636,144 @@ describe("createLlmCall — properties", () => {
         },
       ),
     );
+  });
+});
+
+describe("createLlmCall — a settled Msg carries the call, not its prompt", () => {
+  type Settle = LlmSucceedMsg<Purpose, Outputs> | LlmFailMsg<Purpose>;
+  const prompt = (turn: number) => ({ history: "x".repeat(10_000), turn });
+
+  it("four turns across retries: every handler sees its full prompt, every settle carries `payload: null`", async () => {
+    const llm = makeLlm();
+    const answers: ("ok" | "fail" | "bad")[] = [
+      "ok",
+      "fail",
+      "ok",
+      "bad",
+      "ok",
+      "fail",
+      "bad",
+    ];
+    const handed: unknown[] = [];
+    const runtime = await run(hostMachine(llm), {
+      ctx: {},
+      clock: () => 0,
+      interpret: {
+        resilient_run: async (cmd) => {
+          handed.push(cmd.input.payload);
+          const next = answers.shift() ?? "ok";
+          if (next === "fail") return llm.rejected(new Error("provider 503"));
+          return llm.decode(
+            cmd,
+            next === "bad" ? { steps: "none" } : { steps: ["done"] },
+          );
+        },
+      },
+      subscribe: { timer: () => () => {} },
+    }).ready;
+    const settled: Settle[] = [];
+    runtime.observe((msg) => {
+      if (msg._tag === "resilient_run_ok" || msg._tag === "resilient_run_err")
+        settled.push(msg);
+    });
+
+    const inputs = [0, 1, 2, 3].map(
+      (turn): LlmCall<Purpose> => ({
+        purpose: "plan",
+        model: turn % 2 === 0 ? null : "m-large",
+        payload: prompt(turn),
+      }),
+    );
+    const snapshot = JSON.stringify(inputs);
+    const handedPerTurn: unknown[][] = [];
+    for (const input of inputs) {
+      const from = handed.length;
+      await runtime.dispatch({ _tag: "call_llm", input, at: 0 });
+      for (let guard = 0; guard < 5; guard++) {
+        const call = runtime.getState().resilience.calls.plan;
+        if (call?.phase !== "waiting_retry") break;
+        await runtime.dispatch({
+          _tag: "deadline_exceeded",
+          id: "resilient:retry:plan",
+          atMs: call.retryAtMs,
+        });
+      }
+      expect(runtime.getState().resilience.calls.plan).toEqual({
+        phase: "succeeded",
+        result: { key: "plan", purpose: "plan", output: { steps: ["done"] } },
+      });
+      handedPerTurn.push(handed.slice(from));
+    }
+    await runtime.stop();
+
+    expect(handedPerTurn).toEqual([
+      [prompt(0)],
+      [prompt(1), prompt(1)],
+      [prompt(2), prompt(2)],
+      [prompt(3), prompt(3), prompt(3)],
+    ]);
+    expect(settled.map((m) => m._tag)).toEqual([
+      "resilient_run_ok",
+      "resilient_run_err",
+      "resilient_run_ok",
+      "resilient_run_err",
+      "resilient_run_ok",
+      "resilient_run_err",
+      "resilient_run_err",
+      "resilient_run_ok",
+    ]);
+    expect(settled.map((m) => m.cmd)).toEqual(
+      [0, 1, 1, 2, 2, 3, 3, 3].map((turn) => ({
+        _tag: "resilient_run",
+        key: "plan",
+        input: {
+          purpose: "plan",
+          model: turn % 2 === 0 ? null : "m-large",
+          payload: null,
+        },
+      })),
+    );
+    expect(JSON.stringify(settled).length).toBeLessThan(10_000);
+    expect(JSON.stringify(inputs)).toBe(snapshot);
+  });
+
+  it("a later answer is checked against the full issued Cmd and settles without the prompt", () => {
+    const llm = makeLlm();
+    const contract = cmdContractOver([llm.run], () => 0);
+    const input: LlmCall<Purpose> = {
+      purpose: "report",
+      model: "m-large",
+      payload: prompt(9),
+    };
+    const issued = runCmd(input, "report:9");
+    const answer = {
+      _tag: "resilient_run_ok",
+      cmd: issued,
+      value: { key: "report:9", purpose: "report", output: { score: 1 } },
+      at: 4,
+    };
+    expect(contract.answer(issued, answer)).toEqual({
+      ...answer,
+      cmd: {
+        _tag: "resilient_run",
+        key: "report:9",
+        input: { purpose: "report", model: "m-large", payload: null },
+      },
+    });
+    expect(issued.input.payload).toEqual(prompt(9));
+    expect(() =>
+      contract.answer(issued, {
+        ...answer,
+        cmd: { ...issued, input: { ...input, payload: null } },
+      }),
+    ).toThrow("Answer Cmd mismatch");
+    expect(() =>
+      contract.answer(issued, {
+        _tag: "resilient_run_err",
+        cmd: { ...issued, input: { ...input, payload: prompt(8) } },
+        error: { _tag: "port_rejected", cause: "x" },
+        at: 4,
+      }),
+    ).toThrow("Answer Cmd mismatch");
   });
 });

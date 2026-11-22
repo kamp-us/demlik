@@ -617,3 +617,65 @@ describe("the handle's verbs are Effects with a typed error channel (#308)", () 
     }
   });
 });
+
+describe("a def's `settledCmd` on the Effect engine", () => {
+  const ask = Cmd.define("ask", {
+    input: z.object({ id: z.string(), prompt: z.string().nullable() }),
+    ok: z.object({ answer: z.string().min(1) }),
+    err: ["refused"],
+    settledCmd: (cmd) => ({ ...cmd, prompt: null }),
+  });
+  type AskMsg =
+    | { readonly _tag: "ask_many"; readonly ids: readonly string[] }
+    | Settled<typeof ask>;
+
+  const askMachine = defineMachine({
+    types: { model: {} as { readonly n: number }, msg: {} as AskMsg },
+    cmds: [ask],
+    init: () => [{ n: 0 }, []],
+    update: {
+      ask_many: (m, msg) => [
+        m,
+        msg.ids.map((id) => ask({ id, prompt: `long prompt for ${id}` })),
+      ],
+      ask_ok: (m) => [{ n: m.n + 1 }, []],
+      ask_err: (m) => [{ n: m.n + 1 }, []],
+    },
+  });
+
+  it("hands the handler the full prompt and settles ok, declared err and malformed with `prompt: null`", async () => {
+    const handed: (string | null)[] = [];
+    const seen: Settled<typeof ask>[] = [];
+    const { value: rt, close } = await openScope(
+      run(askMachine, {
+        interpret: {
+          ask: (cmd) => {
+            handed.push(cmd.prompt);
+            if (cmd.id === "b")
+              return Effect.fail({ _tag: "refused" as const });
+            return Effect.succeed({ answer: cmd.id === "c" ? "" : cmd.id });
+          },
+        },
+      }),
+    );
+    const booted = await Effect.runPromise(rt.ready);
+    rt.observe((msg) => {
+      if (msg._tag !== "ask_many") seen.push(msg);
+    });
+    await Effect.runPromise(
+      booted.dispatch({ _tag: "ask_many", ids: ["a", "b", "c", "d"] }),
+    );
+    await Effect.runPromise(booted.idle());
+    await close();
+
+    expect(handed).toEqual(
+      ["a", "b", "c", "d"].map((id) => `long prompt for ${id}`),
+    );
+    expect(
+      seen.map((m) => (m._tag === "ask_err" ? m.error._tag : m._tag)),
+    ).toEqual(["ask_ok", "refused", "malformed_result", "ask_ok"]);
+    expect(seen.map((m) => m.cmd)).toEqual(
+      ["a", "b", "c", "d"].map((id) => ({ _tag: "ask", id, prompt: null })),
+    );
+  });
+});

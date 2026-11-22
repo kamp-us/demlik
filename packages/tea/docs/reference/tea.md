@@ -300,6 +300,7 @@ type AnyCmdDef = {
   readonly errType: string;
   readonly okType: string;
   readonly schema: { readonly ok: StandardSchemaV1 };
+  settledCmd?(cmd: unknown): unknown;
 }
 ```
 
@@ -636,6 +637,9 @@ const Cmd: {
       readonly err: Tags;
       readonly input: StandardSchemaV1<unknown, Input>;
       readonly ok: StandardSchemaV1<unknown, Ok>;
+      readonly settledCmd?: (
+        cmd: CmdValue<Name, Input, Ok, TaggedError<Tags[number]>>,
+      ) => CmdValue<Name, Input, Ok, TaggedError<Tags[number]>>;
     },
   ) => CmdDef<Name, Input, Ok, TaggedError<Tags[number]>>;
   /**
@@ -711,6 +715,7 @@ interface CmdDef<Name extends string, Input extends CmdInput, Ok, E extends Tagg
     readonly input: StandardSchemaV1<unknown, Input>;
     readonly ok: StandardSchemaV1<unknown, Ok>;
   };
+  readonly settledCmd?: (cmd: CmdValue<Name, Input, Ok, E>) => CmdValue<Name, Input, Ok, E>;
 }
 ```
 

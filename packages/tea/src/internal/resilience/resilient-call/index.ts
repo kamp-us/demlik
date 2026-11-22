@@ -429,8 +429,18 @@ export type RunErr = TaggedError<"port_rejected" | "deadline_exceeded">;
 export function runCmdDef<I, R, N extends string = DefaultResilientName>(
   name: N = DEFAULT_RESILIENT_NAME as N,
   settledCmd?: (
-    cmd: RunCmdValue<I, R, N>,
-  ) => RunCmdValue<I, R, N>,
+    cmd: CmdValue<
+      ResilientRunType<N>,
+      { readonly key: string; readonly input: I },
+      R,
+      RunErr
+    >,
+  ) => CmdValue<
+    ResilientRunType<N>,
+    { readonly key: string; readonly input: I },
+    R,
+    RunErr
+  >,
 ) {
   return Cmd.define(`${name}_run` as ResilientRunType<N>, {
     input: unchecked<{ readonly key: string; readonly input: I }>(),
@@ -440,12 +450,6 @@ export function runCmdDef<I, R, N extends string = DefaultResilientName>(
   });
 }
 
-type RunCmdValue<I, R, N extends string> = CmdValue<
-  ResilientRunType<N>,
-  { readonly key: string; readonly input: I },
-  R,
-  RunErr
->;
 /**
  * The type of the `Cmd.define` definition that `runCmdDef` returns for a
  * resilient call's run Cmd.
@@ -668,8 +672,18 @@ export function createResilientCall<
 >(
   config: ResilientConfig<N> & {
     readonly settledCmd?: (
-      cmd: RunCmdValue<I, R, N>,
-    ) => RunCmdValue<I, R, N>;
+      cmd: CmdValue<
+        ResilientRunType<N>,
+        { readonly key: string; readonly input: I },
+        R,
+        RunErr
+      >,
+    ) => CmdValue<
+      ResilientRunType<N>,
+      { readonly key: string; readonly input: I },
+      R,
+      RunErr
+    >;
   },
   rng: () => number = Math.random,
 ) {
