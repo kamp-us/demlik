@@ -452,6 +452,17 @@ function replayTrace<
   trace: Trace<S, M>,
   _ctx?: Ctx,
 ): ReplayResult<S, M>
+function replayTrace<
+  S,
+  M extends { _tag: string },
+  C extends Cmd,
+  U extends Sub,
+  Ctx,
+>(
+  machine: Machine<S, M, C, U, Ctx>,
+  trace: Trace<unknown, { readonly _tag: string }>,
+  _ctx?: Ctx,
+): ReplayResult<unknown, { readonly _tag: string }>
 ```
 
 <a id="RowPort"></a>

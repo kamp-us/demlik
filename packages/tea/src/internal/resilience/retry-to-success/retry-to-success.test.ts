@@ -132,4 +132,37 @@ describe("retryToSuccess", () => {
     expect(port).toHaveBeenCalledTimes(1);
     expect(delays).toEqual([]);
   });
+
+  it("rejects with the failure itself, at once, when `retryable` refuses it", async () => {
+    const { delays, sleep } = recordingSleep();
+    const fatal = new Error("401");
+    const port = vi.fn(async () => {
+      throw fatal;
+    });
+
+    await expect(
+      retryToSuccess(port, policy, { rng, sleep, retryable: () => false }),
+    ).rejects.toBe(fatal);
+    expect(port).toHaveBeenCalledTimes(1);
+    expect(delays).toEqual([]);
+  });
+
+  it("retries the failures `retryable` allows, then rejects with the one it refuses", async () => {
+    const { delays, sleep } = recordingSleep();
+    const fatal = new Error("401");
+    const failures = [new Error("a"), new Error("b"), fatal];
+    const port = vi.fn(async () => {
+      throw failures.shift();
+    });
+
+    await expect(
+      retryToSuccess(port, policy, {
+        rng,
+        sleep,
+        retryable: (error) => error !== fatal,
+      }),
+    ).rejects.toBe(fatal);
+    expect(port).toHaveBeenCalledTimes(3);
+    expect(delays).toEqual(expectedDelays(2));
+  });
 });

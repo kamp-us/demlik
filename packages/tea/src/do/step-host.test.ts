@@ -395,6 +395,78 @@ describe("runStepLoop", () => {
     expect(calls).toBe(3);
     expect(sleeps).toEqual([2, 4]);
   });
+
+  it("gives up at once on a failure `retryable` refuses, without a backoff sleep for it", async () => {
+    const fatal = new Error("401");
+    let calls = 0;
+    const transport = (): Promise<StepResponse<ToolInput, RunOutput>> => {
+      calls += 1;
+      return Promise.reject(calls === 1 ? new Error("flaky") : fatal);
+    };
+    const sleeps: number[] = [];
+
+    const outcome = await runStepLoop<ToolResult, ToolInput, RunOutput>(
+      mintRunToken(),
+      "loop-fatal",
+      transport,
+      (step) => `${step.tool}!`,
+      {
+        deadlineMs: Number.POSITIVE_INFINITY,
+        now: () => 0,
+        sleep: (ms) => {
+          sleeps.push(ms);
+          return Promise.resolve();
+        },
+        retry: {
+          baseMs: 1,
+          factor: 2,
+          capMs: 10,
+          maxAttempts: 9,
+          jitter: "none",
+        },
+        retryable: (error) => error !== fatal,
+      },
+    );
+
+    expect(outcome).toEqual({ kind: "gave_up", error: fatal });
+    expect(calls).toBe(2);
+    expect(sleeps).toEqual([2]);
+  });
+
+  it("gives up when a duration bound runs out, measured on now() from the first failure", async () => {
+    let clock = 0;
+    let calls = 0;
+    const transport = (): Promise<StepResponse<ToolInput, RunOutput>> => {
+      calls += 1;
+      return Promise.reject(new Error("down"));
+    };
+
+    const outcome = await runStepLoop<ToolResult, ToolInput, RunOutput>(
+      mintRunToken(),
+      "loop-outage",
+      transport,
+      (step) => `${step.tool}!`,
+      {
+        deadlineMs: Number.POSITIVE_INFINITY,
+        now: () => clock,
+        sleep: async (ms) => {
+          if (calls > 50) throw new Error("runaway retry");
+          clock += ms;
+        },
+        retry: {
+          baseMs: 10,
+          factor: 1,
+          capMs: 10,
+          maxElapsedMs: 35,
+          jitter: "none",
+        },
+      },
+    );
+
+    expect(outcome.kind).toBe("gave_up");
+    expect(calls).toBe(5);
+    expect(clock).toBe(40);
+  });
 });
 
 // A transport that never reaches a terminal state — always hands out a step.

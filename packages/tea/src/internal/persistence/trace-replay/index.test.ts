@@ -3,7 +3,7 @@ import { Cmd, defineMachine } from "../../../index";
 import { memoryStore } from "../../../mem";
 import { goldenReplay } from "../../../parity";
 import { run } from "../../../promise";
-import { parseJSONL, recorder } from "../recorder";
+import { parseJSONL, recorder, type Trace } from "../recorder";
 import { replayTrace } from "./index";
 
 // ---------------------------------------------------------------------------
@@ -138,6 +138,21 @@ describe("replayTrace", () => {
     expect(result.matches).toBe(true);
     expect(result.actual).toEqual(trace.finalState);
     expect(result.divergence).toBeUndefined();
+  });
+
+  it("replays a recording read back as plain data, whose states and Msgs are not typed as the machine's", async () => {
+    const trace = await recordRun();
+    const stored: Trace<unknown, { readonly _tag: string }> = JSON.parse(
+      JSON.stringify(trace),
+    );
+
+    const same = replayTrace(queueMachine(), stored);
+    const drifted = replayTrace(queueMachineBuggyStatus(), stored);
+
+    expect(same.matches).toBe(true);
+    expect(same.actual).toEqual(trace.finalState);
+    expect(drifted.matches).toBe(false);
+    expect(drifted.divergence?.path).toBeDefined();
   });
 
   it("diverges with the correct path when the reducer cell drifts", async () => {

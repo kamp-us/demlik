@@ -268,3 +268,15 @@ The lid takes the count-bounded `RetryPolicy` the brain call has always taken,
 so step 5's outage bound is not available here: pick `maxAttempts` and `capMs`
 so the ladder's worst case still fits inside whatever patience the caller above
 the agent has.
+
+## 7. Stop retrying a failure that cannot succeed
+
+Some failures are not worth another attempt: a rejected credential, a request
+the server calls malformed. `retryToSuccess` (from `@demlik/tea/resilience`) and
+the step loop's `runStepLoop` (from `@demlik/tea/do`) take an optional
+`retryable: (error) => boolean`, which defaults to `() => true`. When it returns
+`false` for a failure, the retrying ends at once with no backoff sleep:
+`retryToSuccess` rejects with that error itself, not a `RetryExhaustedError`, and
+`runStepLoop` returns `gave_up` carrying it. `runStepLoop`'s `retry` also takes
+the duration bound of step 5, `maxElapsedMs`, measured on its `now()` from the
+first failed POST of a streak.

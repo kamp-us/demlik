@@ -109,7 +109,36 @@ export function replayTrace<
   machine: Machine<S, M, C, U, Ctx>,
   trace: Trace<S, M>,
   _ctx?: Ctx,
-): ReplayResult<S, M> {
+): ReplayResult<S, M>;
+/**
+ * Replay a recording read back from storage, whose states and msgs are plain
+ * data not typed as the machine's own. Replay only folds and compares them, so
+ * the result's states and msgs are `unknown` data too.
+ */
+export function replayTrace<
+  S,
+  M extends { _tag: string },
+  C extends Cmd,
+  U extends Sub,
+  Ctx,
+>(
+  machine: Machine<S, M, C, U, Ctx>,
+  trace: Trace<unknown, { readonly _tag: string }>,
+  _ctx?: Ctx,
+): ReplayResult<unknown, { readonly _tag: string }>;
+export function replayTrace<
+  S,
+  M extends { _tag: string },
+  C extends Cmd,
+  U extends Sub,
+  Ctx,
+>(
+  machine: Machine<S, M, C, U, Ctx>,
+  recorded: Trace<S, M> | Trace<unknown, { readonly _tag: string }>,
+  _ctx?: Ctx,
+): ReplayResult<S, M> | ReplayResult<unknown, { readonly _tag: string }> {
+  // The second overload trusts the host's recording to be the machine's own.
+  const trace = recorded as Trace<S, M>;
   if (trace.loaded === null) {
     throw new Error(
       "tea replayTrace: trace has no captured initial State; record boot before replaying.",
