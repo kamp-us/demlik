@@ -593,6 +593,47 @@ describe("instructions live in the durable Model (ADR 0004)", () => {
 // a persist + resume; a Model persisted before the slot existed still boots.
 // ---------------------------------------------------------------------------
 
+describe("agent.run stamps the compaction settle with the run's clock", () => {
+  it("the compact_ok Msg carries an at the injected clock returned, not wall time", async () => {
+    let calls = 0;
+    const model = async (): Promise<AgentTurn> => {
+      calls += 1;
+      return calls <= 2
+        ? {
+            content: `ask ${calls}`,
+            toolCalls: [
+              { callId: `c${calls}`, name: "search", args: { q: "tea" } },
+            ],
+          }
+        : ANSWER;
+    };
+    const issued: number[] = [];
+    let t = 0;
+    const { store, msgs } = recordedMsgs();
+    const final = await defineAgent({
+      model,
+      tools: [search],
+      instructions: INSTRUCTIONS,
+      compaction: { afterTurns: 2, keepTurns: 0 },
+    }).run(INPUT, {
+      ctx: { kb },
+      store,
+      clock: () => {
+        t += 1;
+        issued.push(t);
+        return t;
+      },
+    });
+
+    expect(final.run.phase).toBe("done");
+    const settles = msgs.filter((m) => m._tag === "compact_ok");
+    expect(settles).toHaveLength(1);
+    const at = (settles[0] as { readonly at: number }).at;
+    expect(issued).toContain(at);
+    expect(final.resilience.clockMs).toBeLessThanOrEqual(t);
+  });
+});
+
 describe("AgentTurn.provider — the opaque passthrough slot (#93)", () => {
   const PROVIDER = {
     blocks: [{ type: "thinking", thinking: "…", signature: "sig-abc" }],

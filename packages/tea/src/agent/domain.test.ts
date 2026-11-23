@@ -33,6 +33,8 @@ const tick = tool(
     input.fail === true ? fail({ _tag: "refused" }) : ok({ ticked: true }),
 );
 
+const SLOW_TIMEOUT_MS = 10;
+
 const slow = tool(
   "slow",
   {
@@ -40,7 +42,7 @@ const slow = tool(
     input: z.object({}),
     ok: z.object({ late: z.literal(true) }),
     err: [],
-    timeoutMs: 10,
+    timeoutMs: SLOW_TIMEOUT_MS,
   },
   async (_input, _ctx, { ok }) => {
     await new Promise((resolve) => setTimeout(resolve, 40));
@@ -355,7 +357,6 @@ describe("an agent's domain slice", () => {
     const ats: number[] = [];
     const issued: number[] = [];
     let t = 0;
-    const wall = Date.now();
     const { model } = stepper();
     const final = await defineAgent({
       model,
@@ -380,9 +381,9 @@ describe("an agent's domain slice", () => {
     for (const [i, event] of log.entries()) {
       const at = ats[i] ?? 0;
       if (event._tag === "compaction") {
-        expect(at).toBeGreaterThanOrEqual(wall);
+        expect(issued).toContain(at);
       } else if (event._tag === "tool" && event.tag === "timeout") {
-        expect(issued).toContain(at - 10);
+        expect(issued).toContain(at - SLOW_TIMEOUT_MS);
       } else if (event._tag === "nudge") {
         expect(at).toBe(ats[i - 1]);
       } else {

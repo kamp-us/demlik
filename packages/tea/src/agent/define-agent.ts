@@ -881,7 +881,14 @@ function definedAgent<T extends AnyToolDef, D = never>(
           >(core).toMachine<DefinedAgentCtx<T>, T>({
             tools,
           }) as unknown as DefinedAgentWired<T, D>)
-        : compactingMachine(core, compaction, brain, tools, config.media, clock);
+        : compactingMachine(
+            core,
+            compaction,
+            brain,
+            tools,
+            config.media,
+            clock,
+          );
     return overlaid(agent, overlays);
   };
   // The public way down carries no chunk sink: `machine(input)` is handed to
@@ -1094,7 +1101,9 @@ function compactingMachine<T extends AnyToolDef, D = never>(
   });
   const wiring = {
     tools,
-    toolInterpret: { compact_run: summarizeWith(brain, tools.partsOf, media, clock) },
+    toolInterpret: {
+      compact_run: summarizeWith(brain, tools.partsOf, media, clock),
+    },
   } as Parameters<typeof agent.toMachine<DefinedAgentCtx<T>, T>>[0];
   return agent.toMachine<DefinedAgentCtx<T>, T>(
     wiring,
