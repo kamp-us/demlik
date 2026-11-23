@@ -210,7 +210,11 @@ export {
   type StepCtx,
   type StepEngine,
   type StepHostConfig,
+  type StepLoopCmd,
+  type StepLoopMsg,
   type StepLoopOutcome,
+  type StepLoopRun,
+  type StepLoopState,
   type StepOutcome,
   type StepRequest,
   type StepResponse,
@@ -218,6 +222,7 @@ export {
   type StepTransport,
   type StepWorking,
   stepHost,
+  stepLoopMachine,
 } from "./step-host";
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -67,7 +67,16 @@
  * request/response contract and the token lifecycle.
  */
 
+import {
+  type BootingRuntime,
+  defineMachine,
+  type Interpret,
+  type Machine,
+  type Sub,
+  type Transitions,
+} from "../index";
 import { createIntake } from "../internal/idempotency/idempotent-intake/index";
+import { driveToDone, run } from "../promise";
 import {
   type AnyRetryPolicy,
   defaultRetryPolicy,
@@ -628,8 +637,8 @@ export function stepHost<R, I, O>(
 // The thin client the HANDS run: POST `/step` → get the next tool → execute it
 // (consumer callback) → POST the result → repeat until terminal. Built on the
 // `poller` primitives (`retry-backoff`) — absolute deadline + backoff + dedupe
-// by callId — exactly the loop the poller knob composes internally, lifted to a
-// standalone async driver (the hands are not a TEA machine; they drive one).
+// by callId. Its decisions are a tea machine ({@link stepLoopMachine}), run by
+// `run`, so a recorder can attach to it like to any other run.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -678,9 +687,11 @@ export interface ExecutedSteps<R> {
  * `R` is the step result type, and only {@link RunStepLoopConfig.executed} reads
  * it. It defaults to `never` because a bare `RunStepLoopConfig` says nothing
  * about results: it has to fit a drive of any `R`, and a store of `unknown`
- * could not hand a drive its `R` back.
+ * could not hand a drive its `R` back. `I` and `O` are the step input and the
+ * output, which only {@link RunStepLoopConfig.attach} reads, and default the
+ * same way.
  */
-export interface RunStepLoopConfig<R = never> {
+export interface RunStepLoopConfig<R = never, I = never, O = never> {
   /**
    * Absolute wall-clock deadline (ms epoch). The loop stops asking once `now()`
    * reaches it, surfacing a `deadline_exceeded` outcome. Mirrors the poller's
@@ -712,6 +723,18 @@ export interface RunStepLoopConfig<R = never> {
   readonly sleep?: (ms: number) => Promise<void>;
   /** Backoff jitter RNG, injected for determinism. Defaults to `Math.random`. */
   readonly rng?: Rng;
+  /**
+   * Called once with the drive's runtime, before it boots, so the caller can
+   * attach to it what attaches to any tea run. `recorder(runtime, {
+   * captureSteps: true })` records the drive, and `replayTrace` or
+   * `replayStoredTrace` with {@link stepLoopMachine} replays the recording.
+   * Attach before boot to record the starting State. A throw rejects the drive.
+   * Declared as a method so that a bare `RunStepLoopConfig` still fits a drive
+   * of any `R`, `I` and `O`.
+   */
+  attach?(
+    runtime: BootingRuntime<StepLoopState<R, I, O>, StepLoopMsg<R, I, O>>,
+  ): void;
 }
 
 /** The terminal outcome of a full {@link runStepLoop} drive. */
@@ -719,6 +742,247 @@ export type StepLoopOutcome<O> =
   | { readonly kind: "done"; readonly output: O }
   | { readonly kind: "deadline_exceeded" }
   | { readonly kind: "gave_up"; readonly error: unknown };
+
+/**
+ * What every phase of a drive in motion carries. Plain data, so a recording of
+ * it survives `JSON.stringify` and a replay from the parsed text decides as the
+ * live drive did.
+ */
+export interface StepLoopRun<R> {
+  /** The absolute deadline, or `null` for none: `Infinity` does not survive JSON. */
+  readonly deadlineMs: number | null;
+  readonly policy: AnyRetryPolicy;
+  /** The result the next POST carries, or `null` on the first. */
+  readonly posted: StepResult<R> | null;
+  /** The not-ready polls since the last real step. */
+  readonly polls: RetryState;
+}
+
+/**
+ * The phases of a {@link runStepLoop} drive. `asking` waits for the clock
+ * before a POST, `posting` for the transport, `failing` for the clock after a
+ * failed POST, `backing_off` and `waiting` for the sleep that ends a failure
+ * streak's pause or a not-ready poll's, `polling` for the clock after a
+ * not-ready answer, and `running` for the hands.
+ */
+export type StepLoopState<R, I, O> =
+  | { readonly _tag: "idle" }
+  | (StepLoopRun<R> & { readonly _tag: "asking" })
+  | (StepLoopRun<R> & {
+      readonly _tag: "posting";
+      readonly failures: RetryState;
+    })
+  | (StepLoopRun<R> & {
+      readonly _tag: "failing";
+      readonly failures: RetryState;
+      readonly error: unknown;
+    })
+  | (StepLoopRun<R> & {
+      readonly _tag: "backing_off";
+      readonly failures: TimedRetryState;
+    })
+  | (StepLoopRun<R> & {
+      readonly _tag: "polling";
+      /** The host's advisory re-poll delay, or `null` for the backoff curve. */
+      readonly hintMs: number | null;
+    })
+  | (StepLoopRun<R> & { readonly _tag: "waiting" })
+  | (StepLoopRun<R> & {
+      readonly _tag: "running";
+      readonly step: NextStep<I>;
+    })
+  | {
+      readonly _tag: "finished";
+      readonly outcome: StepLoopOutcome<O>;
+    };
+
+/**
+ * What a {@link runStepLoop} drive's Cmds report back. Each carries the value
+ * the decision reads: the instant, the response, the failure, the result.
+ */
+export type StepLoopMsg<R, I, O> =
+  | {
+      readonly _tag: "start";
+      readonly deadlineMs: number | null;
+      readonly policy: AnyRetryPolicy;
+    }
+  | { readonly _tag: "clock_read"; readonly at: number }
+  | {
+      readonly _tag: "responded";
+      readonly response: DeferredStepResponse<I, O>;
+    }
+  | {
+      readonly _tag: "post_failed";
+      readonly error: unknown;
+      /** What `config.retryable` said of `error`. */
+      readonly retryable: boolean;
+    }
+  | { readonly _tag: "slept"; readonly ms: number }
+  | {
+      readonly _tag: "step_ran";
+      readonly callId: string;
+      readonly result: R;
+    }
+  | { readonly _tag: "store_failed"; readonly error: unknown };
+
+/** The effects of a {@link runStepLoop} drive, all of them plain data. */
+export type StepLoopCmd<R, I> =
+  | { readonly _tag: "read_clock" }
+  | { readonly _tag: "post"; readonly posted: StepResult<R> | null }
+  | { readonly _tag: "run_step"; readonly step: NextStep<I> }
+  | { readonly _tag: "sleep"; readonly ms: number }
+  | {
+      readonly _tag: "back_off";
+      readonly retry: RetryState;
+      readonly policy: AnyRetryPolicy;
+    };
+
+/**
+ * The decisions of {@link runStepLoop} as a machine: when to POST, what a
+ * response means, when to run a step, retry, back off, give up, stop at the
+ * deadline or finish. It reads the clock, the transport, the hands and the
+ * sleep through Cmds and holds none of them. Replay a drive recorded with
+ * `recorder` by handing this machine and the recording to `replayTrace`, or to
+ * `replayStoredTrace` when the recording was read back from storage.
+ */
+export function stepLoopMachine<R, I, O>(): Machine<
+  StepLoopState<R, I, O>,
+  StepLoopMsg<R, I, O>,
+  StepLoopCmd<R, I>,
+  Sub<never>,
+  unknown
+> {
+  type S = StepLoopState<R, I, O>;
+  type M = StepLoopMsg<R, I, O>;
+  type C = StepLoopCmd<R, I>;
+  const readClock: C = { _tag: "read_clock" };
+  const finish = (outcome: StepLoopOutcome<O>): readonly [S, readonly C[]] => [
+    { _tag: "finished", outcome },
+    [],
+  ];
+  const carry = ({
+    deadlineMs,
+    policy,
+    posted,
+    polls,
+  }: StepLoopRun<R>): StepLoopRun<R> => ({ deadlineMs, policy, posted, polls });
+  const late = (s: StepLoopRun<R>, at: number): boolean =>
+    s.deadlineMs !== null && at >= s.deadlineMs;
+
+  const update: Transitions<S, M, C> = {
+    idle: {
+      start: (_, m) => [
+        {
+          _tag: "asking",
+          deadlineMs: m.deadlineMs,
+          policy: m.policy,
+          posted: null,
+          polls: initRetry(),
+        },
+        [readClock],
+      ],
+    },
+    asking: {
+      clock_read: (s, m) =>
+        late(s, m.at)
+          ? finish({ kind: "deadline_exceeded" })
+          : [
+              { _tag: "posting", ...carry(s), failures: initRetry() },
+              [{ _tag: "post", posted: s.posted }],
+            ],
+    },
+    posting: {
+      responded: (s, { response }) => {
+        if (response.done) {
+          return finish({ kind: "done", output: response.output });
+        }
+        if ("working" in response) {
+          return [
+            {
+              _tag: "polling",
+              ...carry(s),
+              polls: recordFailure(s.polls, "working"),
+              hintMs: response.retryAfterMs ?? null,
+            },
+            [readClock],
+          ];
+        }
+        return [
+          {
+            _tag: "running",
+            ...carry(s),
+            polls: initRetry(),
+            step: response.step,
+          },
+          [{ _tag: "run_step", step: response.step }],
+        ];
+      },
+      post_failed: (s, m) =>
+        m.retryable
+          ? [
+              {
+                _tag: "failing",
+                ...carry(s),
+                failures: s.failures,
+                error: m.error,
+              },
+              [readClock],
+            ]
+          : finish({ kind: "gave_up", error: m.error }),
+    },
+    failing: {
+      clock_read: (s, m) => {
+        const failures = recordFailure(s.failures, s.error, m.at);
+        if (!shouldRetry(failures, s.policy, m.at)) {
+          return finish({ kind: "gave_up", error: s.error });
+        }
+        if (late(s, m.at)) return finish({ kind: "deadline_exceeded" });
+        return [
+          { _tag: "backing_off", ...carry(s), failures },
+          [{ _tag: "back_off", retry: failures, policy: s.policy }],
+        ];
+      },
+    },
+    backing_off: {
+      slept: (s) => [
+        { _tag: "posting", ...carry(s), failures: s.failures },
+        [{ _tag: "post", posted: s.posted }],
+      ],
+    },
+    polling: {
+      clock_read: (s, m) =>
+        late(s, m.at)
+          ? finish({ kind: "deadline_exceeded" })
+          : [
+              { _tag: "waiting", ...carry(s) },
+              [
+                s.hintMs === null
+                  ? { _tag: "back_off", retry: s.polls, policy: s.policy }
+                  : { _tag: "sleep", ms: s.hintMs },
+              ],
+            ],
+    },
+    waiting: { slept: (s) => [{ _tag: "asking", ...carry(s) }, [readClock]] },
+    running: {
+      step_ran: (s, m) => [
+        {
+          _tag: "asking",
+          ...carry(s),
+          posted: { callId: m.callId, result: m.result },
+        },
+        [readClock],
+      ],
+      store_failed: (_, m) => finish({ kind: "gave_up", error: m.error }),
+    },
+    finished: {},
+  };
+
+  return defineMachine({
+    types: { model: {} as S, msg: {} as M, cmd: {} as C },
+    init: (loaded) => [loaded ?? { _tag: "idle" }, []],
+    update,
+  });
+}
 
 /**
  * Drive the pull loop to completion. Starting from `{ posted: null }`, POST
@@ -755,88 +1019,91 @@ export type StepLoopOutcome<O> =
  * `execute` finishing and `set` landing. Hands that die there have run the step
  * with no record of it, and the next drive runs it again. No store can close
  * that: the step itself has to be safe to repeat, as with `idempotentEffect`.
+ *
+ * **A machine:** the decisions above are {@link stepLoopMachine}, run by `run`
+ * and driven to its end by `driveToDone`; the clock, the transport, the hands
+ * and the sleep are its Cmds. {@link RunStepLoopConfig.attach} hands the caller
+ * the runtime, so `recorder` records the drive and `replayTrace` replays it.
+ * A drive is one `dispatch`, which tea bounds at 100,000 follow-up Msgs
+ * (`QuiescenceTimeoutError`): three Msgs for an ordinary step, so a drive of
+ * about 33,000 steps. The loop this replaced had no bound.
  */
 export async function runStepLoop<R, I, O>(
   token: string,
   runId: string,
   transport: StepTransport<R, I, O>,
   execute: ExecuteStep<I, R>,
-  config: RunStepLoopConfig<R>,
+  config: RunStepLoopConfig<R, I, O>,
 ): Promise<StepLoopOutcome<O>> {
   const policy = config.retry ?? defaultRetryPolicy;
   const retryable = config.retryable ?? (() => true);
   const now = config.now ?? Date.now;
   const sleep = config.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
   const rng = config.rng;
-
-  // Dedupe-by-callId: the result already produced for a callId, so a re-handed
-  // step re-POSTs the saved result instead of re-executing.
   const executed = config.executed ?? stepsInMemory<R>();
-  // The result to POST on the NEXT request (null on the first request).
-  let posted: StepResult<R> | null = null;
-  // Consecutive not-ready ("working") polls, driving the re-poll backoff curve.
-  // Reset on any real step / terminal response. Bounded by the absolute deadline,
-  // NOT by `maxAttempts` — a host may legitimately compute for many polls.
-  let pollRetry = initRetry();
 
-  for (;;) {
-    if (now() >= config.deadlineMs) return { kind: "deadline_exceeded" };
-
-    // POST `/step` with backoff on transport failure.
-    let response: DeferredStepResponse<I, O>;
-    let retry: RetryState = initRetry();
-    for (;;) {
+  const interpret: Interpret<
+    StepLoopMsg<R, I, O>,
+    StepLoopCmd<R, I>,
+    unknown
+  > = {
+    read_clock: async () => ({ _tag: "clock_read", at: now() }),
+    post: async ({ posted }) => {
       try {
-        response = await transport({ token, runId, posted });
-        break;
+        return {
+          _tag: "responded",
+          response: await transport({ token, runId, posted }),
+        };
       } catch (error) {
-        if (!retryable(error)) return { kind: "gave_up", error };
-        const failedAt = now();
-        const failures: TimedRetryState = recordFailure(retry, error, failedAt);
-        retry = failures;
-        if (!shouldRetry(failures, policy, failedAt)) {
-          return { kind: "gave_up", error };
+        return { _tag: "post_failed", error, retryable: retryable(error) };
+      }
+    },
+    sleep: async ({ ms }) => {
+      await sleep(ms);
+      return { _tag: "slept", ms };
+    },
+    back_off: async ({ retry, policy }) => {
+      const ms = nextDelayMs(retry, policy, rng);
+      await sleep(ms);
+      return { _tag: "slept", ms };
+    },
+    run_step: async ({ step }) => {
+      let saved: ExecutedStep<R> | undefined;
+      try {
+        saved = await executed.get(step.callId);
+      } catch (error) {
+        return { _tag: "store_failed", error };
+      }
+      if (saved === undefined) {
+        saved = { result: await execute(step) };
+        try {
+          await executed.set(step.callId, saved);
+        } catch (error) {
+          return { _tag: "store_failed", error };
         }
-        if (failedAt >= config.deadlineMs) return { kind: "deadline_exceeded" };
-        await sleep(nextDelayMs(retry, policy, rng));
       }
-    }
+      return { _tag: "step_ran", callId: step.callId, result: saved.result };
+    },
+  };
 
-    if (response.done) return { kind: "done", output: response.output };
-
-    // NOT-READY arm — a defer-resume host is computing the step OUT-OF-BAND. Do
-    // NOT execute anything: re-poll with the SAME `posted` (idempotent re-POST)
-    // after a backoff, until the host yields a real step / done. Honor the host's
-    // advisory `retryAfterMs` when present, else fall back to the poll backoff
-    // curve. The absolute deadline is the only terminal bound here.
-    if ("working" in response) {
-      pollRetry = recordFailure(pollRetry, "working");
-      if (now() >= config.deadlineMs) return { kind: "deadline_exceeded" };
-      await sleep(response.retryAfterMs ?? nextDelayMs(pollRetry, policy, rng));
-      continue;
-    }
-    pollRetry = initRetry(); // a real step resets the poll backoff
-
-    // Execute the next step (dedupe: a callId already remembered re-POSTs its
-    // saved result rather than executing twice). Only the store's own failures
-    // become `gave_up`; a throwing `execute` still rejects the drive.
-    const step = response.step;
-    let saved: ExecutedStep<R> | undefined;
-    try {
-      saved = await executed.get(step.callId);
-    } catch (error) {
-      return { kind: "gave_up", error };
-    }
-    if (saved === undefined) {
-      saved = { result: await execute(step) };
-      try {
-        await executed.set(step.callId, saved);
-      } catch (error) {
-        return { kind: "gave_up", error };
-      }
-    }
-    posted = { callId: step.callId, result: saved.result };
+  const handle = run(stepLoopMachine<R, I, O>(), { interpret });
+  config.attach?.(handle);
+  const final = await driveToDone(
+    handle,
+    {
+      _tag: "start",
+      deadlineMs:
+        config.deadlineMs === Number.POSITIVE_INFINITY
+          ? null
+          : config.deadlineMs,
+      policy,
+    },
+    (state) => state._tag === "finished",
+  );
+  if (final._tag !== "finished") {
+    throw new Error(`tea runStepLoop: the drive ended in "${final._tag}"`);
   }
+  return final.outcome;
 }
 
 /** The default {@link ExecutedSteps}: lives as long as one drive. */
