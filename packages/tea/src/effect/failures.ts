@@ -97,9 +97,9 @@ export function saveFailures<S, M, C>(): ExtensionFactory<S, M, C> {
   return () => ({
     store: (store: Store<S>): Store<S> => ({
       load: () => store.load(),
-      async save(state, msg) {
+      async save(state, msg, boundary) {
         try {
-          await store.save(state, msg);
+          await store.save(state, msg, boundary);
         } catch (cause) {
           throw new SaveFailure(cause);
         }

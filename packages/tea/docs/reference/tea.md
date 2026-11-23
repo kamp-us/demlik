@@ -8,7 +8,7 @@ Tier: `stable`
 import { … } from "@demlik/tea";
 ```
 
-## Exports (213)
+## Exports (214)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -179,6 +179,7 @@ import { … } from "@demlik/tea";
 | [`RuntimeErrorContext`](#RuntimeErrorContext) | Interface | stable | Context handed to an `OnError` sink alongside the error itself. |
 | [`RuntimeErrorPhase`](#RuntimeErrorPhase) | Type | stable | Which otherwise-unattributable runtime path produced an error. |
 | [`RuntimeRef`](#RuntimeRef) | Interface | stable | The dispatch-only view of a runtime. |
+| [`SaveBoundary`](#SaveBoundary) | Type | stable | Which boundary a Store.save records. |
 | [`Schema`](#Schema) | Interface | stable | The minimal validator shape `schemaMigrate` accepts: an object with `safeParse`. |
 | [`schemaMigrate`](#schemaMigrate) | Function | stable | Build a `Store.migrate` from a schema (job 1) and an optional thin `upcast` (job 2). |
 | [`Seq`](#Seq) | Type | stable | A monotonic, non-negative sequence number tagging one client-predicted command. |
@@ -2720,6 +2721,23 @@ interface RuntimeRef<M extends { _tag: string }> {
 }
 ```
 
+<a id="SaveBoundary"></a>
+
+### `SaveBoundary`
+
+```ts
+type SaveBoundary =
+  | {
+    readonly _tag: "init";
+    readonly cmds: readonly unknown[];
+  }
+  | {
+    readonly _tag: "step";
+    readonly cmds: readonly unknown[];
+  }
+  | { readonly _tag: "stop" }
+```
+
 <a id="Schema"></a>
 
 ### `Schema`
@@ -2804,7 +2822,7 @@ type SettledOk<Name extends string, C, Ok> = {
 interface Store<S> {
   load(): Promise<unknown>;
   migrate(raw: unknown): Migrated<S>;
-  save(state: S, msg?: unknown): Promise<void>;
+  save(state: S, msg?: unknown, boundary?: SaveBoundary): Promise<void>;
 }
 ```
 

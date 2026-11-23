@@ -13,6 +13,7 @@ import { describe, expect, it } from "vitest";
 import {
   defineMachine,
   type FencedStore,
+  type Reducer,
   type Store,
   type Sub,
   type Transitions,
@@ -276,6 +277,100 @@ describe.each(
       finish,
       undefined,
     ]);
+  });
+});
+
+describe.each(
+  ENGINES,
+)("%s engine: Store.save receives the boundary", (engine) => {
+  it("tells each save which boundary it is, with the Cmds that boundary starts", async () => {
+    const { store, saves } = recording();
+    const run = await start[engine](store);
+    await run.dispatch(send);
+    await run.dispatch(finish);
+    await run.stop();
+
+    expect(saves.map((s) => s.args[2])).toEqual([
+      { _tag: "init", cmds: [] },
+      { _tag: "step", cmds: [{ _tag: "notify", files: 2 }] },
+      { _tag: "step", cmds: [] },
+      { _tag: "stop" },
+    ]);
+  });
+});
+
+describe("the boot save's boundary carries the Cmds the engine starts", () => {
+  type Greeter = { readonly n: number };
+  type Hello = { readonly _tag: "hello" };
+  type Tick = { readonly _tag: "tick" };
+  const tick: Reducer<Greeter, Tick, Hello> = {
+    tick: (s) => [{ n: s.n + 1 }, []],
+  };
+  const greeter = defineMachine({
+    types: {
+      model: {} as Greeter,
+      msg: {} as Tick,
+      cmd: {} as Hello,
+      ctx: undefined,
+    },
+    init: (loaded) => [
+      loaded === null ? { n: 0 } : { n: loaded.n + 1 },
+      [{ _tag: "hello" }],
+    ],
+    update: tick,
+  });
+
+  function storeHolding(held: Greeter | null) {
+    const saves: { readonly state: Greeter; readonly args: unknown[] }[] = [];
+    const store: Store<Greeter> = {
+      load: async () => held,
+      save: async (state, ...rest) => {
+        saves.push({ state, args: rest });
+      },
+      migrate: (raw) => raw as Greeter | null,
+    };
+    return { store, saves };
+  }
+
+  it("hands init's Cmds to the boot save of a fresh run, and the handler runs them", async () => {
+    const { store, saves } = storeHolding(null);
+    const hello: Hello[] = [];
+    const rt = await runPromise(greeter, {
+      ctx: undefined,
+      store,
+      interpret: {
+        hello: async (cmd) => {
+          hello.push(cmd);
+        },
+      },
+    }).ready;
+    await rt.stop();
+
+    expect(saves[0]?.args).toEqual([
+      undefined,
+      { _tag: "init", cmds: [{ _tag: "hello" }] },
+    ]);
+    expect(hello).toEqual([{ _tag: "hello" }]);
+  });
+
+  it("hands none when the run wakes a restored State, because none of them start", async () => {
+    const { store, saves } = storeHolding({ n: 5 });
+    const hello: Hello[] = [];
+    const rt = await runPromise(greeter, {
+      ctx: undefined,
+      store,
+      boot: "restored",
+      interpret: {
+        hello: async (cmd) => {
+          hello.push(cmd);
+        },
+      },
+    }).ready;
+    await rt.stop();
+
+    expect(saves[0]?.state).toEqual({ n: 6 });
+    expect(saves[0]?.args).toEqual([undefined, { _tag: "init", cmds: [] }]);
+    expect(hello).toEqual([]);
   });
 });
 
