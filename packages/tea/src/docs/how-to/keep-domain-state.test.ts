@@ -27,6 +27,9 @@ const lookup = tool(
 const IDS = ["t1", "t2", "missing", "t3"];
 
 async function model(messages: readonly AgentMessage[]): Promise<AgentTurn> {
+  if (messages.filter((m) => m.role === "assistant").length >= 7) {
+    throw new Error("the script ran past seven model calls");
+  }
   const done = messages.filter((m) => m.role === "tool").length;
   const id = IDS[done];
   return id === undefined

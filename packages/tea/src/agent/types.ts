@@ -891,7 +891,8 @@ export type AgentDomainEvent<R> =
  * `state.domain`, already holding the event that just settled.
  *
  *   - `init`  — the slice a new run starts from. A `start` for a new `runId`
- *               resets to it; a repeated `start` for the same `runId` does not.
+ *               resets to it; a repeated `start` for the same `runId` returns the
+ *               Model untouched, with or without the slice.
  *   - `step`  — the slice after one event. It must be PURE: read no clock and
  *               no randomness (use `event.at`), return new objects rather than
  *               mutate (the slice it receives is frozen in dev), and emit
@@ -899,11 +900,13 @@ export type AgentDomainEvent<R> =
  *
  * The slice must be plain JSON data — no `Map`, `Set`, `Date`, class instance
  * or function — because it is saved and compared like every other field of the
- * Model.
+ * Model. `D` must not include `undefined`: an `undefined` slice reads as no
+ * slice at all.
  *
- * A Model saved without the slice is seeded from `init` while the run is
- * `idle`; met mid-run it throws {@link MissingAgentDomainError}, because
- * seeding there would silently restart the position. Upgrade such saves in the
+ * A Model saved without the slice is seeded from `init` unless its run is
+ * mid-run (running or suspended, by `isMidRun`); mid-run it throws
+ * {@link MissingAgentDomainError}, because seeding there would silently
+ * restart the position. Upgrade such saves in the
  * Store's `migrate`.
  *
  * @typeParam D - the domain slice.

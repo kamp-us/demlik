@@ -2,9 +2,10 @@
  * @demlik/tea/agent — which runs a restored Model re-enters through `agent_boot`.
  *
  * NOT part of the public `./agent` barrel: `defineAgent` reads it to choose
- * between `agent_start` and `agent_boot`, and `@demlik/tea/do` reads it to choose
- * whether a cold wake dispatches `agent_boot`. One table answers both, so the two
- * hosts cannot disagree about a run.
+ * between `agent_start` and `agent_boot`, `@demlik/tea/do` reads it to choose
+ * whether a cold wake dispatches `agent_boot`, and `createAgent` reads it to
+ * decide whether a Model without its domain slice is seeded or refused. One
+ * table answers all three, so no two of them can disagree about a run.
  */
 
 import { type AgentState, type AgentStatus, status } from "./types";

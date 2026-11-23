@@ -51,7 +51,8 @@ a failed compaction and a tool's late result after its timeout fold nothing, so
 `step` must be pure. Read `event.at` rather than a clock, read no randomness,
 and return new objects rather than changing the slice. In dev the slice `step`
 receives is frozen, so an assignment throws. Keep the slice to plain JSON: no
-`Map`, `Set`, `Date`, class instance or function.
+`Map`, `Set`, `Date`, class instance or function, and no `undefined` slice,
+which reads as no slice at all.
 
 ## Give it to the agent
 
@@ -77,7 +78,7 @@ Neither folds the conversation.
 
 `init` seeds the slice when the Model is created and again when a `start`
 brings a new `runId`. A repeated `start` for the run the Model already holds
-keeps the slice.
+returns the Model untouched, with or without the slice.
 
 ## Read it off the result
 
@@ -96,9 +97,9 @@ and a changed `step` shows up as a divergence whose path starts at
 
 ## Saves made before you added `domain`
 
-A Model saved before the agent had a `domain` has no slice. If its run is
-`idle`, the next transition seeds it from `init`. If the run is under way, the
-transition throws `MissingAgentDomainError`, because seeding there would start
+A Model saved before the agent had a `domain` has no slice. The next
+transition seeds it from `init` unless its run is mid-run (running or
+suspended, by `isMidRun`); mid-run it throws `MissingAgentDomainError`, because seeding there would start
 the slice over at a point the run has long passed. Add the slice to old saves
 in your Store's `migrate`; see
 [Change a saved state's shape without losing old saves](./migrate-a-saved-state.md).

@@ -31,8 +31,8 @@ A stale or late settle, `boot`, a brain retry, `compactErr`, and a ladder retry 
 
 1. `AgentDomainEvent<R>` is a `_tag` union: `turn` (the `AgentTurn`), `tool` (the `ToolCall` and its `ToolOutcome<R>`), `nudge` (the `Nudge`), and `compaction` (the `folded` count and the `summary` turn). Each carries the transition's `at`, so `step` never reads a clock.
 2. `step` runs where the kernel folds the event, before anything reads the state. The turn is stepped on the state that `continueWhen` reads and that the tool branch builds on. The nudge is stepped before `nextTurn`. A tool outcome is stepped on the state all three returns of `settleTool` share, so `stopWhen` after a drained batch sees every outcome. A compaction is stepped on the state handed to the next brain call, after the stale guard.
-3. `init()` seeds the slice in the agent's `init`, and `start` resets it for a new `runId`. A repeated `start` for the same `runId` returns the Model itself, slice included.
-4. A Model met without the slice is seeded from `init()` when the run is `idle`. Mid-run it throws `MissingAgentDomainError`, which stops the run like any reducer throw. Seeding mid-run would silently restart the slice, and skipping the step would silently diverge. Upgrading an old save belongs to the host's Store `migrate`.
+3. `init()` seeds the slice in the agent's `init`, and `start` resets it for a new `runId`. A repeated `start` for the same `runId` returns the Model untouched, with or without the slice.
+4. A Model met without the slice is seeded from `init()` unless its run is mid-run (running or suspended, by `isMidRun`); mid-run it throws `MissingAgentDomainError`, which stops the run like any reducer throw. Seeding mid-run would silently restart the slice, and skipping the step would silently diverge. Upgrading an old save belongs to the host's Store `migrate`.
 5. The types default `D = never`, and `AgentStateOf<…, D>` collapses to `AgentState` there. Every existing signature compiles unchanged, and `domain` sits at the same key in `createAgent`, `defineAgent` and `createAgentHost`.
 
 **Binding constraints.**

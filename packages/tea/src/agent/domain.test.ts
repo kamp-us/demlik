@@ -43,7 +43,7 @@ const slow = tool(
     timeoutMs: 10,
   },
   async (_input, _ctx, { ok }) => {
-    await new Promise((resolve) => setTimeout(resolve, 80));
+    await new Promise((resolve) => setTimeout(resolve, 40));
     return ok({ late: true });
   },
 );
@@ -57,7 +57,7 @@ const hold = tool(
     err: [],
   },
   async (_input, _ctx, { ok }) => {
-    await new Promise((resolve) => setTimeout(resolve, 160));
+    await new Promise((resolve) => setTimeout(resolve, 100));
     return ok({ held: true });
   },
 );
@@ -95,8 +95,12 @@ type Shape =
       readonly kind: string;
       readonly tag?: string;
     }
-  | { readonly _tag: "nudge"; readonly text: string }
-  | { readonly _tag: "compaction"; readonly folded: number };
+  | { readonly _tag: "nudge"; readonly turn: number; readonly text: string }
+  | {
+      readonly _tag: "compaction";
+      readonly folded: number;
+      readonly summary: string;
+    };
 
 function stepTally(slice: Tally, event: Shape): Tally {
   switch (event._tag) {
@@ -143,9 +147,13 @@ function shapeOf(event: Event): Shape {
             tag: event.outcome._tag ?? "untagged",
           };
     case "nudge":
-      return { _tag: "nudge", text: event.nudge.text };
+      return { _tag: "nudge", turn: event.nudge.turn, text: event.nudge.text };
     case "compaction":
-      return { _tag: "compaction", folded: event.folded };
+      return {
+        _tag: "compaction",
+        folded: event.folded,
+        summary: event.summary.content,
+      };
   }
 }
 
@@ -154,11 +162,12 @@ const tally: AgentDomain<Tally, R> = {
   step: (slice, event) => stepTally(slice, shapeOf(event)),
 };
 
-function recording(log: Shape[]): AgentDomain<Tally, R> {
+function recording(log: Shape[], ats: number[] = []): AgentDomain<Tally, R> {
   return {
     init: () => TALLY,
     step: (slice, event) => {
       log.push(shapeOf(event));
+      ats.push(event.at);
       return stepTally(slice, shapeOf(event));
     },
   };
@@ -247,8 +256,8 @@ const EXPECTED: readonly Shape[] = [
   { _tag: "turn", content: "step 3" },
   { _tag: "tool", callId: "e", kind: "ok" },
   { _tag: "turn", content: "step 4" },
-  { _tag: "nudge", text: "nudged after 4 turns" },
-  { _tag: "compaction", folded: 4 },
+  { _tag: "nudge", turn: 3, text: "nudged after 4 turns" },
+  { _tag: "compaction", folded: 4, summary: "summary through step 4" },
   { _tag: "turn", content: "step 5" },
   { _tag: "tool", callId: "f", kind: "ok" },
   { _tag: "tool", callId: "g", kind: "ok" },
@@ -343,20 +352,43 @@ describe("an agent's domain slice", () => {
 
   it("folds turn, tool, nudge and compaction events in transcript order", async () => {
     const log: Shape[] = [];
+    const ats: number[] = [];
+    const issued: number[] = [];
+    let t = 0;
+    const wall = Date.now();
     const { model } = stepper();
     const final = await defineAgent({
       model,
       tools: TOOLS,
       instructions: "Work the script.",
-      domain: recording(log),
+      domain: recording(log, ats),
       compaction: { afterTurns: 4, keepTurns: 0 },
       continueWhen: (state) =>
         state.domain.nudges.length === 0
           ? `nudged after ${state.domain.turns} turns`
           : null,
-    }).run("go");
+    }).run("go", {
+      clock: () => {
+        t += 1;
+        issued.push(t);
+        return t;
+      },
+    });
     expect(final.run.phase).toBe("done");
     expect(log).toEqual(EXPECTED);
+    expect(ats).toHaveLength(EXPECTED.length);
+    for (const [i, event] of log.entries()) {
+      const at = ats[i] ?? 0;
+      if (event._tag === "compaction") {
+        expect(at).toBeGreaterThanOrEqual(wall);
+      } else if (event._tag === "tool" && event.tag === "timeout") {
+        expect(issued).toContain(at - 10);
+      } else if (event._tag === "nudge") {
+        expect(at).toBe(ats[i - 1]);
+      } else {
+        expect(issued).toContain(at);
+      }
+    }
   });
 
   it("hands continueWhen the slice the just-settled turn produced", async () => {
@@ -370,6 +402,7 @@ describe("an agent's domain slice", () => {
       tools: TOOLS,
       instructions: "Answer.",
       domain: tally,
+      maxTurns: 5,
       continueWhen: (state) =>
         state.domain.turns < 3 ? `turns seen: ${state.domain.turns}` : null,
     }).run("go", { onEvent: collected.onEvent });
@@ -536,6 +569,30 @@ describe("the domain slice across the run's lifecycle", () => {
 
     expect(restarted.run).toMatchObject({ phase: "running", runId: "r2" });
     expect(restarted.domain).toEqual(TALLY);
+  });
+
+  it("folds nothing for a second settle of a callId the batch already settled", () => {
+    const agent = knob({
+      init: () => TALLY,
+      step: (slice, event) =>
+        event._tag === "tool"
+          ? { ...slice, seen: [...slice.seen, event.call.callId] }
+          : slice,
+    });
+    const [started] = agent.start(agent.init(), "r1", 0);
+    const [batched] = agent.turn(
+      started,
+      { content: "two", toolCalls: [call("p", "tick"), call("q", "tick")] },
+      1,
+    );
+    const [first] = agent.toolOk(batched, "p", "ok", 2);
+    expect(first.domain.seen).toEqual(["p"]);
+    expect(first.conversation?.awaiting.kind).toBe("tools");
+
+    const [again] = agent.toolOk(first, "p", "late", 3);
+
+    expect(again.domain).toBe(first.domain);
+    expect(again.conversation?.toolRecords).toHaveLength(1);
   });
 
   it("throws when step mutates the frozen slice it is handed", async () => {

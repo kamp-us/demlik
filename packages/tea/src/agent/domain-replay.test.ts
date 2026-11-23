@@ -91,13 +91,19 @@ interface Seen {
   readonly tools: readonly string[];
   readonly nudges: number;
   readonly folded: number;
+  readonly ats: readonly number[];
 }
 
-const SEEN: Seen = { turns: 0, tools: [], nudges: 0, folded: 0 };
+const SEEN: Seen = { turns: 0, tools: [], nudges: 0, folded: 0, ats: [] };
 
 type Step = AgentDomain<Seen, ToolResult<typeof tick>>["step"];
 
 const seen: Step = (slice, event) => {
+  const stamped = { ...slice, ats: [...slice.ats, event.at] };
+  return counted(stamped, event);
+};
+
+const counted: Step = (slice, event) => {
   switch (event._tag) {
     case "turn":
       return { ...slice, turns: slice.turns + 1 };
@@ -188,7 +194,9 @@ describe("an agent with a domain", () => {
       tools: ["a:ok", "b:error", "c:ok"],
       nudges: 1,
       folded: 3,
+      ats: expect.any(Array),
     });
+    expect(final.domain.ats).toHaveLength(9);
     const trace = parseJSONL<SD, M>(jsonl);
 
     const replayed = replayTrace(
@@ -202,6 +210,16 @@ describe("an agent with a domain", () => {
       trace.steps?.map((step) => step.state.domain),
     );
     expect(trace.loaded?.domain).toEqual(SEEN);
+
+    let before = 0;
+    for (const [i, step] of (trace.steps ?? []).entries()) {
+      const msg: { readonly at?: number; readonly atMs?: number } = step.msg;
+      const added = step.state.domain.ats.slice(before);
+      for (const at of added) expect(at).toBe(msg.at ?? msg.atMs);
+      expect(replayed.states[i]?.domain.ats).toEqual(step.state.domain.ats);
+      before = step.state.domain.ats.length;
+    }
+    expect(before).toBe(9);
   });
 
   it("names state.domain at the first msg a changed step folds differently", async () => {
