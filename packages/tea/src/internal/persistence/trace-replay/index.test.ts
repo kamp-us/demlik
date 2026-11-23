@@ -4,7 +4,7 @@ import { memoryStore } from "../../../mem";
 import { goldenReplay } from "../../../parity";
 import { run } from "../../../promise";
 import { parseJSONL, recorder, type Trace } from "../recorder";
-import { replayTrace } from "./index";
+import { replayStoredTrace, replayTrace } from "./index";
 
 // ---------------------------------------------------------------------------
 // A queue machine with nested state — exercises the divergence path finder
@@ -146,13 +146,26 @@ describe("replayTrace", () => {
       JSON.stringify(trace),
     );
 
-    const same = replayTrace(queueMachine(), stored);
-    const drifted = replayTrace(queueMachineBuggyStatus(), stored);
+    const same = replayStoredTrace(queueMachine(), stored);
+    const drifted = replayStoredTrace(queueMachineBuggyStatus(), stored);
 
     expect(same.matches).toBe(true);
     expect(same.actual).toEqual(trace.finalState);
     expect(drifted.matches).toBe(false);
     expect(drifted.divergence?.path).toBeDefined();
+  });
+
+  it("fails to compile when a trace of another machine is replayed against this one", () => {
+    const otherMachinesTrace: Trace<
+      { readonly ticks: number },
+      { _tag: "tick" }
+    > = { loaded: { ticks: 0 }, msgs: [], finalState: { ticks: 0 } };
+
+    const replayAnother = () =>
+      // @ts-expect-error a trace of another machine's State and Msg is not this machine's trace
+      replayTrace(queueMachine(), otherMachinesTrace);
+
+    expect(replayAnother).toBeTypeOf("function");
   });
 
   it("diverges with the correct path when the reducer cell drifts", async () => {

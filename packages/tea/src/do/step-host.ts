@@ -701,7 +701,9 @@ export interface RunStepLoopConfig<R = never> {
   /**
    * Whether a FAILED `/step` POST may be retried. Defaults to `() => true`.
    * When it returns `false` the failure is terminal at once: the loop stops
-   * with `gave_up` carrying the error, and the failure consumes no budget.
+   * with `gave_up` carrying the error, and the failure consumes no budget. A
+   * `retryable` that throws replaces the failure it was asked about: its throw
+   * is what rejects the loop.
    */
   readonly retryable?: (error: unknown) => boolean;
   /** Clock, injected for determinism. Defaults to `Date.now`. */
@@ -795,7 +797,7 @@ export async function runStepLoop<R, I, O>(
         if (!shouldRetry(failures, policy, failedAt)) {
           return { kind: "gave_up", error };
         }
-        if (now() >= config.deadlineMs) return { kind: "deadline_exceeded" };
+        if (failedAt >= config.deadlineMs) return { kind: "deadline_exceeded" };
         await sleep(nextDelayMs(retry, policy, rng));
       }
     }

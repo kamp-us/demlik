@@ -1639,7 +1639,9 @@ interface RunStepLoopConfig<R = never> {
   /**
    * Whether a FAILED `/step` POST may be retried. Defaults to `() => true`.
    * When it returns `false` the failure is terminal at once: the loop stops
-   * with `gave_up` carrying the error, and the failure consumes no budget.
+   * with `gave_up` carrying the error, and the failure consumes no budget. A
+   * `retryable` that throws replaces the failure it was asked about: its throw
+   * is what rejects the loop.
    */
   readonly retryable?: (error: unknown) => boolean;
   /** Backoff jitter RNG, injected for determinism. Defaults to `Math.random`. */

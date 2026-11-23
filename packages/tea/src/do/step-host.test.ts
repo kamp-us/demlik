@@ -467,6 +467,60 @@ describe("runStepLoop", () => {
     expect(calls).toBe(5);
     expect(clock).toBe(40);
   });
+
+  it("reads the clock once for a failed POST, as it did before a duration bound", async () => {
+    let reads = 0;
+    let calls = 0;
+    const flaky = (): Promise<StepResponse<ToolInput, RunOutput>> => {
+      calls += 1;
+      return calls === 1
+        ? Promise.reject(new Error("down"))
+        : Promise.resolve({ done: true, output: "ok" });
+    };
+
+    const outcome = await runStepLoop<ToolResult, ToolInput, RunOutput>(
+      mintRunToken(),
+      "loop-clock",
+      flaky,
+      (step) => `${step.tool}!`,
+      {
+        deadlineMs: Number.POSITIVE_INFINITY,
+        now: () => {
+          reads += 1;
+          return 0;
+        },
+        sleep: async () => {},
+      },
+    );
+
+    expect(outcome.kind).toBe("done");
+    expect(calls).toBe(2);
+    expect(reads).toBe(2);
+  });
+
+  it("stops at the deadline a failed POST runs into, without sleeping", async () => {
+    const clock = [0, 150];
+    const sleeps: number[] = [];
+    const down = (): Promise<StepResponse<ToolInput, RunOutput>> =>
+      Promise.reject(new Error("down"));
+
+    const outcome = await runStepLoop<ToolResult, ToolInput, RunOutput>(
+      mintRunToken(),
+      "loop-late",
+      down,
+      (step) => `${step.tool}!`,
+      {
+        deadlineMs: 100,
+        now: () => clock.shift() ?? 150,
+        sleep: async (ms) => {
+          sleeps.push(ms);
+        },
+      },
+    );
+
+    expect(outcome).toEqual({ kind: "deadline_exceeded" });
+    expect(sleeps).toEqual([]);
+  });
 });
 
 // A transport that never reaches a terminal state — always hands out a step.
