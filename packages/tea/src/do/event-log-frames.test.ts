@@ -47,9 +47,15 @@ async function recordedLog(steps: number): Promise<Map<string, string>> {
   return backing;
 }
 
-async function collect<T>(source: AsyncIterable<T>): Promise<T[]> {
+async function collect<T>(
+  source: AsyncIterable<T>,
+  bound = 2_000,
+): Promise<T[]> {
   const all: T[] = [];
-  for await (const item of source) all.push(item);
+  for await (const item of source) {
+    all.push(item);
+    if (all.length > bound) throw new Error(`a read ran past ${bound} items`);
+  }
   return all;
 }
 
@@ -162,6 +168,13 @@ describe("readFrames on a recording log", () => {
       "basis",
       "basis",
     ]);
+    expect(frames[2]).toStrictEqual({
+      _tag: "refused",
+      key: key(3),
+      seq: 3,
+      serializedBytes: JSON.stringify(damaged).length,
+      reason: "checksum",
+    });
     expect(
       refusals(await collect(reader.readFrames({}, { evidence: "verify" }))),
     ).toEqual(["init", "step", "checksum", "basis", "basis"]);
@@ -172,6 +185,49 @@ describe("readFrames on a recording log", () => {
       "step",
       "step",
     ]);
+  });
+
+  it("rebuilds the deltas after a frame whose Msg the host refuses, because only its Msg is refused", async () => {
+    const backing = await recordedLog(4);
+    const reader = doEventLogReader<Msg>(fakeStorage(backing).storage, {
+      parseEvent: (raw) => ((raw as Msg).by === 3 ? null : (raw as Msg)),
+    });
+
+    const frames = await collect(reader.readFrames({}, { evidence: true }));
+    const inside = await collect(
+      reader.readFrames({ fromSeq: 4 }, { evidence: true }),
+    );
+
+    expect(refusals(frames)).toEqual(["init", "step", "event", "step", "step"]);
+    expect(frames).toMatchObject([
+      { evidence: evidenceAt(1) },
+      { evidence: evidenceAt(2) },
+      { _tag: "refused", seq: 3 },
+      { evidence: evidenceAt(4) },
+      { evidence: evidenceAt(5) },
+    ]);
+    expect(inside).toMatchObject([
+      { evidence: evidenceAt(4) },
+      { evidence: evidenceAt(5) },
+    ]);
+  });
+
+  it.each([
+    [128, 300],
+    [256, 300],
+    [129, 300],
+  ])("reads exactly a limit of %i cells over a log of %i", async (limit, cells) => {
+    const reader = readerOver(await recordedLog(cells - 1));
+
+    const forward = await collect(reader.readFrames({ limit }));
+    const backward = await collect(
+      reader.readFrames({ limit }, { reverse: true }),
+    );
+
+    expect(forward.map((frame) => ("seq" in frame ? frame.seq : null))).toEqual(
+      Array.from({ length: limit }, (_, at) => at + 1),
+    );
+    expect(backward).toHaveLength(limit);
   });
 
   it("reads a range from its highest seq down, in pages, without evidence", async () => {
