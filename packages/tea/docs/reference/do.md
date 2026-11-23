@@ -1739,8 +1739,20 @@ interface RunStepLoopConfig<R = never> {
   readonly executed?: ExecutedSteps<R>;
   /** Clock, injected for determinism. Defaults to `Date.now`. */
   readonly now?: () => number;
-  /** Backoff policy for FAILED `/step` POSTs. Defaults to `defaultRetryPolicy`. */
-  readonly retry?: RetryPolicy;
+  /**
+   * Backoff policy for FAILED `/step` POSTs. Defaults to `defaultRetryPolicy`.
+   * A count bound, a duration bound (`maxElapsedMs`, measured on `now()` from
+   * the first failure of the current streak) or an unbounded budget.
+   */
+  readonly retry?: AnyRetryPolicy;
+  /**
+   * Whether a FAILED `/step` POST may be retried. Defaults to `() => true`.
+   * When it returns `false` the failure is terminal at once: the loop stops
+   * with `gave_up` carrying the error, and the failure consumes no budget. A
+   * `retryable` that throws replaces the failure it was asked about: its throw
+   * is what rejects the loop.
+   */
+  readonly retryable?: (error: unknown) => boolean;
   /** Backoff jitter RNG, injected for determinism. Defaults to `Math.random`. */
   readonly rng?: Rng;
   /** `(ms) => Promise` sleep, injected for determinism. Defaults to real sleep. */

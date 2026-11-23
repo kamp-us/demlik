@@ -32,7 +32,7 @@ Call `await journalConformance(make, { records: 10000, now: () => performance.no
 
 A fenced driver returned by `open()` exposes `fenced: true` and `appendFenced`; the same call then checks K7's atomic expected-head comparison and competing writers. K7 is skipped for plain drivers, and K8 for non-file fixtures. K3, the atomic-batch case, needs the fixture's interruption controls: a fixture whose `writePoints` returns no point gets K3 `failed` with "Fixture exposes no interruption points", and its other results still stand. See [the host fixture and deliberately broken driver](https://github.com/kamp-us/demlik/blob/main/packages/tea/examples/journal-store.ts) for a runnable example.
 
-## Exports (39)
+## Exports (40)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -54,6 +54,7 @@ A fenced driver returned by `open()` exposes `fenced: true` and `appendFenced`; 
 | [`Recorder`](#Recorder) | Interface | battery | A live recorder attached to a Runtime. |
 | [`RecorderOptions`](#RecorderOptions) | Interface | battery | Options for recorder. |
 | [`ReplayResult`](#ReplayResult) | Interface | battery | The outcome of replayTrace. |
+| [`replayStoredTrace`](#replayStoredTrace) | Function | battery | Replay a recording read back from storage, whose states and msgs are plain data not typed as the machine's own. |
 | [`replayTrace`](#replayTrace) | Function | battery | Replay a recorded Trace against `machine` and diff the recomputed states against the recorded ones. |
 | [`RowPort`](#RowPort) | Interface | experimental | One SQL row, bound by the host to its table and row id (and, when the save must be part of the host's transaction, to that transaction's connection). |
 | [`rowStore`](#rowStore) | Function | experimental | A fenced `Store` whose storage is one SQL row: the State lives in the row's own columns, and the fence is the row's revision. |
@@ -435,6 +436,24 @@ interface ReplayResult<S, M = unknown> {
    */
   states: readonly S[];
 }
+```
+
+<a id="replayStoredTrace"></a>
+
+### `replayStoredTrace`
+
+```ts
+function replayStoredTrace<
+  S,
+  M extends { _tag: string },
+  C extends Cmd,
+  U extends Sub,
+  Ctx,
+>(
+  machine: Machine<S, M, C, U, Ctx>,
+  trace: Trace<unknown, { readonly _tag: string }>,
+  ctx?: Ctx,
+): ReplayResult<unknown, { readonly _tag: string }>
 ```
 
 <a id="replayTrace"></a>

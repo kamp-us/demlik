@@ -1313,6 +1313,14 @@ function retryToSuccess<R>(
 ```ts
 interface RetryToSuccessOptions {
   /**
+   * Whether a thrown failure may be retried. Defaults to `() => true`. When it
+   * returns `false` the failure is terminal at once: `retryToSuccess` rejects
+   * with the thrown error itself (not a RetryExhaustedError), and the
+   * failure consumes no budget. A `retryable` that throws replaces the failure
+   * it was asked about: its throw is what rejects.
+   */
+  readonly retryable?: (error: unknown) => boolean;
+  /**
    * The `[0, 1)` jitter source threaded into `nextDelayMs`, branded via
    * `asRng` at construction (a raw `() => number` is rejected by the type).
    * Injected for deterministic backoff in tests; defaults to `defaultRng`

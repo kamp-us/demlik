@@ -173,6 +173,32 @@ export function replayTrace<
 }
 
 /**
+ * Replay a recording read back from storage, whose states and msgs are plain
+ * data not typed as the machine's own. It trusts the host's recording to be
+ * the machine's own: unlike {@link replayTrace}, nothing checks at compile time
+ * that the trace belongs to the machine. Replay only folds and compares them,
+ * so the result's states and msgs are `unknown` data too.
+ *
+ * @param machine - the machine to replay against.
+ * @param trace   - a recording read back as plain data, for example by
+ *                  `JSON.parse`.
+ * @param ctx     - optional legacy argument; recorded replay needs no init context.
+ */
+export function replayStoredTrace<
+  S,
+  M extends { _tag: string },
+  C extends Cmd,
+  U extends Sub,
+  Ctx,
+>(
+  machine: Machine<S, M, C, U, Ctx>,
+  trace: Trace<unknown, { readonly _tag: string }>,
+  ctx?: Ctx,
+): ReplayResult<unknown, { readonly _tag: string }> {
+  return replayTrace(machine, trace as Trace<S, M>, ctx);
+}
+
+/**
  * Order-insensitive structural deep-equality — the comparator the
  * record/replay lane owns, exposed so consumers (e.g. `@demlik/tea/parity`'s
  * `parityEqual`) reuse it rather than adding a third deep-compare. It is one

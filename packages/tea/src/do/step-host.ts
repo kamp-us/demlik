@@ -69,13 +69,15 @@
 
 import { createIntake } from "../internal/idempotency/idempotent-intake/index";
 import {
+  type AnyRetryPolicy,
   defaultRetryPolicy,
   initRetry,
   nextDelayMs,
-  type RetryPolicy,
+  type RetryState,
   type Rng,
   recordFailure,
   shouldRetry,
+  type TimedRetryState,
 } from "../retry-backoff/index";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -690,8 +692,20 @@ export interface RunStepLoopConfig<R = never> {
    * store per drive, which a restart forgets. See {@link runStepLoop}.
    */
   readonly executed?: ExecutedSteps<R>;
-  /** Backoff policy for FAILED `/step` POSTs. Defaults to `defaultRetryPolicy`. */
-  readonly retry?: RetryPolicy;
+  /**
+   * Backoff policy for FAILED `/step` POSTs. Defaults to `defaultRetryPolicy`.
+   * A count bound, a duration bound (`maxElapsedMs`, measured on `now()` from
+   * the first failure of the current streak) or an unbounded budget.
+   */
+  readonly retry?: AnyRetryPolicy;
+  /**
+   * Whether a FAILED `/step` POST may be retried. Defaults to `() => true`.
+   * When it returns `false` the failure is terminal at once: the loop stops
+   * with `gave_up` carrying the error, and the failure consumes no budget. A
+   * `retryable` that throws replaces the failure it was asked about: its throw
+   * is what rejects the loop.
+   */
+  readonly retryable?: (error: unknown) => boolean;
   /** Clock, injected for determinism. Defaults to `Date.now`. */
   readonly now?: () => number;
   /** `(ms) => Promise` sleep, injected for determinism. Defaults to real sleep. */
@@ -718,7 +732,8 @@ export type StepLoopOutcome<O> =
  *     than asking forever.
  *   - **backoff** — a FAILED POST (transport reject) is retried on the
  *     `retry-backoff` curve; once `shouldRetry` is exhausted the loop stops
- *     with `gave_up`. A success resets the retry counter.
+ *     with `gave_up`, and a failure `config.retryable` refuses stops it at
+ *     once, spending no budget. A success resets the retry counter.
  *   - **dedupe** — a step whose `callId` is already in `config.executed` is not
  *     re-executed; its saved result is re-POSTed. Closes the "the host re-handed
  *     the same step after a duplicate settle" path (the host side is idempotent;
@@ -749,6 +764,7 @@ export async function runStepLoop<R, I, O>(
   config: RunStepLoopConfig<R>,
 ): Promise<StepLoopOutcome<O>> {
   const policy = config.retry ?? defaultRetryPolicy;
+  const retryable = config.retryable ?? (() => true);
   const now = config.now ?? Date.now;
   const sleep = config.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
   const rng = config.rng;
@@ -768,15 +784,20 @@ export async function runStepLoop<R, I, O>(
 
     // POST `/step` with backoff on transport failure.
     let response: DeferredStepResponse<I, O>;
-    let retry = initRetry();
+    let retry: RetryState = initRetry();
     for (;;) {
       try {
         response = await transport({ token, runId, posted });
         break;
       } catch (error) {
-        retry = recordFailure(retry, error);
-        if (!shouldRetry(retry, policy)) return { kind: "gave_up", error };
-        if (now() >= config.deadlineMs) return { kind: "deadline_exceeded" };
+        if (!retryable(error)) return { kind: "gave_up", error };
+        const failedAt = now();
+        const failures: TimedRetryState = recordFailure(retry, error, failedAt);
+        retry = failures;
+        if (!shouldRetry(failures, policy, failedAt)) {
+          return { kind: "gave_up", error };
+        }
+        if (failedAt >= config.deadlineMs) return { kind: "deadline_exceeded" };
         await sleep(nextDelayMs(retry, policy, rng));
       }
     }
