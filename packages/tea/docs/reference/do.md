@@ -8,7 +8,7 @@ Tier: `stable`
 import { … } from "@demlik/tea/do";
 ```
 
-## Exports (125)
+## Exports (129)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -124,7 +124,11 @@ import { … } from "@demlik/tea/do";
 | [`StepEngine`](#StepEngine) | Interface | stable | The run-specific operations `stepHost` orchestrates. |
 | [`stepHost`](#stepHost) | Function | stable | Build the `/step` handler for a DO that drives one or more runs over the pull carrier. |
 | [`StepHostConfig`](#StepHostConfig) | Interface | stable | Tuning for `stepHost`'s give-up alarm. |
+| [`StepLoopCmd`](#StepLoopCmd) | Type | stable | The effects of a runStepLoop drive, all of them plain data. |
+| [`stepLoopMachine`](#stepLoopMachine) | Function | stable | The decisions of runStepLoop as a machine: when to POST, what a response means, when to run a step, retry, back off, give up, stop at the deadline or finish. |
+| [`StepLoopMsg`](#StepLoopMsg) | Type | stable | What a runStepLoop drive's Cmds report back. |
 | [`StepLoopOutcome`](#StepLoopOutcome) | Type | stable | The terminal outcome of a full runStepLoop drive. |
+| [`StepLoopState`](#StepLoopState) | Type | stable | The phases of a runStepLoop drive. |
 | [`StepOutcome`](#StepOutcome) | Type | stable | A structured `/step` outcome `stepHost` returns — the response body plus the HTTP status the consumer's route should send. |
 | [`StepRequest`](#StepRequest) | Interface | stable | A `/step` request. |
 | [`StepResponse`](#StepResponse) | Type | stable | A `/step` response — a discriminated union on `done`: - `{ done: false, step }` — execute `step`, POST its result, ask again. |
@@ -1716,7 +1720,7 @@ function runStepLoop<R, I, O>(
   runId: string,
   transport: StepTransport<R, I, O>,
   execute: ExecuteStep<I, R>,
-  config: RunStepLoopConfig<R>,
+  config: RunStepLoopConfig<R, I, O>,
 ): Promise<StepLoopOutcome<O>>
 ```
 
@@ -1725,7 +1729,7 @@ function runStepLoop<R, I, O>(
 ### `RunStepLoopConfig`
 
 ```ts
-interface RunStepLoopConfig<R = never> {
+interface RunStepLoopConfig<R = never, I = never, O = never> {
   /**
    * Absolute wall-clock deadline (ms epoch). The loop stops asking once `now()`
    * reaches it, surfacing a `deadline_exceeded` outcome. Mirrors the poller's
@@ -1757,6 +1761,16 @@ interface RunStepLoopConfig<R = never> {
   readonly rng?: Rng;
   /** `(ms) => Promise` sleep, injected for determinism. Defaults to real sleep. */
   readonly sleep?: (ms: number) => Promise<void>;
+  /**
+   * Called once with the drive's runtime, before it boots, so the caller can
+   * attach to it what attaches to any tea run. `recorder(runtime, {
+   * captureSteps: true })` records the drive, and `replayTrace` or
+   * `replayStoredTrace` with stepLoopMachine replays the recording.
+   * Attach before boot to record the starting State. A throw rejects the drive.
+   * Declared as a method so that a bare `RunStepLoopConfig` still fits a drive
+   * of any `R`, `I` and `O`.
+   */
+  attach?(runtime: BootingRuntime<StepLoopState<R, I, O>, StepLoopMsg<R, I, O>>): void;
 }
 ```
 
@@ -1954,6 +1968,74 @@ interface StepHostConfig {
 }
 ```
 
+<a id="StepLoopCmd"></a>
+
+### `StepLoopCmd`
+
+```ts
+type StepLoopCmd<R, I> =
+  | { readonly _tag: "read_clock" }
+  | {
+    readonly _tag: "post";
+    readonly posted: StepResult<R> | null;
+  }
+  | {
+    readonly _tag: "run_step";
+    readonly step: NextStep<I>;
+  }
+  | { readonly _tag: "sleep"; readonly ms: number }
+  | {
+    readonly _tag: "back_off";
+    readonly policy: AnyRetryPolicy;
+    readonly retry: RetryState;
+  }
+```
+
+<a id="stepLoopMachine"></a>
+
+### `stepLoopMachine`
+
+```ts
+function stepLoopMachine<R, I, O>(): Machine<StepLoopState<R, I, O>, StepLoopMsg<R, I, O>, StepLoopCmd<R, I>, Sub<never>, unknown>
+```
+
+<a id="StepLoopMsg"></a>
+
+### `StepLoopMsg`
+
+```ts
+type StepLoopMsg<R, I, O> =
+  | {
+    readonly _tag: "start";
+    readonly deadlineMs: number | null;
+    readonly policy: AnyRetryPolicy;
+  }
+  | {
+    readonly _tag: "clock_read";
+    readonly at: number;
+  }
+  | {
+    readonly _tag: "responded";
+    readonly response: DeferredStepResponse<I, O>;
+  }
+  | {
+    readonly _tag: "post_failed";
+    readonly error: unknown;
+    /** What `config.retryable` said of `error`. */
+    readonly retryable: boolean;
+  }
+  | { readonly _tag: "slept"; readonly ms: number }
+  | {
+    readonly _tag: "step_ran";
+    readonly callId: string;
+    readonly result: R;
+  }
+  | {
+    readonly _tag: "store_failed";
+    readonly error: unknown;
+  }
+```
+
 <a id="StepLoopOutcome"></a>
 
 ### `StepLoopOutcome`
@@ -1965,6 +2047,43 @@ type StepLoopOutcome<O> =
   | {
     readonly error: unknown;
     readonly kind: "gave_up";
+  }
+```
+
+<a id="StepLoopState"></a>
+
+### `StepLoopState`
+
+```ts
+type StepLoopState<R, I, O> =
+  | { readonly _tag: "idle" }
+  | StepLoopRun<R> & { readonly _tag: "asking" }
+  | StepLoopRun<R> & {
+    readonly _tag: "posting";
+    readonly failures: RetryState;
+  }
+  | StepLoopRun<R> & {
+    readonly _tag: "failing";
+    readonly error: unknown;
+    readonly failures: RetryState;
+  }
+  | StepLoopRun<R> & {
+    readonly _tag: "backing_off";
+    readonly failures: TimedRetryState;
+  }
+  | StepLoopRun<R> & {
+    readonly _tag: "polling";
+    /** The host's advisory re-poll delay, or `null` for the backoff curve. */
+    readonly hintMs: number | null;
+  }
+  | StepLoopRun<R> & { readonly _tag: "waiting" }
+  | StepLoopRun<R> & {
+    readonly _tag: "running";
+    readonly step: NextStep<I>;
+  }
+  | {
+    readonly _tag: "finished";
+    readonly outcome: StepLoopOutcome<O>;
   }
 ```
 

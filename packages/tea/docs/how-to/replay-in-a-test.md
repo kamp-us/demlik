@@ -74,6 +74,6 @@ different effects diverges too, at a path such as `cmds[0].total`. A trace witho
 record the boot rather than trying to reconstruct it with fresh init. A recording read back from storage has plain data for its states and Msgs, not the
 machine's types: `replayStoredTrace` takes it as a `Trace<unknown, { readonly _tag: string }>`
 and returns `unknown` states. It trusts the recording to be the machine's own, which
-`replayTrace` checks at compile time and `replayStoredTrace` cannot. That is how a stuck run becomes a diff at one field instead of a re-run;
+`replayTrace` checks at compile time and `replayStoredTrace` cannot. A `runStepLoop` drive records the same way: its `attach` option hands you the drive's runtime for `recorder`, and `stepLoopMachine` from `@demlik/tea/do` is the machine to replay it against. That is how a stuck run becomes a diff at one field instead of a re-run;
 [Gate a refactor on a parity check](./gate-a-refactor-on-parity.md) walks the full
 record-then-replay loop.
