@@ -163,6 +163,7 @@ import {
   mergeInterpret,
   type SnapshotInterpret,
 } from "./machine";
+import { isMidRun } from "./mid-run";
 import { brainHandler } from "./model";
 import {
   type AnyToolDef,
@@ -178,17 +179,21 @@ import {
   type ToolResilienceState,
   type ToolTimerOutcome,
 } from "./tool-resilience";
-import type {
-  AgentConfig,
-  AgentConfigCore,
-  AgentFailure,
-  AgentLifecycleNote,
-  AgentState,
-  AgentTurn,
-  Conversation,
-  ToolCall,
-  ToolFailure,
-  ToolOutcome,
+import {
+  type AgentConfig,
+  type AgentConfigCore,
+  type AgentDomainEvent,
+  type AgentFailure,
+  type AgentLifecycleNote,
+  type AgentState,
+  type AgentStateOf,
+  type AgentTurn,
+  type Conversation,
+  type DomainRequired,
+  MissingAgentDomainError,
+  type ToolCall,
+  type ToolFailure,
+  type ToolOutcome,
 } from "./types";
 
 export * from "./agent-tool";
@@ -238,12 +243,14 @@ export function createAgent<
   R,
   TC extends Cmd = Cmd,
   Msg = unknown,
+  D = never,
 >(
-  config: AgentConfigCore<Stage, P, O, R, TC, Msg> & {
-    readonly snapshotEvery: number;
-    readonly compaction: CompactionPolicy<R, Msg>;
-  },
-): AgentKnob<Stage, P, O, R, TC, true, true>;
+  config: AgentConfigCore<Stage, P, O, R, TC, Msg, D> &
+    DomainRequired<D, R> & {
+      readonly snapshotEvery: number;
+      readonly compaction: CompactionPolicy<R, Msg>;
+    },
+): AgentKnob<Stage, P, O, R, TC, true, true, D>;
 export function createAgent<
   Stage,
   P extends string,
@@ -251,12 +258,14 @@ export function createAgent<
   R,
   TC extends Cmd = Cmd,
   Msg = unknown,
+  D = never,
 >(
-  config: AgentConfigCore<Stage, P, O, R, TC, Msg> & {
-    readonly snapshotEvery: number;
-    readonly compaction?: never;
-  },
-): AgentKnob<Stage, P, O, R, TC, true, false>;
+  config: AgentConfigCore<Stage, P, O, R, TC, Msg, D> &
+    DomainRequired<D, R> & {
+      readonly snapshotEvery: number;
+      readonly compaction?: never;
+    },
+): AgentKnob<Stage, P, O, R, TC, true, false, D>;
 export function createAgent<
   Stage,
   P extends string,
@@ -264,12 +273,14 @@ export function createAgent<
   R,
   TC extends Cmd = Cmd,
   Msg = unknown,
+  D = never,
 >(
-  config: AgentConfigCore<Stage, P, O, R, TC, Msg> & {
-    readonly snapshotEvery?: never;
-    readonly compaction: CompactionPolicy<R, Msg>;
-  },
-): AgentKnob<Stage, P, O, R, TC, false, true>;
+  config: AgentConfigCore<Stage, P, O, R, TC, Msg, D> &
+    DomainRequired<D, R> & {
+      readonly snapshotEvery?: never;
+      readonly compaction: CompactionPolicy<R, Msg>;
+    },
+): AgentKnob<Stage, P, O, R, TC, false, true, D>;
 export function createAgent<
   Stage,
   P extends string,
@@ -277,12 +288,14 @@ export function createAgent<
   R,
   TC extends Cmd = Cmd,
   Msg = unknown,
+  D = never,
 >(
-  config: AgentConfigCore<Stage, P, O, R, TC, Msg> & {
-    readonly snapshotEvery?: never;
-    readonly compaction?: never;
-  },
-): AgentKnob<Stage, P, O, R, TC, false, false>;
+  config: AgentConfigCore<Stage, P, O, R, TC, Msg, D> &
+    DomainRequired<D, R> & {
+      readonly snapshotEvery?: never;
+      readonly compaction?: never;
+    },
+): AgentKnob<Stage, P, O, R, TC, false, false, D>;
 export function createAgent<
   Stage,
   P extends string,
@@ -290,9 +303,10 @@ export function createAgent<
   R,
   TC extends Cmd = Cmd,
   Msg = unknown,
+  D = never,
 >(
-  config: AgentConfig<Stage, P, O, R, TC, Msg>,
-): AgentKnob<Stage, P, O, R, TC, boolean, boolean> {
+  config: AgentConfig<Stage, P, O, R, TC, Msg, D> & DomainRequired<D, R>,
+): AgentKnob<Stage, P, O, R, TC, boolean, boolean, D> {
   const rng = config.rng ?? Math.random;
   // ---- The three composed sub-knobs --------------------------------------
 
@@ -367,11 +381,11 @@ export function createAgent<
     rng,
   );
 
-  type State = AgentState<Stage, P, O, R>;
+  type State = AgentStateOf<Stage, P, O, R, D>;
 
   /** The starting slice — every brick's `init`, no conversation yet. */
   function init(): State {
-    return {
+    return withDomain({
       run: run.init(),
       resilience: llm.init(),
       tools: initFanOut<ToolCall, ToolOutcome<R>>(),
@@ -384,7 +398,39 @@ export function createAgent<
       failure: null,
       output: null,
       instructions: config.instructions ?? null,
-    };
+    });
+  }
+
+  function withDomain(base: AgentState<Stage, P, O, R>): State {
+    return (
+      config.domain === undefined
+        ? base
+        : { ...base, domain: config.domain.init() }
+    ) as State;
+  }
+
+  function domainOf(s: State): D | undefined {
+    const held: AgentState<Stage, P, O, R> & { readonly domain?: D } = s;
+    return held.domain;
+  }
+
+  function stepDomain(s: State, event: AgentDomainEvent<R>): State {
+    const domain = config.domain;
+    if (domain === undefined) return s;
+    const slice = domainOf(s);
+    if (slice === undefined) throw new MissingAgentDomainError(runIdOf(s));
+    return { ...s, domain: domain.step(slice, event) };
+  }
+
+  function runIdOf(s: State): string | null {
+    return s.run.phase === "idle" ? null : s.run.runId;
+  }
+
+  function seededDomain(s: State): State {
+    const domain = config.domain;
+    if (domain === undefined || domainOf(s) !== undefined) return s;
+    if (isMidRun(s)) throw new MissingAgentDomainError(runIdOf(s));
+    return { ...s, domain: domain.init() };
   }
 
   /** Build the brain-call request for the current stage + conversation. PURE. */
@@ -549,6 +595,7 @@ export function createAgent<
       // …and the prior run's refusals: those `callId`s belong to a batch this
       // run will never settle, so carrying them would only grow the Model (#145).
       refusedCalls: [],
+      ...(config.domain === undefined ? {} : { domain: config.domain.init() }),
     };
     return fireBrainCall(withRun, at);
   }
@@ -583,23 +630,23 @@ export function createAgent<
       ...measured,
       turns: [...conv.turns, result],
     };
-    const counted: State = { ...s, usage };
+    const counted: State = stepDomain(
+      { ...s, usage },
+      { _tag: "turn", at, turn: result },
+    );
 
     if (result.toolCalls.length === 0) {
       const answered: State = { ...counted, conversation: withTurn };
       const text = config.continueWhen?.(answered) ?? null;
       if (text === null) return advanceStage(answered, result, at);
+      const nudge = { turn: withTurn.turns.length - 1, text };
       return nextTurn(
-        {
-          ...noted(answered, { kind: "nudge_recorded", text, at }),
-          conversation: {
-            ...withTurn,
-            nudges: [
-              ...withTurn.nudges,
-              { turn: withTurn.turns.length - 1, text },
-            ],
-          },
-        },
+        stepDomain(noted(answered, { kind: "nudge_recorded", text, at }), {
+          _tag: "nudge",
+          at,
+          nudge,
+        }),
+        { ...withTurn, nudges: [...withTurn.nudges, nudge] },
         at,
       );
     }
@@ -840,12 +887,15 @@ export function createAgent<
     // The same settle body is where a failure becomes public, so it is also
     // where it is noted — ahead of the backfilled launches, the order they
     // happened in (#331).
-    const s: State = noted(
-      { ...prev, toolResilience, refusedCalls },
-      ...(outcome.kind === "ok"
-        ? []
-        : [{ kind: "tool_failed" as const, call, failure: outcome, at }]),
-      ...toolsStarted(launched, at),
+    const s: State = stepDomain(
+      noted(
+        { ...prev, toolResilience, refusedCalls },
+        ...(outcome.kind === "ok"
+          ? []
+          : [{ kind: "tool_failed" as const, call, failure: outcome, at }]),
+        ...toolsStarted(launched, at),
+      ),
+      { _tag: "tool", at, call, outcome },
     );
 
     const foldedConv: Conversation<R> = {
@@ -865,19 +915,20 @@ export function createAgent<
       ];
     }
 
-    return nextTurn({ ...s, tools, conversation: foldedConv }, at, launchCmds);
+    return nextTurn({ ...s, tools }, foldedConv, at, launchCmds);
   }
 
   function nextTurn(
-    s: State & { readonly conversation: Conversation<R> },
+    s: State,
+    conversation: Conversation<R>,
     at: number,
     launchCmds: readonly AgentCmd<P, TC>[] = [],
   ): readonly [State, readonly AgentCmd<P, TC>[]] {
     const turned: State = {
       ...s,
       conversation: {
-        ...s.conversation,
-        turnCount: s.conversation.turnCount + 1,
+        ...conversation,
+        turnCount: conversation.turnCount + 1,
         awaiting: { kind: "llm" },
       },
     };
@@ -1102,7 +1153,10 @@ export function createAgent<
     const foldedConv = foldSummary(conv, folding, summaryTurn);
     // Resume the loop: fire the next brain call on the shrunk transcript.
     const [fired, llmCmds] = fireBrainCall(
-      { ...settledRetry, conversation: foldedConv },
+      stepDomain(
+        { ...settledRetry, conversation: foldedConv },
+        { _tag: "compaction", at, folded: folding, summary: summaryTurn },
+      ),
       at,
     );
     return [fired, [...retryCmds, ...llmCmds]];
@@ -1614,7 +1668,12 @@ export function createAgent<
     // drops, so the reducer's emitted arrays provably stay within `ACmd[]`. This
     // is the same shape as `mergeInterpret`'s one sound mapped-type identity: the
     // soundness lives in a documented seam, not smuggled at every verb.
-    const machine: Machine<State, M, ACmd, DeadlinesSub, Ctx> = {
+    const machine: Omit<
+      Machine<State, M, ACmd, DeadlinesSub, Ctx>,
+      "update"
+    > & {
+      readonly update: Reducer<State, M, ACmd>;
+    } = {
       init: (loaded) => (loaded !== null ? [loaded, []] : [init(), []]),
       update: update as Reducer<State, M, ACmd>,
       subs: [deadlinesSub(subs)],
@@ -1660,7 +1719,7 @@ export function createAgent<
     at: number,
     verb: (entered: State) => readonly [State, readonly AgentCmd<P, TC>[]],
   ): readonly [State, readonly AgentCmd<P, TC>[]] {
-    const current = withStateDefaults(s);
+    const current = seededDomain(withStateDefaults(s));
     const entered: State =
       (current.lifecycle ?? []).length === 0
         ? current

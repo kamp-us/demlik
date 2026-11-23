@@ -414,6 +414,15 @@ export const PAGE_MIRRORS: readonly PageRow[] = [
     ),
   },
   {
+    page: "docs/how-to/keep-domain-state-in-the-model.md",
+    shows: regions(
+      "src/docs/how-to/keep-domain-state.test.ts",
+      "slice",
+      "agent",
+      "run",
+    ),
+  },
+  {
     page: "docs/how-to/ignore-a-late-answer.md",
     shows: regions(
       "src/docs/how-to/ignore-a-late-answer.test.ts",

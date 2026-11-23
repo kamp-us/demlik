@@ -44,6 +44,7 @@ One row per ADR, repo-wide. Read the file for the why.
 | [0040](./0040-running-agents-resume-on-wake.md) | A cold wake resumes a running agent, including one lost during compaction | Accepted | 2026-11-19 |
 | [0041](./0041-store-save-receives-the-applied-message.md) | A store's save receives the applied message, as an optional argument | Accepted | 2026-11-20 |
 | [0042](./0042-a-save-abandoned-at-dispose-never-overwrites-a-later-run.md) | A save abandoned at dispose never overwrites a later run, checked once at the store's write point | Accepted | 2026-11-20 |
+| [0043](./0043-an-agent-keeps-its-domain-state-in-the-model-through-a-pure-fold-hook.md) | An agent keeps its domain state in the Model through a pure fold hook | Accepted | 2026-11-23 |
 
 Numbers are inherited from the `csirin/monorepo` sequence this package was extracted
 from, and the gaps are real: 0009 (the brain/hand seam) and 0012 (the single-root ADR

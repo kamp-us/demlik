@@ -41,6 +41,7 @@ import {
   type AgentEndedStatus,
   type AgentLifecycleNote,
   type AgentState,
+  type AgentStateOf,
   type AgentTurn,
   status,
   type ToolFailure,
@@ -136,6 +137,7 @@ export type AgentToMachine<
   TC extends Cmd,
   Snap extends boolean,
   Compact extends boolean,
+  D = never,
 > = <Ctx = object, T extends AnyToolDef = never>(opts?: {
   readonly tools?: ToolRouter<T>;
   readonly toolInterpret?: Interpret<
@@ -147,7 +149,7 @@ export type AgentToMachine<
     CompactInterpret<AgentMachineMsg<P, O, R> | WiredToolMsg<T>, Compact, Ctx>;
 }) => {
   readonly machine: Machine<
-    AgentState<Stage, P, O, R>,
+    AgentStateOf<Stage, P, O, R, D>,
     AgentMachineMsg<P, O, R> | WiredToolMsg<T>,
     AgentCmd<P, TC, Snap, Compact>,
     DeadlinesSub,
@@ -183,8 +185,9 @@ export interface AgentKnob<
   TC extends Cmd,
   Snap extends boolean,
   Compact extends boolean,
+  D = never,
 > {
-  readonly init: () => AgentState<Stage, P, O, R>;
+  readonly init: () => AgentStateOf<Stage, P, O, R, D>;
   /**
    * Start the run `runId`: seed the pipeline and a fresh conversation, zero the
    * run's usage, clear its output and failure, and fire the first brain call.
@@ -193,14 +196,23 @@ export interface AgentKnob<
    * commands. That is what makes a retried or concurrent start request safe.
    * Only a State with no run, or a different `runId`, starts a run.
    */
-  readonly start: AgentVerb1<Stage, P, O, R, TC, [runId: string, at: number]>;
+  readonly start: AgentVerb1<
+    Stage,
+    P,
+    O,
+    R,
+    TC,
+    [runId: string, at: number],
+    D
+  >;
   readonly turn: AgentVerb1<
     Stage,
     P,
     O,
     R,
     TC,
-    [result: AgentTurn, at: number]
+    [result: AgentTurn, at: number],
+    D
   >;
   readonly toolOk: AgentVerb1<
     Stage,
@@ -208,7 +220,8 @@ export interface AgentKnob<
     O,
     R,
     TC,
-    [callId: string, result: R, at: number]
+    [callId: string, result: R, at: number],
+    D
   >;
   /**
    * A bare `reason` string still works and settles an untagged failure — the
@@ -222,7 +235,8 @@ export interface AgentKnob<
     O,
     R,
     TC,
-    [callId: string, failure: string | ToolFailure, at: number]
+    [callId: string, failure: string | ToolFailure, at: number],
+    D
   >;
   readonly succeed: AgentVerb1<
     Stage,
@@ -230,7 +244,8 @@ export interface AgentKnob<
     O,
     R,
     TC,
-    [msg: AgentLlmOkMsg<P, O>, at: number]
+    [msg: AgentLlmOkMsg<P, O>, at: number],
+    D
   >;
   readonly fail: AgentVerb1<
     Stage,
@@ -238,7 +253,8 @@ export interface AgentKnob<
     O,
     R,
     TC,
-    [msg: AgentLlmErrMsg<P>, at: number]
+    [msg: AgentLlmErrMsg<P>, at: number],
+    D
   >;
   readonly compactOk: AgentVerb1<
     Stage,
@@ -246,7 +262,8 @@ export interface AgentKnob<
     O,
     R,
     TC,
-    [key: string, msg: AgentCompactOkMsg, at: number]
+    [key: string, msg: AgentCompactOkMsg, at: number],
+    D
   >;
   readonly compactErr: AgentVerb1<
     Stage,
@@ -254,15 +271,18 @@ export interface AgentKnob<
     O,
     R,
     TC,
-    [key: string, msg: AgentCompactErrMsg, at: number]
+    [key: string, msg: AgentCompactErrMsg, at: number],
+    D
   >;
-  readonly onTimer: AgentVerb1<Stage, P, O, R, TC, [msg: AgentTimerMsg]>;
-  readonly boot: AgentVerb1<Stage, P, O, R, TC, [at: number]>;
-  readonly isSettled: (s: AgentState<Stage, P, O, R>) => boolean;
-  readonly currentStage: (s: AgentState<Stage, P, O, R>) => Stage | undefined;
-  readonly brainCall: (s: AgentState<Stage, P, O, R>) => LlmCall<P>;
-  readonly subs: (s: AgentState<Stage, P, O, R>) => readonly DeadlineSub[];
-  readonly toMachine: AgentToMachine<Stage, P, O, R, TC, Snap, Compact>;
+  readonly onTimer: AgentVerb1<Stage, P, O, R, TC, [msg: AgentTimerMsg], D>;
+  readonly boot: AgentVerb1<Stage, P, O, R, TC, [at: number], D>;
+  readonly isSettled: (s: AgentStateOf<Stage, P, O, R, D>) => boolean;
+  readonly currentStage: (
+    s: AgentStateOf<Stage, P, O, R, D>,
+  ) => Stage | undefined;
+  readonly brainCall: (s: AgentStateOf<Stage, P, O, R, D>) => LlmCall<P>;
+  readonly subs: (s: AgentStateOf<Stage, P, O, R, D>) => readonly DeadlineSub[];
+  readonly toMachine: AgentToMachine<Stage, P, O, R, TC, Snap, Compact, D>;
   /**
    * The brain call's `resilient_run` handler — the one `toMachine` wires. Its
    * Cmd is `Cmd.define`d, so it returns an outcome and the engine mints the
@@ -286,10 +306,11 @@ type AgentVerb1<
   R,
   TC extends Cmd,
   Args extends readonly unknown[],
+  D = never,
 > = (
-  s: AgentState<Stage, P, O, R>,
+  s: AgentStateOf<Stage, P, O, R, D>,
   ...args: Args
-) => readonly [AgentState<Stage, P, O, R>, readonly AgentCmd<P, TC>[]];
+) => readonly [AgentStateOf<Stage, P, O, R, D>, readonly AgentCmd<P, TC>[]];
 
 /** The brain-call SUCCESS settle Msg, inherited from `../llm-call`. */
 export type AgentLlmOkMsg<

@@ -21,7 +21,7 @@ These are the ones to read first:
 | [`DefinedAgentState`](#DefinedAgentState) | Type the Model a defined agent persists — what a `Store` reads and writes. |
 | [`createAgent`](#createAgent) | Drop below the lid, once you need to walk a stage pipeline `defineAgent` does not express. |
 
-## Exports (160)
+## Exports (165)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -37,6 +37,8 @@ These are the ones to read first:
 | [`AgentCompactRunCmd`](#AgentCompactRunCmd) | Type | experimental | The "summarize the oldest N turns" effect Cmd — the compaction round-trip's carrier. |
 | [`AgentConfig`](#AgentConfig) | Type | experimental | The agent configuration — the core seams intersected with the snapshotting discriminant (`AgentSnapshotConfig`). |
 | [`AgentConfigCore`](#AgentConfigCore) | Interface | experimental | The core (non-snapshot, non-compaction) agent configuration. |
+| [`AgentDomain`](#AgentDomain) | Interface | experimental | The host's own domain state, kept in the agent's Model under `domain` and updated by one pure fold over AgentDomainEvents. |
+| [`AgentDomainEvent`](#AgentDomainEvent) | Type | experimental | One transcript event the kernel just settled, handed to AgentDomain.step. |
 | [`AgentEndedStatus`](#AgentEndedStatus) | Type | experimental | The three AgentStatus arms a run can end on — what `RunDone` carries. |
 | [`AgentEvent`](#AgentEvent) | Type | experimental | The agent's PUBLIC lifecycle events — the semantic stream a consumer subscribes to via `runtime.on(type, …)`. |
 | [`AgentEventHead`](#AgentEventHead) | Interface | experimental | The two fields every AgentEvent carries. |
@@ -52,6 +54,7 @@ These are the ones to read first:
 | [`AgentPrompt`](#AgentPrompt) | Interface | experimental | The brain-call payload `defineAgent` builds from the durable state — everything `messagesOf` renders, so the prompt is a pure function of the Model and the resilient slice carries exactly what was sent. |
 | [`AgentSnapshotConfig`](#AgentSnapshotConfig) | Type | experimental | The snapshotting discriminant. |
 | [`AgentState`](#AgentState) | Interface | experimental | The agent slice — every composed wrapper's slice plus the loop's conversation and the agent-specific failure annotation. |
+| [`AgentStateOf`](#AgentStateOf) | Type | experimental | The agent's Model with its domain slice: AgentState when no domain is configured (`D = never`), and AgentState plus `domain: D` otherwise. |
 | [`AgentStatus`](#AgentStatus) | Type | experimental | The agent's lifecycle status — THE single typed channel for "what is this run doing?". |
 | [`AgentTerminalFailure`](#AgentTerminalFailure) | Type | experimental | The unified terminal failure the agent settles on. |
 | [`AgentTimerMsg`](#AgentTimerMsg) | Type | experimental | The timer Msg (retry + safety deadline) — `DeadlineExceeded`, the shared shape of both composed wrappers' timer Msgs (`LlmTimerMsg` and `MonitoredRunTimerMsg` are both `DeadlineExceeded`). |
@@ -95,6 +98,7 @@ These are the ones to read first:
 | [`DefinedAgentRunOptions`](#DefinedAgentRunOptions) | Type | experimental | Host wiring for one `run`: the store, the ctx the tools need, a runId, a clock. |
 | [`DefinedAgentState`](#DefinedAgentState) | Type | experimental | The Model a defined agent runs — a hand-wired `createAgent`'s, key for key. |
 | [`DefinedAgentWired`](#DefinedAgentWired) | Type | experimental | The machine `defineAgent` builds per `input` beside the handlers it runs under — the interpret table and the `deadline` runner (a machine carries none — #278, #279). |
+| [`DomainRequired`](#DomainRequired) | Type | experimental | What an agent config owes for its domain type `D`: nothing when no domain is configured (`D = never`), and the AgentDomain that builds the slice otherwise. |
 | [`EndedRun`](#EndedRun) | Type | experimental | The ENDED phases — a run that finished (`done`) or was stopped from outside (`cancelled`). |
 | [`fanOutInterpret`](#fanOutInterpret) | Function | experimental | Give a router's interpret cells real wall-clock overlap without touching the kernel — pass the table `toolRouter` built, get back one whose cells launch their tool and RETURN, so `runInterpret` reaches the next Cmd of the turn while the first tool is still running. |
 | [`FILE_OMITTED`](#FILE_OMITTED) | Variable | experimental | The text an omitted file stands in as. |
@@ -121,6 +125,7 @@ These are the ones to read first:
 | [`mergeInterpret`](#mergeInterpret) | Function | experimental | Join two `Interpret` dictionaries over DISJOINT Cmd subsets `A` and `B` (over the same Msg union `M` and Ctx) into the full `Interpret<M, A \| B, Ctx>`. |
 | [`MessageContent`](#MessageContent) | Type | experimental | A message's content: a plain string, or a list of parts. |
 | [`MessageLoader`](#MessageLoader) | Type | experimental | Build the `Msg[]` the handler hands to the bound model for a given call. |
+| [`MissingAgentDomainError`](#MissingAgentDomainError) | Class | experimental | Thrown when an agent configured with a `domain` meets a Model that is mid-run and has no domain slice — a save from before the domain was configured. |
 | [`ModelFactory`](#ModelFactory) | Type | experimental | The model factory — the first DI port. |
 | [`ModelPort`](#ModelPort) | Type | experimental | Either model port. |
 | [`ModelStream`](#ModelStream) | Interface | experimental | The side channel a StreamingModel writes its deltas to — the second argument of the streaming port. |
@@ -312,7 +317,8 @@ type AgentConfig<
   R,
   TC extends Cmd = Cmd,
   Msg = unknown,
-> = AgentConfigCore<Stage, P, O, R, TC, Msg> & AgentSnapshotConfig & AgentCompactionConfig<R, Msg>
+  D = never,
+> = AgentConfigCore<Stage, P, O, R, TC, Msg, D> & AgentSnapshotConfig & AgentCompactionConfig<R, Msg>
 ```
 
 <a id="AgentConfigCore"></a>
@@ -327,6 +333,7 @@ interface AgentConfigCore<
   R,
   TC extends Cmd = Cmd,
   Msg = unknown,
+  D = never,
 > {
   /**
    * Consulted when a turn asks for no tools. `null` lets the stage retire;
@@ -338,9 +345,15 @@ interface AgentConfigCore<
    * get the same answer. It is config, not Model: a resumed run consults the
    * predicate the config passed to THIS boot.
    */
-  readonly continueWhen?: (state: AgentState<Stage, P, O, R>) => string | null;
+  readonly continueWhen?: (state: AgentStateOf<Stage, P, O, R, D>) => string | null;
   /** No-progress watchdog budget, in ms. Omit → no watchdog. */
   readonly deadlineMs?: number;
+  /**
+   * The host's own domain state, folded from the transcript events the kernel
+   * settles and kept in the Model under `domain`. See AgentDomain.
+   * Omit → the Model has no `domain` key and the reducer is unchanged.
+   */
+  readonly domain?: AgentDomain<D, R>;
   /**
    * The system prompt, stored ON THE MODEL at `init` (`AgentState.instructions`)
    * rather than closed over — so a replay reproduces the exact prompt that ran,
@@ -416,7 +429,7 @@ interface AgentConfigCore<
    * it with the same state and must get the same answer. It is config, not
    * Model: a resumed run consults the predicate the config passed to THIS boot.
    */
-  readonly stopWhen?: (state: AgentState<Stage, P, O, R>) => boolean;
+  readonly stopWhen?: (state: AgentStateOf<Stage, P, O, R, D>) => boolean;
   /**
    * How many of ONE turn's tool calls a transition LAUNCHES at once. At the
    * default `1` a turn's calls go out one at a time; raise it and up to that
@@ -462,6 +475,47 @@ interface AgentConfigCore<
    */
   readonly turnOf: (stage: Stage | undefined) => P;
 }
+```
+
+<a id="AgentDomain"></a>
+
+### `AgentDomain`
+
+```ts
+interface AgentDomain<D, R> {
+  readonly init: () => D;
+  readonly step: (slice: D, event: AgentDomainEvent<R>) => D;
+}
+```
+
+<a id="AgentDomainEvent"></a>
+
+### `AgentDomainEvent`
+
+```ts
+type AgentDomainEvent<R> =
+  | {
+    readonly _tag: "turn";
+    readonly at: number;
+    readonly turn: AgentTurn;
+  }
+  | {
+    readonly _tag: "tool";
+    readonly at: number;
+    readonly call: ToolCall;
+    readonly outcome: ToolOutcome<R>;
+  }
+  | {
+    readonly _tag: "nudge";
+    readonly at: number;
+    readonly nudge: Nudge;
+  }
+  | {
+    readonly _tag: "compaction";
+    readonly at: number;
+    readonly folded: number;
+    readonly summary: AgentTurn;
+  }
 ```
 
 <a id="AgentEndedStatus"></a>
@@ -584,14 +638,15 @@ interface AgentKnob<
   TC extends Cmd,
   Snap extends boolean,
   Compact extends boolean,
+  D = never,
 > {
-  readonly boot: AgentVerb1<Stage, P, O, R, TC, [at: number]>;
+  readonly boot: AgentVerb1<Stage, P, O, R, TC, [at: number], D>;
   /** The brain call's `Cmd.define`d run Cmd def — list it in `cmds` when you hand-wire. */
   readonly brain: CmdDef<"resilient_run", {
     readonly input: LlmCall;
     readonly key: string;
   }>;
-  readonly brainCall: (s: AgentState<Stage, P, O, R>) => LlmCall<P>;
+  readonly brainCall: (s: AgentStateOf<Stage, P, O, R, D>) => LlmCall<P>;
   /**
    * The brain call's `resilient_run` handler — the one `toMachine` wires. Its
    * Cmd is `Cmd.define`d, so it returns an outcome and the engine mints the
@@ -599,13 +654,13 @@ interface AgentKnob<
    * (ADR 0021). List `AgentKnob`'s brain Cmd def in `cmds` when you hand-wire.
    */
   readonly brainInterpret: () => Interpret<AgentLlmOkMsg<P, O> | AgentLlmErrMsg<P>, AgentLlmRunCmd<P>, unknown>;
-  readonly compactErr: AgentVerb1<Stage, P, O, R, TC, [key: string, msg: AgentCompactErrMsg, at: number]>;
-  readonly compactOk: AgentVerb1<Stage, P, O, R, TC, [key: string, msg: AgentCompactOkMsg, at: number]>;
-  readonly currentStage: (s: AgentState<Stage, P, O, R>) => Stage | undefined;
-  readonly fail: AgentVerb1<Stage, P, O, R, TC, [msg: AgentLlmErrMsg<P>, at: number]>;
-  readonly init: () => AgentState<Stage, P, O, R>;
-  readonly isSettled: (s: AgentState<Stage, P, O, R>) => boolean;
-  readonly onTimer: AgentVerb1<Stage, P, O, R, TC, [msg: LlmTimerMsg]>;
+  readonly compactErr: AgentVerb1<Stage, P, O, R, TC, [key: string, msg: AgentCompactErrMsg, at: number], D>;
+  readonly compactOk: AgentVerb1<Stage, P, O, R, TC, [key: string, msg: AgentCompactOkMsg, at: number], D>;
+  readonly currentStage: (s: AgentStateOf<Stage, P, O, R, D>) => Stage | undefined;
+  readonly fail: AgentVerb1<Stage, P, O, R, TC, [msg: AgentLlmErrMsg<P>, at: number], D>;
+  readonly init: () => AgentStateOf<Stage, P, O, R, D>;
+  readonly isSettled: (s: AgentStateOf<Stage, P, O, R, D>) => boolean;
+  readonly onTimer: AgentVerb1<Stage, P, O, R, TC, [msg: LlmTimerMsg], D>;
   /**
    * Start the run `runId`: seed the pipeline and a fresh conversation, zero the
    * run's usage, clear its output and failure, and fire the first brain call.
@@ -614,19 +669,19 @@ interface AgentKnob<
    * commands. That is what makes a retried or concurrent start request safe.
    * Only a State with no run, or a different `runId`, starts a run.
    */
-  readonly start: AgentVerb1<Stage, P, O, R, TC, [runId: string, at: number]>;
-  readonly subs: (s: AgentState<Stage, P, O, R>) => readonly DeadlineSub[];
-  readonly succeed: AgentVerb1<Stage, P, O, R, TC, [msg: AgentLlmOkMsg<P, O>, at: number]>;
-  readonly toMachine: AgentToMachine<Stage, P, O, R, TC, Snap, Compact>;
+  readonly start: AgentVerb1<Stage, P, O, R, TC, [runId: string, at: number], D>;
+  readonly subs: (s: AgentStateOf<Stage, P, O, R, D>) => readonly DeadlineSub[];
+  readonly succeed: AgentVerb1<Stage, P, O, R, TC, [msg: AgentLlmOkMsg<P, O>, at: number], D>;
+  readonly toMachine: AgentToMachine<Stage, P, O, R, TC, Snap, Compact, D>;
   /**
    * A bare `reason` string still works and settles an untagged failure — the
    * hand-wired shape this verb has always had. Hand it a whole `ToolFailure`
    * instead to keep the `{ _tag, …payload }` beside that reason, which is what
    * `onToolError` and any host code discriminating on `_tag` then read (#115).
    */
-  readonly toolErr: AgentVerb1<Stage, P, O, R, TC, [callId: string, failure: string | ToolFailure, at: number]>;
-  readonly toolOk: AgentVerb1<Stage, P, O, R, TC, [callId: string, result: R, at: number]>;
-  readonly turn: AgentVerb1<Stage, P, O, R, TC, [result: AgentTurn, at: number]>;
+  readonly toolErr: AgentVerb1<Stage, P, O, R, TC, [callId: string, failure: string | ToolFailure, at: number], D>;
+  readonly toolOk: AgentVerb1<Stage, P, O, R, TC, [callId: string, result: R, at: number], D>;
+  readonly turn: AgentVerb1<Stage, P, O, R, TC, [result: AgentTurn, at: number], D>;
 }
 ```
 
@@ -889,6 +944,14 @@ interface AgentState<Stage, P extends string, O extends Record<P, unknown>, R> {
 }
 ```
 
+<a id="AgentStateOf"></a>
+
+### `AgentStateOf`
+
+```ts
+type AgentStateOf<Stage, P extends string, O extends Record<P, unknown>, R, D = never> = [D] extends [never] ? AgentState<Stage, P, O, R> : AgentState<Stage, P, O, R> & { readonly domain: D }
+```
+
 <a id="AgentStatus"></a>
 
 ### `AgentStatus`
@@ -945,6 +1008,7 @@ type AgentToMachine<
   TC extends Cmd,
   Snap extends boolean,
   Compact extends boolean,
+  D = never,
 > = <Ctx = object, T extends AnyToolDef = never>(
   opts?: {
     readonly toolInterpret?: Interpret<AgentMachineMsg<P, O, R> | WiredToolMsg<T>, Exclude<TC, WiredToolCmd<T>>, Ctx> & SnapshotInterpret<AgentMachineMsg<P, O, R> | WiredToolMsg<T>, Snap, Ctx> & CompactInterpret<AgentMachineMsg<P, O, R> | WiredToolMsg<T>, Compact, Ctx>;
@@ -952,7 +1016,7 @@ type AgentToMachine<
   },
 ) => {
   readonly interpret: Interpret<AgentMachineMsg<P, O, R> | WiredToolMsg<T>, AgentCmd<P, TC, Snap, Compact>, Ctx & ToolsCtx<T>>;
-  readonly machine: Machine<AgentState<Stage, P, O, R>, AgentMachineMsg<P, O, R> | WiredToolMsg<T>, AgentCmd<P, TC, Snap, Compact>, DeadlinesSub, Ctx & ToolsCtx<T>>;
+  readonly machine: Machine<AgentStateOf<Stage, P, O, R, D>, AgentMachineMsg<P, O, R> | WiredToolMsg<T>, AgentCmd<P, TC, Snap, Compact>, DeadlinesSub, Ctx & ToolsCtx<T>>;
   readonly subscribe: Subscribe<AgentMachineMsg<P, O, R> | WiredToolMsg<T>, DeadlinesSub, Ctx & ToolsCtx<T>>;
 }
 ```
@@ -1216,12 +1280,13 @@ function createAgent<
   R,
   TC extends Cmd = Cmd,
   Msg = unknown,
+  D = never,
 >(
-  config: AgentConfigCore<Stage, P, O, R, TC, Msg> & {
+  config: AgentConfigCore<Stage, P, O, R, TC, Msg, D> & DomainRequired<D, R> & {
     readonly compaction: CompactionPolicy<R, Msg>;
     readonly snapshotEvery: number;
   },
-): AgentKnob<Stage, P, O, R, TC, true, true>
+): AgentKnob<Stage, P, O, R, TC, true, true, D>
 function createAgent<
   Stage,
   P extends string,
@@ -1229,12 +1294,13 @@ function createAgent<
   R,
   TC extends Cmd = Cmd,
   Msg = unknown,
+  D = never,
 >(
-  config: AgentConfigCore<Stage, P, O, R, TC, Msg> & {
+  config: AgentConfigCore<Stage, P, O, R, TC, Msg, D> & DomainRequired<D, R> & {
     readonly compaction?: undefined;
     readonly snapshotEvery: number;
   },
-): AgentKnob<Stage, P, O, R, TC, true, false>
+): AgentKnob<Stage, P, O, R, TC, true, false, D>
 function createAgent<
   Stage,
   P extends string,
@@ -1242,12 +1308,13 @@ function createAgent<
   R,
   TC extends Cmd = Cmd,
   Msg = unknown,
+  D = never,
 >(
-  config: AgentConfigCore<Stage, P, O, R, TC, Msg> & {
+  config: AgentConfigCore<Stage, P, O, R, TC, Msg, D> & DomainRequired<D, R> & {
     readonly compaction: CompactionPolicy<R, Msg>;
     readonly snapshotEvery?: undefined;
   },
-): AgentKnob<Stage, P, O, R, TC, false, true>
+): AgentKnob<Stage, P, O, R, TC, false, true, D>
 function createAgent<
   Stage,
   P extends string,
@@ -1255,12 +1322,13 @@ function createAgent<
   R,
   TC extends Cmd = Cmd,
   Msg = unknown,
+  D = never,
 >(
-  config: AgentConfigCore<Stage, P, O, R, TC, Msg> & {
+  config: AgentConfigCore<Stage, P, O, R, TC, Msg, D> & DomainRequired<D, R> & {
     readonly compaction?: undefined;
     readonly snapshotEvery?: undefined;
   },
-): AgentKnob<Stage, P, O, R, TC, false, false>
+): AgentKnob<Stage, P, O, R, TC, false, false, D>
 ```
 
 <a id="deadlinesSub"></a>
@@ -1320,9 +1388,9 @@ type DeadlineSub<N extends string | undefined = undefined> = {
 ### `defineAgent`
 
 ```ts
-function defineAgent<T extends AnyToolDef>(
-  config: DefineAgentConfig<T>,
-): DefinedAgent<T>
+function defineAgent<T extends AnyToolDef, D = never>(
+  config: DefineAgentConfig<T, D> & DomainRequired<D, ToolResult<T>>,
+): DefinedAgent<T, D>
 ```
 
 <a id="DefineAgentCompaction"></a>
@@ -1338,7 +1406,7 @@ type DefineAgentCompaction = { [K in CompactionTriggerTag]: CompactionTriggers &
 ### `DefineAgentConfig`
 
 ```ts
-interface DefineAgentConfig<T extends AnyToolDef> {
+interface DefineAgentConfig<T extends AnyToolDef, D = never> {
   /**
    * Bounds a run that keeps going without ever failing: the transcript budget,
    * past which the OLDEST turns are folded into one model-written summary
@@ -1375,7 +1443,7 @@ interface DefineAgentConfig<T extends AnyToolDef> {
    * get the same answer. It is config, not Model: a resumed run consults the
    * predicate the config passed to THIS boot.
    */
-  readonly continueWhen?: (state: DefinedAgentState<T>) => string | null;
+  readonly continueWhen?: (state: AgentStateOf<string, "act">) => string | null;
   /**
    * Stops a run that stops progressing: milliseconds the run may sit without
    * advancing before it fails. The budget is a no-progress watchdog, not a
@@ -1389,6 +1457,16 @@ interface DefineAgentConfig<T extends AnyToolDef> {
    * settle later than `at`.
    */
   readonly deadlineMs?: number;
+  /**
+   * The host's own domain state, kept in the Model under `domain` and updated
+   * by one pure fold over the transcript events the kernel settles: a turn, a
+   * tool outcome, a nudge and a compaction. `stopWhen` and `continueWhen` read
+   * it as `state.domain`, already holding the event that just settled; every
+   * Store persists it and `replayTrace` replays it. See AgentDomain.
+   *
+   * Omit → the Model has no `domain` key and the run is the run it was before.
+   */
+  readonly domain?: AgentDomain<D, OkOf<T>>;
   /**
    * The system prompt — stored on the Model at `init` (ADR 0004) and never
    * re-read, so a resumed run keeps the prompt it started with even across a
@@ -1514,7 +1592,7 @@ interface DefineAgentConfig<T extends AnyToolDef> {
    * resumed run consults the predicate the config passed to THIS boot, exactly
    * as it uses the `maxTurns` passed to this boot.
    */
-  readonly stopWhen?: (state: DefinedAgentState<T>) => boolean;
+  readonly stopWhen?: (state: AgentStateOf<string, "act">) => boolean;
   /**
    * How many of ONE turn's tool calls a transition launches at once. At the
    * default `1` a turn's calls go out one at a time, each waiting for the last
@@ -1543,12 +1621,12 @@ interface DefineAgentConfig<T extends AnyToolDef> {
 ### `DefinedAgent`
 
 ```ts
-interface DefinedAgent<T extends AnyToolDef> {
+interface DefinedAgent<T extends AnyToolDef, D = never> {
   /**
    * The machine `run` drives for `input` and the interpret table it runs under
    * — the way down to the raw kernel.
    */
-  readonly machine: (input: string) => DefinedAgentWired<T>;
+  readonly machine: (input: string) => DefinedAgentWired<T, D>;
   /**
    * Run `input` to its terminal Model. Resolves on `run.phase: "done"`; a
    * failed run rejects with `DriveFailedError` carrying the failed Model.
@@ -1564,8 +1642,8 @@ interface DefinedAgent<T extends AnyToolDef> {
    */
   readonly run: (
     input: string,
-    ...opts: [Record<never, never>] extends [UnionToIntersection<KnownToolCtx<ToolCtxBoxed<T>>>] ? [opts?: DefinedAgentRunOptions<T>] : [opts: DefinedAgentRunOptions<T>],
-  ) => Promise<DefinedAgentResolvedState<T>>;
+    ...opts: [Record<never, never>] extends [UnionToIntersection<KnownToolCtx<ToolCtxBoxed<T>>>] ? [opts?: DefinedAgentRunOptions<T, D>] : [opts: DefinedAgentRunOptions<T, D>],
+  ) => Promise<DefinedAgentResolvedState<T, D>>;
   /**
    * The ramp between the lid and `createAgent`: wrap ONE interpret cell of the
    * machine this agent builds and get back a NEW defined agent that runs the
@@ -1594,7 +1672,7 @@ interface DefinedAgent<T extends AnyToolDef> {
    * cell the machine has none of throws at `machine(input)`, where the table it
    * is checked against exists.
    */
-  readonly with: (overlay: DefinedAgentOverlay<T>) => DefinedAgent<T>;
+  readonly with: (overlay: DefinedAgentOverlay<T>) => DefinedAgent<T, D>;
 }
 ```
 
@@ -1635,7 +1713,7 @@ type DefinedAgentInterpret<T extends AnyToolDef> = Interpret<DefinedAgentMsg<T>,
 ### `DefinedAgentMachine`
 
 ```ts
-type DefinedAgentMachine<T extends AnyToolDef> = Machine<DefinedAgentState<T>, DefinedAgentMsg<T>, DefinedAgentCmd<T>, DeadlinesSub, DefinedAgentCtx<T>>
+type DefinedAgentMachine<T extends AnyToolDef, D = never> = Machine<DefinedAgentState<T, D>, DefinedAgentMsg<T>, DefinedAgentCmd<T>, DeadlinesSub, DefinedAgentCtx<T>>
 ```
 
 <a id="DefinedAgentModel"></a>
@@ -1669,7 +1747,7 @@ interface DefinedAgentOverlay<T extends AnyToolDef> {
 ### `DefinedAgentResolvedState`
 
 ```ts
-type DefinedAgentResolvedState<T extends AnyToolDef> = Omit<DefinedAgentState<T>, "run"> & { readonly run: EndedRun<string> }
+type DefinedAgentResolvedState<T extends AnyToolDef, D = never> = Omit<DefinedAgentState<T, D>, "run"> & { readonly run: EndedRun<string> }
 ```
 
 <a id="DefinedAgentRunOptions"></a>
@@ -1677,7 +1755,7 @@ type DefinedAgentResolvedState<T extends AnyToolDef> = Omit<DefinedAgentState<T>
 ### `DefinedAgentRunOptions`
 
 ```ts
-type DefinedAgentRunOptions<T extends AnyToolDef> = CtxArg<DefinedAgentCtx<T>> & StoreAndOnError<DefinedAgentState<T>> & {
+type DefinedAgentRunOptions<T extends AnyToolDef, D = never> = CtxArg<DefinedAgentCtx<T>> & StoreAndOnError<DefinedAgentState<T, D>> & {
   /** The clock that stamps `at`. Omit → `Date.now`. */
   readonly clock?: () => number;
   /**
@@ -1750,7 +1828,7 @@ type DefinedAgentRunOptions<T extends AnyToolDef> = CtxArg<DefinedAgentCtx<T>> &
 ### `DefinedAgentState`
 
 ```ts
-type DefinedAgentState<T extends AnyToolDef> = AgentState<string, LidPurpose, LidOutputs, ToolResult<T>>
+type DefinedAgentState<T extends AnyToolDef, D = never> = AgentStateOf<string, LidPurpose, LidOutputs, ToolResult<T>, D>
 ```
 
 <a id="DefinedAgentWired"></a>
@@ -1758,11 +1836,19 @@ type DefinedAgentState<T extends AnyToolDef> = AgentState<string, LidPurpose, Li
 ### `DefinedAgentWired`
 
 ```ts
-type DefinedAgentWired<T extends AnyToolDef> = {
+type DefinedAgentWired<T extends AnyToolDef, D = never> = {
   readonly interpret: DefinedAgentInterpret<T>;
-  readonly machine: DefinedAgentMachine<T>;
+  readonly machine: DefinedAgentMachine<T, D>;
   readonly subscribe: Subscribe<DefinedAgentMsg<T>, DeadlinesSub, DefinedAgentCtx<T>>;
 }
+```
+
+<a id="DomainRequired"></a>
+
+### `DomainRequired`
+
+```ts
+type DomainRequired<D, R> = [D] extends [never] ? unknown : { readonly domain: AgentDomain<D, R> }
 ```
 
 <a id="EndedRun"></a>
@@ -2023,6 +2109,19 @@ type MessageContent = string | readonly ContentPart[]
 
 ```ts
 type MessageLoader<P extends string, Msg> = (call: LlmCall<P>) => Promise<readonly Msg[]>
+```
+
+<a id="MissingAgentDomainError"></a>
+
+### `MissingAgentDomainError`
+
+```ts
+class MissingAgentDomainError extends Error {
+  constructor(runId: string | null);
+  readonly _tag: "MissingAgentDomainError";
+  readonly name: "MissingAgentDomainError";
+  readonly runId: string | null;
+}
 ```
 
 <a id="ModelFactory"></a>

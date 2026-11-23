@@ -119,8 +119,9 @@ export function withStateDefaults<
   P extends string,
   O extends Record<P, unknown>,
   R,
->(s: AgentState<Stage, P, O, R>): AgentState<Stage, P, O, R> {
-  const persisted = s as Partial<AgentState<Stage, P, O, R>>;
+  S extends AgentState<Stage, P, O, R>,
+>(s: S): S {
+  const persisted: Partial<AgentState<Stage, P, O, R>> = s;
   const conv = s.conversation as PersistedConversation<R> | null;
   const current =
     persisted.usage !== undefined &&
