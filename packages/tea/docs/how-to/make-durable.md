@@ -357,8 +357,11 @@ logged store in steps 5–6.
    without the option, and gets no `init` frame. Restore folds the step frames
    and skips the init frames, and `snapshotEvery` counts Msgs only. Evidence is
    stored as a delta against the frame before it, so a restart reads the last
-   frames to continue the chain; if they cannot be rebuilt, restore refuses with
-   `StoreRefusedError`.
+   frames to continue the chain. Evidence is not State: if those frames cannot be
+   rebuilt, restore still succeeds, because the Msgs and the snapshot rebuild the
+   State, and the next frame is written whole as a new basis. The store tells
+   `onRecordingBreak` (default: a `console.warn`) which frames are broken, as
+   `{ fromSeq, toSeq, reason }`; `readFrames` still refuses them.
 
 A host that reads an agent's log without loading it — its head, committed
 sequence or events in a range — uses

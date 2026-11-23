@@ -4,7 +4,7 @@
  * started. Restore, snapshots and reads treat it as the log of Msgs it contains.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { fakeDoStorage as fakeStorage } from "../__fixtures__/do-storage";
 import { defineMachine, type Transitions } from "../index";
 import { run } from "../promise";
@@ -272,21 +272,159 @@ describe("restoring a recording that cannot be read", () => {
       ).store.load(),
     ).rejects.toThrow(/recording frame was refused/);
   });
+});
 
-  it("refuses when the evidence its next frame is a delta of cannot be rebuilt", async () => {
+describe("restoring a recording whose evidence is broken", () => {
+  const damageDelta = (backing: Map<string, string>, seq: number) => {
+    const cell = JSON.parse(backing.get(key(seq)) ?? "");
+    cell.evidence.delta = btoa("not a delta");
+    backing.set(key(seq), JSON.stringify(cell));
+  };
+
+  const cases = [
+    {
+      name: "a delta that fails its checksum",
+      opts: {},
+      msgs: [inc(1)],
+      damage: (backing: Map<string, string>) => damageDelta(backing, 2),
+      broken: { fromSeq: 2, toSeq: 2, reason: "checksum" },
+      count: 11,
+    },
+    {
+      name: "a delta in the middle of a chain that fails its checksum",
+      opts: {},
+      msgs: [inc(1), inc(1), inc(1)],
+      damage: (backing: Map<string, string>) => damageDelta(backing, 3),
+      broken: { fromSeq: 3, toSeq: 4, reason: "checksum" },
+      count: 13,
+    },
+    {
+      name: "a frame the next one is a delta of, gone from the log",
+      opts: { snapshotEvery: 2 },
+      msgs: [inc(1), inc(1), inc(1)],
+      damage: (backing: Map<string, string>) => backing.delete(key(3)),
+      broken: { fromSeq: 3, toSeq: 4, reason: "basis" },
+      count: 13,
+    },
+    {
+      name: "a cell, older than the snapshot, that is not a frame",
+      opts: { snapshotEvery: 2 },
+      msgs: [inc(1), inc(1)],
+      damage: (backing: Map<string, string>) =>
+        backing.set(key(2), '{"tea":"recording/1","frame":"step"}'),
+      broken: { fromSeq: 2, toSeq: 3, reason: "frame" },
+      count: 12,
+    },
+    {
+      name: "every cell gone from under a snapshot",
+      opts: { snapshotEvery: 1 },
+      msgs: [inc(1), inc(1)],
+      damage: (backing: Map<string, string>) => {
+        for (const seq of [1, 2, 3]) backing.delete(key(seq));
+      },
+      broken: { fromSeq: 3, toSeq: 3, reason: "basis" },
+      count: 12,
+    },
+  ] as const;
+
+  it.each(
+    cases,
+  )("resumes after $name, reports where, and writes the next frame whole", async ({
+    opts,
+    msgs,
+    damage,
+    broken,
+    count,
+  }) => {
+    const backing = new Map<string, string>();
+    await liveRun(backing, msgs, { ...recording, ...opts });
+    damage(backing);
+    const heard: unknown[] = [];
+
+    const ended = await liveRun(backing, [inc(10)], {
+      ...recording,
+      ...opts,
+      onRecordingBreak: (b) => heard.push(b),
+    });
+
+    expect(ended.count).toBe(count);
+    expect(heard).toEqual([broken]);
+    const frames = await framesOf(backing);
+    const [restart, next] = frames.slice(-2);
+    expect([restart?._tag, next?._tag]).toEqual(["init", "step"]);
+    expect(restart).toMatchObject({ encoding: "full", restored: true });
+    expect(next).toMatchObject({ encoding: "delta" });
+  });
+
+  it("writes the next frame whole when a second load of the same store finds the break", async () => {
+    const backing = new Map<string, string>();
+    await liveRun(backing, [inc(1), inc(1)], recording);
+    const { store } = doEventSourcedStore(
+      fakeStorage(backing).storage,
+      counter,
+      ctx,
+      { ...recording, onRecordingBreak: () => {} },
+    );
+    await store.load();
+    damageDelta(backing, 3);
+
+    await store.load();
+    await store.save(fresh, inc(1), { _tag: "step", cmds: [] });
+
+    expect((await framesOf(backing)).at(-1)).toMatchObject({
+      seq: 4,
+      encoding: "full",
+    });
+  });
+
+  it("still refuses to rebuild the broken frames when they are read", async () => {
     const backing = new Map<string, string>();
     await liveRun(backing, [inc(1)], recording);
-    const damaged = JSON.parse(backing.get(key(2)) ?? "");
-    damaged.evidence.delta = btoa("not a delta");
-    backing.set(key(2), JSON.stringify(damaged));
+    damageDelta(backing, 2);
+    await liveRun(backing, [inc(1)], recording);
 
-    await expect(
-      doEventSourcedStore(
-        fakeStorage(backing).storage,
-        counter,
-        ctx,
-        recording,
-      ).store.load(),
-    ).rejects.toThrow(/recorded evidence could not be rebuilt/);
+    const frames = await framesOf(backing);
+
+    expect(frames.map((frame) => frame._tag)).toEqual([
+      "init",
+      "refused",
+      "init",
+      "step",
+    ]);
+    expect(frames[1]).toMatchObject({ seq: 2, reason: "checksum" });
+  });
+
+  it("warns by default, naming the frames", async () => {
+    const backing = new Map<string, string>();
+    await liveRun(backing, [inc(1)], recording);
+    damageDelta(backing, 2);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await liveRun(backing, [], recording);
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0]?.[0])).toMatch(
+      /frames 2 to 2 \(checksum\)/,
+    );
+    warn.mockRestore();
+  });
+
+  it("is not stopped by a hook that throws", async () => {
+    const backing = new Map<string, string>();
+    await liveRun(backing, [inc(1)], recording);
+    damageDelta(backing, 2);
+    const hookFailure = new Error("hook");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const ended = await liveRun(backing, [inc(1)], {
+      ...recording,
+      onRecordingBreak: () => {
+        throw hookFailure;
+      },
+    });
+
+    expect(ended.count).toBe(2);
+    expect(warn).toHaveBeenCalledWith(hookFailure);
+    warn.mockRestore();
   });
 });
