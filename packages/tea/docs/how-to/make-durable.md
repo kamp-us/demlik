@@ -359,10 +359,16 @@ sequence or events in a range — uses
 A log can be written as a recording: a frame per cell instead of a bare Msg, an
 `init` frame for each boot and a `step` frame for each applied Msg, each holding
 the State after it and the Cmds the engine started for it. `readHead()` says
-which format the first cell is (`format`). `readFrames(range)` reads every cell
-as a [`StoredFrame`](../reference/do.md#StoredFrame): a `message`, an `init`
-frame, a `step` frame or a `refused` cell with its reason. `readStoredEvents`
-and `readEvents` still yield Msgs only, whichever format the log has.
+which format the first cell is (`format`). `readFrames(range, options)` reads
+every cell as a [`StoredFrame`](../reference/do.md#StoredFrame) (`message`,
+`init`, `step` or `refused`). Pass `{ evidence: true }` to rebuild each frame's
+State and Cmds, `{ evidence: "verify" }` to check that they rebuild without
+returning them, and `{ reverse: true }` to read from the highest `seq` down. A
+range that starts in the middle of a run of deltas reads one bounded page of
+earlier frames to find its basis. A frame that cannot be rebuilt comes back
+`refused` with its reason (`frame`, `basis` or `checksum`), and a delta after it
+is refused `basis`. `readStoredEvents` and `readEvents` still yield Msgs only,
+whichever format the log has.
 
 See [`EventSourcedOptions`](../reference/do.md#EventSourcedOptions) for the
 restore-attempt key override and parsing options, and
