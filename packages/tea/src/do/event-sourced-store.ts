@@ -595,7 +595,9 @@ type Refused = Extract<StoredFrame<never>, { _tag: "refused" }>;
 /**
  * Decode one stored cell as a frame, in whichever format it was written. The
  * parsed recording cell is returned beside it, evidence still encoded, for a
- * read that rebuilds it. A cell of a log written as bare messages has none.
+ * read that rebuilds it. A cell of a log written as bare messages has none. A
+ * step whose Msg the host refuses (`event`) keeps its parsed cell: only its Msg
+ * is refused, and the deltas after it still rebuild against its evidence.
  */
 function decodeStoredFrame<M>(
   eventPrefix: string,
@@ -659,7 +661,7 @@ function decodeStoredFrame<M>(
     };
   }
   const event = parseEvent(encoded.msg);
-  if (event === null) return refused("event");
+  if (event === null) return { frame: refused("event").frame, encoded };
   return {
     frame: {
       _tag: "step",
@@ -802,9 +804,7 @@ function openLogReader<M extends { _tag: string }>(
         value,
       );
       if (frame.seq !== expected) return broke(expected, "basis");
-      if (frame._tag === "refused" || encoded === null) {
-        return broke(expected, "frame");
-      }
+      if (encoded === null) return broke(expected, "frame");
       chain.push([expected, encoded]);
       if (encoded.evidence.encoding === "full") break;
       expected -= 1;
@@ -836,8 +836,8 @@ function openLogReader<M extends { _tag: string }>(
       if (
         !rebuild ||
         encoded === null ||
-        frame._tag === "refused" ||
-        frame._tag === "message"
+        frame._tag === "message" ||
+        frame.seq === null
       ) {
         basis = null;
         yield frame;
@@ -855,17 +855,21 @@ function openLogReader<M extends { _tag: string }>(
         typeof rebuilt === "string" ? null : readEvidence(rebuilt.bytes);
       if (typeof rebuilt === "string" || read === null) {
         basis = null;
-        yield {
-          _tag: "refused",
-          key,
-          seq: frame.seq,
-          serializedBytes: frame.serializedBytes,
-          reason: typeof rebuilt === "string" ? rebuilt : "frame",
-        };
+        yield frame._tag === "refused"
+          ? frame
+          : {
+              _tag: "refused",
+              key,
+              seq: frame.seq,
+              serializedBytes: frame.serializedBytes,
+              reason: typeof rebuilt === "string" ? rebuilt : "frame",
+            };
         continue;
       }
       basis = rebuilt;
-      yield evidence === "verify" ? frame : { ...frame, evidence: read };
+      yield frame._tag === "refused" || evidence === "verify"
+        ? frame
+        : { ...frame, evidence: read };
     }
   }
 
