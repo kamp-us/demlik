@@ -173,3 +173,31 @@ run(profile, {
 ```
 
 The machine does not change. Only the runner does.
+
+## 4. Keep only a failed drive's recording
+
+A `recorder` with `captureSteps: true` keeps every transition of a drive in
+memory, by reference. A drive that succeeds drops it and writes nothing. When
+the drive rejects, write what the recorder kept into a store that records, with
+`writeTrace` from `@demlik/tea/persistence`:
+
+```ts
+const handle = run(machine, { interpret, onError });
+const capture = recorder(handle, { captureSteps: true });
+try {
+  return await driveToDone(handle, start, isDone);
+} catch (error) {
+  const { store } = doEventSourcedStore(storage, machine, ctx, { recording });
+  await writeTrace(store, capture.dump());
+  throw error;
+} finally {
+  capture.stop();
+}
+```
+
+The store ends up with the frames a live run on it would have saved, so what
+reads a recording reads this one. `writeTrace` writes an `init` frame for the
+State the run started in, with no Cmds because the recorder's boot observation
+carries none, then a `step` frame per recorded transition. A store that does not
+record keeps the Msgs only. It throws before it saves anything when the trace has
+no starting State or has Msgs but no steps.
