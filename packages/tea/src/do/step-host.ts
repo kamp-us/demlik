@@ -746,8 +746,9 @@ export type StepLoopOutcome<O> =
 /**
  * What every phase of a drive in motion carries. Plain data, so a recording of
  * it survives `JSON.stringify` and a replay from the parsed text decides as the
- * live drive did, except for a deadline or retry-policy number that is `NaN`
- * or `-Infinity`, or an `Infinity` in the policy: see {@link runStepLoop}.
+ * live drive did, except that a deadline or retry-policy number that is
+ * `NaN` or infinite (other than a `deadlineMs` of `Infinity`) may not replay
+ * from stored text: see {@link runStepLoop}.
  */
 interface StepLoopRun<R> {
   /** The absolute deadline, or `null` for none: `Infinity` does not survive JSON. */
@@ -1034,12 +1035,13 @@ export function stepLoopMachine<R, I, O>(): Machine<
  *   - **Frozen values (dev builds).** Where tea's dev checks run (`NODE_ENV` is
  *     not `production`) the State is deep-frozen before each reducer step. The
  *     result `execute` returned, a step's `input` once its result is posted, a
- *     failure that is a plain object, and the `config.retry` object are frozen
- *     in place, and a caller that mutates one throws a `TypeError`: an
- *     `execute` that returns a shared object and changes it on the next call
- *     rejects the drive, and so does pushing onto a returned result after the
- *     drive. Return a fresh value. `done`'s `output` is not frozen. A
- *     production build freezes nothing.
+ *     failure that is a plain object, and the `config.retry` object (the shared
+ *     `defaultRetryPolicy` from `retry-backoff`, process-wide, when you omit
+ *     it) are frozen in place, and a caller that mutates one throws a
+ *     `TypeError`: an `execute` that returns a shared object and changes it on
+ *     the next call rejects the drive, and so does pushing onto a returned
+ *     result after the drive. Return a fresh value. `done`'s `output` is not
+ *     frozen. A production build freezes nothing.
  *   - **A bound.** A drive is one `dispatch`, which tea ends with
  *     `QuiescenceTimeoutError` after 100,000 follow-up Msgs counted over the
  *     whole drive: 3 for a step, 4 for a not-ready poll, and 3 more for each
@@ -1049,11 +1051,13 @@ export function stepLoopMachine<R, I, O>(): Machine<
  *   - **Stored recordings and non-finite numbers.** The machine decides on
  *     exactly the numbers you pass, and the recorded `start` Msg carries them.
  *     JSON has no `NaN` or `Infinity`, so a `deadlineMs` or a `retry` number
- *     that is `NaN` or infinite replays from the dumped trace but not from the
- *     text `toJSONL` wrote, which reads it back as `null`. The one exception is
- *     `deadlineMs: Infinity`, which the machine already holds as `null`, "no
- *     deadline". Write a policy with no limit as `unbounded: true`, not as an
- *     infinite `maxAttempts` or `maxElapsedMs`.
+ *     that is `NaN` or infinite replays from the dumped trace, but may not
+ *     replay from the text `toJSONL` wrote, which reads it back as `null`
+ *     (`maxAttempts` of `NaN` or `Infinity` does not; a `NaN` deadline and a
+ *     `NaN` `maxElapsedMs` happen to). The one exception is `deadlineMs:
+ *     Infinity`, which the machine already holds as `null`, "no deadline".
+ *     Write a policy with no limit as `unbounded: true`, not as an infinite
+ *     `maxAttempts` or `maxElapsedMs`.
  */
 export async function runStepLoop<R, I, O>(
   token: string,
