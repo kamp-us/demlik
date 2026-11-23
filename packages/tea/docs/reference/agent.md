@@ -1624,7 +1624,8 @@ interface DefineAgentConfig<T extends AnyToolDef, D = never> {
 interface DefinedAgent<T extends AnyToolDef, D = never> {
   /**
    * The machine `run` drives for `input` and the interpret table it runs under
-   * — the way down to the raw kernel.
+   * — the way down to the raw kernel. Its compaction settle is stamped with
+   * `Date.now` at the settle, not with the clock a raw `run` is given.
    */
   readonly machine: (input: string) => DefinedAgentWired<T, D>;
   /**

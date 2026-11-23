@@ -593,47 +593,6 @@ describe("instructions live in the durable Model (ADR 0004)", () => {
 // a persist + resume; a Model persisted before the slot existed still boots.
 // ---------------------------------------------------------------------------
 
-describe("agent.run stamps the compaction settle with the run's clock", () => {
-  it("the compact_ok Msg carries an at the injected clock returned, not wall time", async () => {
-    let calls = 0;
-    const model = async (): Promise<AgentTurn> => {
-      calls += 1;
-      return calls <= 2
-        ? {
-            content: `ask ${calls}`,
-            toolCalls: [
-              { callId: `c${calls}`, name: "search", args: { q: "tea" } },
-            ],
-          }
-        : ANSWER;
-    };
-    const issued: number[] = [];
-    let t = 0;
-    const { store, msgs } = recordedMsgs();
-    const final = await defineAgent({
-      model,
-      tools: [search],
-      instructions: INSTRUCTIONS,
-      compaction: { afterTurns: 2, keepTurns: 0 },
-    }).run(INPUT, {
-      ctx: { kb },
-      store,
-      clock: () => {
-        t += 1;
-        issued.push(t);
-        return t;
-      },
-    });
-
-    expect(final.run.phase).toBe("done");
-    const settles = msgs.filter((m) => m._tag === "compact_ok");
-    expect(settles).toHaveLength(1);
-    const at = (settles[0] as { readonly at: number }).at;
-    expect(issued).toContain(at);
-    expect(final.resilience.clockMs).toBeLessThanOrEqual(t);
-  });
-});
-
 describe("AgentTurn.provider — the opaque passthrough slot (#93)", () => {
   const PROVIDER = {
     blocks: [{ type: "thinking", thinking: "…", signature: "sig-abc" }],
@@ -1868,6 +1827,82 @@ describe("defineAgent — the compaction knob (#149)", () => {
 
     expect(brain.summaries()).toBe(0);
     expect(brain.brainPrompts[2]).toHaveLength(6);
+  });
+
+  it("agent.run stamps the compact_ok settle with the run's clock, after the summarize call", async () => {
+    let calls = 0;
+    let t = 0;
+    let summarySettledAt = 0;
+    const model = async (): Promise<AgentTurn> => {
+      calls += 1;
+      if (calls === 3) {
+        t += 500;
+        summarySettledAt = t;
+      }
+      return calls <= 2
+        ? {
+            content: `ask ${calls}`,
+            toolCalls: [
+              { callId: `c${calls}`, name: "search", args: { q: "tea" } },
+            ],
+          }
+        : ANSWER;
+    };
+    const issued: number[] = [];
+    const { store, msgs } = recordedMsgs();
+    const final = await defineAgent({
+      model,
+      tools: [search],
+      instructions: INSTRUCTIONS,
+      compaction: { afterTurns: 2, keepTurns: 0 },
+    }).run(INPUT, {
+      ctx: { kb },
+      store,
+      clock: () => {
+        t += 1000;
+        issued.push(t);
+        return t;
+      },
+    });
+
+    expect(final.run.phase).toBe("done");
+    const ats = msgs.flatMap((m) => (m._tag === "compact_ok" ? [m.at] : []));
+    expect(ats).toHaveLength(1);
+    expect(issued).toContain(ats[0]);
+    expect(ats[0]).toBeGreaterThan(summarySettledAt);
+  });
+
+  it("machine(input) reads Date.now at the compact_ok settle, not when the machine is built", async () => {
+    const brain = compactableModel([ASK, ASK_2, ASK_3, ANSWER]);
+    const { machine, interpret, subscribe } = defineAgent({
+      model: brain.model,
+      tools: [search],
+      instructions: INSTRUCTIONS,
+      compaction: { afterTurns: 3, keepTurns: 1 },
+    }).machine(INPUT);
+    const wall = vi.spyOn(Date, "now").mockReturnValue(4242);
+    try {
+      const { store, msgs } = recordedMsgs();
+      const handle = run(machine, {
+        ctx: { kb },
+        interpret,
+        subscribe,
+        store,
+        clock: () => 0,
+      });
+      const final = await driveToDone(
+        handle,
+        { _tag: "agent_start", runId: "run-1", at: 0 },
+        (s) => s.run.phase === "done",
+      );
+      await (await handle.ready).stop();
+
+      expect(final.run.phase).toBe("done");
+      const ats = msgs.flatMap((m) => (m._tag === "compact_ok" ? [m.at] : []));
+      expect(ats).toEqual([4242]);
+    } finally {
+      wall.mockRestore();
+    }
   });
 });
 

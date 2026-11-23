@@ -709,7 +709,8 @@ export interface DefinedAgent<T extends AnyToolDef, D = never> {
   ) => Promise<DefinedAgentResolvedState<T, D>>;
   /**
    * The machine `run` drives for `input` and the interpret table it runs under
-   * — the way down to the raw kernel.
+   * — the way down to the raw kernel. Its compaction settle is stamped with
+   * `Date.now` at the settle, not with the clock a raw `run` is given.
    */
   readonly machine: (input: string) => DefinedAgentWired<T, D>;
   /**
@@ -894,7 +895,7 @@ function definedAgent<T extends AnyToolDef, D = never>(
   // The public way down carries no chunk sink: `machine(input)` is handed to
   // the raw kernel by a caller who has no run options to read one from.
   const machine = (input: string): DefinedAgentWired<T, D> =>
-    machineWith(input, undefined, Date.now);
+    machineWith(input, undefined, () => Date.now());
   const drive: DefinedAgent<T, D>["run"] = (input, ...[opts = noHost<T>()]) => {
     const { onEvent, onChunk } = opts;
     // No listener → no projector, so an omitted `onEvent` leaves the run the

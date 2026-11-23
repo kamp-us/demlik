@@ -357,7 +357,19 @@ describe("an agent's domain slice", () => {
     const ats: number[] = [];
     const issued: number[] = [];
     let t = 0;
-    const { model } = stepper();
+    let summarySettledAt = 0;
+    const { model: script } = stepper();
+    const model: typeof script = async (messages) => {
+      const turn = await script(messages);
+      if (
+        messages[0]?.role === "system" &&
+        messages[0].content.startsWith(SUMMARIZING)
+      ) {
+        t += 500;
+        summarySettledAt = t;
+      }
+      return turn;
+    };
     const final = await defineAgent({
       model,
       tools: TOOLS,
@@ -382,6 +394,7 @@ describe("an agent's domain slice", () => {
       const at = ats[i] ?? 0;
       if (event._tag === "compaction") {
         expect(issued).toContain(at);
+        expect(at).toBeGreaterThan(summarySettledAt);
       } else if (event._tag === "tool" && event.tag === "timeout") {
         expect(issued).toContain(at - SLOW_TIMEOUT_MS);
       } else if (event._tag === "nudge") {
