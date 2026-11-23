@@ -18,6 +18,8 @@
  *   machine resumes from its last checkpoint rather than from the top.
  * - `trace-replay` — feed a recorded `Trace` back through a machine and report
  *   where, if anywhere, the replay diverged.
+ * - `write-trace` — write a captured `Trace` into a `Store` as the boundaries a
+ *   live run would have saved.
  *
  * `battery` tier (MAINTAINING.md): a published named pattern over the kernel,
  * which may break in a minor provided the changelog for that minor says so.
@@ -32,6 +34,7 @@ export {
 } from "../internal/persistence/row-store";
 export * from "../internal/persistence/snapshot";
 export * from "../internal/persistence/trace-replay";
+export { writeTrace } from "../internal/persistence/write-trace";
 
 import type * as JournalContract from "../internal/journal";
 

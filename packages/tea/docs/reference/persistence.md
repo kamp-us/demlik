@@ -32,7 +32,7 @@ Call `await journalConformance(make, { records: 10000, now: () => performance.no
 
 A fenced driver returned by `open()` exposes `fenced: true` and `appendFenced`; the same call then checks K7's atomic expected-head comparison and competing writers. K7 is skipped for plain drivers, and K8 for non-file fixtures. K3, the atomic-batch case, needs the fixture's interruption controls: a fixture whose `writePoints` returns no point gets K3 `failed` with "Fixture exposes no interruption points", and its other results still stand. See [the host fixture and deliberately broken driver](https://github.com/kamp-us/demlik/blob/main/packages/tea/examples/journal-store.ts) for a runnable example.
 
-## Exports (38)
+## Exports (39)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -74,6 +74,7 @@ A fenced driver returned by `open()` exposes `fenced: true` and `appendFenced`; 
 | [`TraceAttachment`](#TraceAttachment) | Interface | battery | A Sentry-shaped attachment carrying the full Trace as JSONL. |
 | [`TraceBreadcrumb`](#TraceBreadcrumb) | Interface | battery | A Sentry-shaped breadcrumb. |
 | [`TraceStep`](#TraceStep) | Interface | battery | One recorded transition: the msg, the State after it, and its Cmds. |
+| [`writeTrace`](#writeTrace) | Function | battery | Write a captured Trace into a Store as the frames a live run would have saved: an `init` boundary for `loaded`, then one `step` boundary per recorded transition, each with the State after it and the Cmds it started. |
 
 ## Declarations
 
@@ -798,4 +799,15 @@ interface TraceStep<S, M> {
   readonly msg: M;
   readonly state: S;
 }
+```
+
+<a id="writeTrace"></a>
+
+### `writeTrace`
+
+```ts
+function writeTrace<S, M extends { readonly _tag: string }>(
+  store: Pick<Store<S>, "load" | "save">,
+  trace: Trace<S, M>,
+): Promise<void>
 ```
