@@ -53,6 +53,7 @@ export const __DEV__: boolean = (() => {
 
 export function deepFreeze<T>(obj: T, seen?: WeakSet<object>): T {
   if (obj === null || typeof obj !== "object") return obj;
+  if (Object.isFrozen(obj)) return obj;
   const proto = Object.getPrototypeOf(obj);
   if (proto !== Object.prototype && proto !== Array.prototype && proto !== null)
     return obj;
