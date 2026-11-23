@@ -36,14 +36,13 @@ const step: DeferredStepResponse<Input, Output> = {
   step: { callId: "c1", tool: "alpha", input: { arg: "a" } },
 };
 
-/** A drive that polls a not-ready host, runs one step, then loses the transport twice. */
-async function failAfterARetry() {
-  const answers: (DeferredStepResponse<Input, Output> | Error)[] = [
-    { done: false, working: true, retryAfterMs: 5 },
-    step,
-    new Error("down"),
-    new Error("still down"),
-  ];
+type Answer = DeferredStepResponse<Input, Output> | Error;
+
+/** A drive answered from `answers` in order, recorded from before it boots. */
+async function drive(
+  answers: Answer[],
+  config: Partial<RunStepLoopConfig<string, Input, Output>> = {},
+) {
   const requests: StepRequest<string>[] = [];
   const sleeps: number[] = [];
   let tick = 0;
@@ -62,17 +61,11 @@ async function failAfterARetry() {
     (next) => `${next.tool}!`,
     {
       deadlineMs: Number.POSITIVE_INFINITY,
-      retry: {
-        baseMs: 10,
-        factor: 2,
-        capMs: 100,
-        maxAttempts: 2,
-        jitter: "none",
-      },
       now: () => tick++,
       sleep: async (ms) => {
         sleeps.push(ms);
       },
+      ...config,
       attach: (runtime) => {
         recording = recorder(runtime, { captureSteps: true });
       },
@@ -82,6 +75,26 @@ async function failAfterARetry() {
   if (recording === undefined) throw new Error("attach was not called");
   return { outcome, requests, sleeps, recording };
 }
+
+/** A drive that polls a not-ready host, runs one step, then loses the transport twice. */
+const failAfterARetry = () =>
+  drive(
+    [
+      { done: false, working: true, retryAfterMs: 5 },
+      step,
+      new Error("down"),
+      new Error("still down"),
+    ],
+    {
+      retry: {
+        baseMs: 10,
+        factor: 2,
+        capMs: 100,
+        maxAttempts: 2,
+        jitter: "none",
+      },
+    },
+  );
 
 describe("runStepLoop as a machine", () => {
   it("records a drive that fails after a retry, with the posted result and the response in its Msgs", async () => {
@@ -177,6 +190,95 @@ describe("runStepLoop as a machine", () => {
         },
       }),
     ).rejects.toBe(outage);
+  });
+
+  it.each([
+    {
+      input: "deadlineMs: -Infinity",
+      config: { deadlineMs: Number.NEGATIVE_INFINITY },
+      answers: [],
+      kind: "deadline_exceeded",
+      posts: 0,
+    },
+    {
+      input: "retry.maxElapsedMs: Infinity",
+      config: {
+        retry: {
+          baseMs: 1,
+          factor: 1,
+          capMs: 5,
+          maxElapsedMs: Number.POSITIVE_INFINITY,
+          jitter: "none",
+        },
+      },
+      answers: [
+        new Error("a"),
+        new Error("b"),
+        { done: true, output: "ok" },
+      ] satisfies Answer[],
+      kind: "done",
+      posts: 3,
+    },
+  ] as const)("decides as the live drive did when it is replayed from stored text, with $input", async ({
+    config,
+    answers,
+    kind,
+    posts,
+  }) => {
+    const { outcome, requests, recording } = await drive([...answers], config);
+    const written = recording.toJSONL();
+
+    const stored = replayStoredTrace(
+      machine,
+      parseJSONL<unknown, { readonly _tag: string }>(written),
+    );
+
+    expect(outcome.kind).toBe(kind);
+    expect(requests).toHaveLength(posts);
+    expect(JSON.parse(written.split("\n")[1] ?? "{}")).toMatchObject({
+      msg: { _tag: "start", deadlineMs: expect.any(Number) },
+    });
+    expect(stored.matches).toBe(true);
+    expect(stored.refusal).toBeUndefined();
+  });
+
+  it("freezes the results it was handed in a dev build, so a mutated step result throws", async () => {
+    const stepsThenDone =
+      (steps: number) =>
+      async (): Promise<DeferredStepResponse<Input, Output>> =>
+        ++served > steps
+          ? { done: true, output: "ok" }
+          : {
+              done: false,
+              step: { callId: `c${served}`, tool: "t", input: { arg: "a" } },
+            };
+    let served = 0;
+    const shared = { n: 0 };
+
+    await expect(
+      runStepLoop<{ n: number }, Input, Output>(
+        "token",
+        "run-3",
+        stepsThenDone(3),
+        () => {
+          shared.n += 1;
+          return shared;
+        },
+        { deadlineMs: Number.POSITIVE_INFINITY, now: () => 0 },
+      ),
+    ).rejects.toBeInstanceOf(TypeError);
+    expect(shared.n).toBe(1);
+
+    served = 0;
+    const kept = { log: [] as string[] };
+    await runStepLoop<{ log: string[] }, Input, Output>(
+      "token",
+      "run-4",
+      stepsThenDone(1),
+      () => kept,
+      { deadlineMs: Number.POSITIVE_INFINITY, now: () => 0 },
+    );
+    expect(() => kept.log.push("after")).toThrow(TypeError);
   });
 
   it("stops where a recorded Msg no longer says what the drive saw", async () => {

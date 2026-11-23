@@ -213,7 +213,6 @@ export {
   type StepLoopCmd,
   type StepLoopMsg,
   type StepLoopOutcome,
-  type StepLoopRun,
   type StepLoopState,
   type StepOutcome,
   type StepRequest,

@@ -746,11 +746,10 @@ export type StepLoopOutcome<O> =
 /**
  * What every phase of a drive in motion carries. Plain data, so a recording of
  * it survives `JSON.stringify` and a replay from the parsed text decides as the
- * live drive did.
+ * live drive did: no number in it is `Infinity` or `NaN` (see `storable`).
  */
-export interface StepLoopRun<R> {
-  /** The absolute deadline, or `null` for none: `Infinity` does not survive JSON. */
-  readonly deadlineMs: number | null;
+interface StepLoopRun<R> {
+  readonly deadlineMs: number;
   readonly policy: AnyRetryPolicy;
   /** The result the next POST carries, or `null` on the first. */
   readonly posted: StepResult<R> | null;
@@ -763,7 +762,10 @@ export interface StepLoopRun<R> {
  * before a POST, `posting` for the transport, `failing` for the clock after a
  * failed POST, `backing_off` and `waiting` for the sleep that ends a failure
  * streak's pause or a not-ready poll's, `polling` for the clock after a
- * not-ready answer, and `running` for the hands.
+ * not-ready answer, and `running` for the hands. Every phase but `idle` and
+ * `finished` also carries `deadlineMs`, `policy`, `posted` (the result the next
+ * POST carries, or `null` on the first) and `polls` (the not-ready polls since
+ * the last real step).
  */
 export type StepLoopState<R, I, O> =
   | { readonly _tag: "idle" }
@@ -803,7 +805,7 @@ export type StepLoopState<R, I, O> =
 export type StepLoopMsg<R, I, O> =
   | {
       readonly _tag: "start";
-      readonly deadlineMs: number | null;
+      readonly deadlineMs: number;
       readonly policy: AnyRetryPolicy;
     }
   | { readonly _tag: "clock_read"; readonly at: number }
@@ -866,8 +868,7 @@ export function stepLoopMachine<R, I, O>(): Machine<
     posted,
     polls,
   }: StepLoopRun<R>): StepLoopRun<R> => ({ deadlineMs, policy, posted, polls });
-  const late = (s: StepLoopRun<R>, at: number): boolean =>
-    s.deadlineMs !== null && at >= s.deadlineMs;
+  const late = (s: StepLoopRun<R>, at: number): boolean => at >= s.deadlineMs;
 
   const update: Transitions<S, M, C> = {
     idle: {
@@ -1024,9 +1025,23 @@ export function stepLoopMachine<R, I, O>(): Machine<
  * and driven to its end by `driveToDone`; the clock, the transport, the hands
  * and the sleep are its Cmds. {@link RunStepLoopConfig.attach} hands the caller
  * the runtime, so `recorder` records the drive and `replayTrace` replays it.
- * A drive is one `dispatch`, which tea bounds at 100,000 follow-up Msgs
- * (`QuiescenceTimeoutError`): three Msgs for an ordinary step, so a drive of
- * about 33,000 steps. The loop this replaced had no bound.
+ * The machine's State carries the values the drive was handed, so two things
+ * differ from the loop this replaced:
+ *
+ *   - **Frozen values (dev builds).** Where tea's dev checks run (`NODE_ENV` is
+ *     not `production`) the State is deep-frozen before each reducer step. The
+ *     result `execute` returned, a step's `input` once its result is posted, and
+ *     a failure that is a plain object are frozen in place, and a caller that
+ *     mutates one throws a `TypeError`: an `execute` that returns a shared
+ *     object and changes it on the next call rejects the drive, and so does
+ *     pushing onto a returned result after the drive. Return a fresh value.
+ *     `done`'s `output` is not frozen. A production build freezes nothing.
+ *   - **A bound.** A drive is one `dispatch`, which tea ends with
+ *     `QuiescenceTimeoutError` after 100,000 follow-up Msgs counted over the
+ *     whole drive: 3 for a step, 4 for a not-ready poll, and 3 more for each
+ *     failed POST that is retried, plus 3 for the start and the final answer.
+ *     That is about 33,000 steps, or 25,000 polls, or a mix. The loop this
+ *     replaced had no bound.
  */
 export async function runStepLoop<R, I, O>(
   token: string,
@@ -1090,20 +1105,33 @@ export async function runStepLoop<R, I, O>(
   config.attach?.(handle);
   const final = await driveToDone(
     handle,
-    {
-      _tag: "start",
-      deadlineMs:
-        config.deadlineMs === Number.POSITIVE_INFINITY
-          ? null
-          : config.deadlineMs,
-      policy,
-    },
+    { _tag: "start", ...storable({ deadlineMs: config.deadlineMs, policy }) },
     (state) => state._tag === "finished",
   );
   if (final._tag !== "finished") {
     throw new Error(`tea runStepLoop: the drive ended in "${final._tag}"`);
   }
   return final.outcome;
+}
+
+/**
+ * `value` as the machine's State can hold it. JSON writes `Infinity`,
+ * `-Infinity` and `NaN` as `null`, which a replay from stored text would read
+ * as something else. Every such number, in every field, becomes a finite
+ * extreme that compares as it did: `-Infinity` the smallest number, `Infinity`
+ * the largest, and `NaN`, which no deadline or bound means and which no
+ * comparison reaches, the largest too.
+ */
+function storable<T>(value: T): T {
+  return JSON.parse(
+    JSON.stringify(value, (_key, v) =>
+      typeof v !== "number" || Number.isFinite(v)
+        ? v
+        : v < 0
+          ? -Number.MAX_VALUE
+          : Number.MAX_VALUE,
+    ),
+  );
 }
 
 /** The default {@link ExecutedSteps}: lives as long as one drive. */

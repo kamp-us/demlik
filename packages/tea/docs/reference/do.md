@@ -8,7 +8,7 @@ Tier: `stable`
 import { … } from "@demlik/tea/do";
 ```
 
-## Exports (123)
+## Exports (122)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -122,7 +122,6 @@ import { … } from "@demlik/tea/do";
 | [`stepLoopMachine`](#stepLoopMachine) | Function | stable | The decisions of runStepLoop as a machine: when to POST, what a response means, when to run a step, retry, back off, give up, stop at the deadline or finish. |
 | [`StepLoopMsg`](#StepLoopMsg) | Type | stable | What a runStepLoop drive's Cmds report back. |
 | [`StepLoopOutcome`](#StepLoopOutcome) | Type | stable | The terminal outcome of a full runStepLoop drive. |
-| [`StepLoopRun`](#StepLoopRun) | Interface | stable | What every phase of a drive in motion carries. |
 | [`StepLoopState`](#StepLoopState) | Type | stable | The phases of a runStepLoop drive. |
 | [`StepOutcome`](#StepOutcome) | Type | stable | A structured `/step` outcome `stepHost` returns — the response body plus the HTTP status the consumer's route should send. |
 | [`StepRequest`](#StepRequest) | Interface | stable | A `/step` request. |
@@ -1899,7 +1898,7 @@ function stepLoopMachine<R, I, O>(): Machine<StepLoopState<R, I, O>, StepLoopMsg
 type StepLoopMsg<R, I, O> =
   | {
     readonly _tag: "start";
-    readonly deadlineMs: number | null;
+    readonly deadlineMs: number;
     readonly policy: AnyRetryPolicy;
   }
   | {
@@ -1940,22 +1939,6 @@ type StepLoopOutcome<O> =
     readonly error: unknown;
     readonly kind: "gave_up";
   }
-```
-
-<a id="StepLoopRun"></a>
-
-### `StepLoopRun`
-
-```ts
-interface StepLoopRun<R> {
-  /** The absolute deadline, or `null` for none: `Infinity` does not survive JSON. */
-  readonly deadlineMs: number | null;
-  readonly policy: AnyRetryPolicy;
-  /** The not-ready polls since the last real step. */
-  readonly polls: RetryState;
-  /** The result the next POST carries, or `null` on the first. */
-  readonly posted: StepResult<R> | null;
-}
 ```
 
 <a id="StepLoopState"></a>
