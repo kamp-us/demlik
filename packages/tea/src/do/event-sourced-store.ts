@@ -67,11 +67,18 @@
 import type { Cmd, Machine, Store, Sub } from "../index";
 import { foldMsgs } from "../index";
 import {
+  type Basis,
   cellFormatOf,
+  type EncodedFrame,
   type EvidenceEncoding,
+  type FrameEvidence,
+  type FrameRefusal,
+  FULL_FRAME_EVERY,
   type LogFormat,
   parseFrame,
   RECORDING_PREFIX,
+  readEvidence,
+  rebuildEvidence,
 } from "./recording-frames";
 import { saveFence } from "./save-fence";
 
@@ -356,14 +363,15 @@ export interface StoredEventRange extends EventLogRange {
  * Why a stored event cell did not decode: its value is not text (`not-text`),
  * its key carries no integer sequence (`key`), its text is not JSON (`json`),
  * `parseEvent` returned `null` (`event`), or it is a recording cell that does
- * not decode as a frame (`frame`).
+ * not decode as a frame, lacks the frame its delta needs, or fails its checksum
+ * ({@link FrameRefusal}).
  */
 export type StoredEventRefusal =
   | "not-text"
   | "key"
   | "json"
   | "event"
-  | "frame";
+  | FrameRefusal;
 
 /**
  * One stored event cell as read, decoded or refused. `serializedBytes` is the
@@ -389,7 +397,8 @@ export type StoredEvent<M> =
 
 /**
  * One stored cell read as a frame of the log. A `message` is a cell of a log
- * written as bare messages. An `init` or `step` frame is a recording frame.
+ * written as bare messages, with no evidence. An `init` or `step` frame is a
+ * recording frame; its `evidence` is rebuilt only when the read asked for it.
  * `serializedBytes` is the UTF-8 size of the whole stored text and
  * `messageBytes` the size of the Msg JSON inside it.
  */
@@ -410,6 +419,7 @@ export type StoredFrame<M> =
       readonly messageBytes: number;
       readonly event: M;
       readonly encoding: EvidenceEncoding;
+      readonly evidence?: FrameEvidence;
     }
   | {
       readonly _tag: "init";
@@ -419,8 +429,21 @@ export type StoredFrame<M> =
       readonly restored: boolean;
       readonly provenance: unknown;
       readonly encoding: EvidenceEncoding;
+      readonly evidence?: FrameEvidence;
     }
   | Extract<StoredEvent<M>, { _tag: "refused" }>;
+
+/** Options for {@link EventLogReader.readFrames}. */
+export interface FrameReadOptions {
+  /**
+   * Rebuild each recording frame's evidence. `"verify"` rebuilds and checks
+   * it, refusing a frame that does not rebuild, but yields no evidence.
+   * Default `false`.
+   */
+  readonly evidence?: boolean | "verify";
+  /** Read the range from its highest `seq` down. Evidence is not rebuilt. */
+  readonly reverse?: boolean;
+}
 
 /**
  * A read-only view over a durable agent's event log, built by
@@ -445,9 +468,15 @@ export interface EventLogReader<M> {
   readEvents(range?: EventLogRange): AsyncIterable<PersistedEvent<M>>;
   /**
    * Every stored cell in range as a {@link StoredFrame}, in `seq` order, with
-   * refusals reported instead of thrown. Read in pages of at most 128 rows.
+   * refusals reported instead of thrown. With `evidence`, each recording
+   * frame's State and Cmds are rebuilt; a delta whose basis is missing or whose
+   * checksum fails is refused. Only the current basis is held, and the frames
+   * before the range that a delta needs are read in one bounded page.
    */
-  readFrames(range?: StoredEventRange): AsyncIterable<StoredFrame<M>>;
+  readFrames(
+    range?: StoredEventRange,
+    options?: FrameReadOptions,
+  ): AsyncIterable<StoredFrame<M>>;
 }
 
 const utf8 = new TextEncoder();
@@ -513,35 +542,45 @@ function jsonBytes(value: unknown): number {
 
 type Refused = Extract<StoredFrame<never>, { _tag: "refused" }>;
 
-/** Decode one stored cell as a frame, in whichever format it was written. */
+/**
+ * Decode one stored cell as a frame, in whichever format it was written. The
+ * parsed recording cell is returned beside it, evidence still encoded, for a
+ * read that rebuilds it. A cell of a log written as bare messages has none.
+ */
 function decodeStoredFrame<M>(
   eventPrefix: string,
   parseEvent: (raw: unknown) => M | null,
   key: string,
   value: unknown,
-): StoredFrame<M> {
+): { readonly frame: StoredFrame<M>; readonly encoded: EncodedFrame | null } {
   if (typeof value !== "string" || cellFormatOf(value) === "messages") {
     const stored = decodeStoredEvent(eventPrefix, parseEvent, key, value);
-    if (stored._tag === "refused") return stored;
+    if (stored._tag === "refused") return { frame: stored, encoded: null };
     const { event, serializedBytes } = stored;
     return {
-      _tag: "message",
-      key,
-      seq: stored.seq,
-      serializedBytes,
-      messageBytes: serializedBytes,
-      event,
+      frame: {
+        _tag: "message",
+        key,
+        seq: stored.seq,
+        serializedBytes,
+        messageBytes: serializedBytes,
+        event,
+      },
+      encoded: null,
     };
   }
   const serializedBytes = utf8.encode(value).byteLength;
   const seq = Number(key.slice(eventPrefix.length));
-  const refused = (reason: Refused["reason"], cause?: unknown): Refused => ({
-    _tag: "refused",
-    key,
-    seq: Number.isSafeInteger(seq) ? seq : null,
-    serializedBytes,
-    reason,
-    ...(cause === undefined ? {} : { cause }),
+  const refused = (reason: Refused["reason"], cause?: unknown) => ({
+    frame: {
+      _tag: "refused",
+      key,
+      seq: Number.isSafeInteger(seq) ? seq : null,
+      serializedBytes,
+      reason,
+      ...(cause === undefined ? {} : { cause }),
+    } satisfies Refused,
+    encoded: null,
   });
   if (!Number.isSafeInteger(seq)) return refused("key");
   if (!value.startsWith(RECORDING_PREFIX)) return refused("frame");
@@ -557,25 +596,31 @@ function decodeStoredFrame<M>(
   if (encoded.frame === "init") {
     const { restored, provenance } = encoded;
     return {
-      _tag: "init",
-      key,
-      seq,
-      serializedBytes,
-      restored,
-      provenance,
-      encoding,
+      frame: {
+        _tag: "init",
+        key,
+        seq,
+        serializedBytes,
+        restored,
+        provenance,
+        encoding,
+      },
+      encoded,
     };
   }
   const event = parseEvent(encoded.msg);
   if (event === null) return refused("event");
   return {
-    _tag: "step",
-    key,
-    seq,
-    serializedBytes,
-    messageBytes: jsonBytes(encoded.msg),
-    event,
-    encoding,
+    frame: {
+      _tag: "step",
+      key,
+      seq,
+      serializedBytes,
+      messageBytes: jsonBytes(encoded.msg),
+      event,
+      encoding,
+    },
+    encoded,
   };
 }
 
@@ -595,6 +640,20 @@ export function doEventLogReader<M extends { _tag: string } = { _tag: string }>(
   storage: DurableObjectStorage,
   opts: EventLogReaderOptions<M> = {},
 ): EventLogReader<M> {
+  return openLogReader(storage, opts).reader;
+}
+
+/**
+ * The reader, and the one read the writing store also needs: the evidence
+ * bytes of the frame before `seq`, which the next delta is taken from.
+ */
+function openLogReader<M extends { _tag: string }>(
+  storage: DurableObjectStorage,
+  opts: EventLogReaderOptions<M>,
+): {
+  readonly reader: EventLogReader<M>;
+  basisBefore(seq: number): Promise<Basis | null>;
+} {
   const parseEvent = opts.parseEvent ?? defaultParseEvent<M>;
   const {
     snapshot: snapshotKey,
@@ -627,9 +686,11 @@ export function doEventLogReader<M extends { _tag: string } = { _tag: string }>(
     };
   }
 
-  async function* readFrames(
-    range: StoredEventRange = {},
-  ): AsyncGenerator<StoredFrame<M>> {
+  /** The raw cells in range, a page at a time, from the lowest `seq` or, reversed, the highest. */
+  async function* listCells(
+    range: StoredEventRange,
+    reverse: boolean,
+  ): AsyncGenerator<readonly [string, unknown]> {
     const fromSeq = Math.max(1, Math.ceil(range.fromSeq ?? 1));
     const toSeq = Math.floor(range.toSeq ?? Number.POSITIVE_INFINITY);
     const limit = range.limit ?? Number.POSITIVE_INFINITY;
@@ -640,21 +701,113 @@ export function doEventLogReader<M extends { _tag: string } = { _tag: string }>(
       ? eventKey(eventPrefix, toSeq + 1)
       : undefined;
     let startAfter: string | undefined;
+    let endBefore = end;
     let yielded = 0;
     while (true) {
+      const bounds = reverse
+        ? { start, ...(endBefore === undefined ? {} : { end: endBefore }) }
+        : {
+            ...(startAfter === undefined ? { start } : { startAfter }),
+            ...(end === undefined ? {} : { end }),
+          };
       const rows = await storage.list<unknown>({
         prefix: eventPrefix,
-        ...(startAfter === undefined ? { start } : { startAfter }),
-        ...(end === undefined ? {} : { end }),
+        ...bounds,
+        reverse,
         limit: Math.min(EVENT_PAGE_SIZE, limit - yielded),
         noCache: true,
       });
       for (const [key, value] of rows) {
-        startAfter = key;
+        if (reverse) endBefore = key;
+        else startAfter = key;
         yielded += 1;
-        yield decodeStoredFrame(eventPrefix, parseEvent, key, value);
+        yield [key, value];
       }
       if (rows.size < EVENT_PAGE_SIZE || yielded >= limit) return;
+    }
+  }
+
+  async function basisBefore(seq: number): Promise<Basis | null> {
+    if (seq <= 1) return null;
+    const rows = await storage.list<unknown>({
+      prefix: eventPrefix,
+      end: eventKey(eventPrefix, seq),
+      reverse: true,
+      limit: FULL_FRAME_EVERY,
+      noCache: true,
+    });
+    // Walk back to the last whole frame, then rebuild forward from it.
+    const chain: (readonly [number, EncodedFrame])[] = [];
+    let expected = seq - 1;
+    for (const [key, value] of rows) {
+      const { frame, encoded } = decodeStoredFrame(
+        eventPrefix,
+        parseEvent,
+        key,
+        value,
+      );
+      if (frame._tag === "refused" || frame.seq !== expected) return null;
+      if (encoded === null) return null;
+      chain.push([expected, encoded]);
+      if (encoded.evidence.encoding === "full") break;
+      expected -= 1;
+    }
+    let basis: Basis | null = null;
+    for (const [at, encoded] of chain.reverse()) {
+      const rebuilt = await rebuildEvidence(at, encoded.evidence, basis);
+      if (typeof rebuilt === "string") return null;
+      basis = rebuilt;
+    }
+    return basis;
+  }
+
+  async function* readFrames(
+    range: StoredEventRange = {},
+    options: FrameReadOptions = {},
+  ): AsyncGenerator<StoredFrame<M>> {
+    const evidence = options.evidence ?? false;
+    const rebuild = evidence !== false && options.reverse !== true;
+    // `undefined`: the frame before the range is not looked up yet.
+    let basis: Basis | null | undefined;
+    for await (const [key, value] of listCells(
+      range,
+      options.reverse === true,
+    )) {
+      const decoded = decodeStoredFrame(eventPrefix, parseEvent, key, value);
+      const { frame, encoded } = decoded;
+      if (
+        !rebuild ||
+        encoded === null ||
+        frame._tag === "refused" ||
+        frame._tag === "message"
+      ) {
+        basis = null;
+        yield frame;
+        continue;
+      }
+      if (basis === undefined && encoded.evidence.encoding === "delta") {
+        basis = await basisBefore(frame.seq);
+      }
+      const rebuilt = await rebuildEvidence(
+        frame.seq,
+        encoded.evidence,
+        basis ?? null,
+      );
+      const read =
+        typeof rebuilt === "string" ? null : readEvidence(rebuilt.bytes);
+      if (typeof rebuilt === "string" || read === null) {
+        basis = null;
+        yield {
+          _tag: "refused",
+          key,
+          seq: frame.seq,
+          serializedBytes: frame.serializedBytes,
+          reason: typeof rebuilt === "string" ? rebuilt : "frame",
+        };
+        continue;
+      }
+      basis = rebuilt;
+      yield evidence === "verify" ? frame : { ...frame, evidence: read };
     }
   }
 
@@ -693,11 +846,14 @@ export function doEventLogReader<M extends { _tag: string } = { _tag: string }>(
   }
 
   return {
-    readHead,
-    readCommittedSeq,
-    readStoredEvents,
-    readEvents,
-    readFrames,
+    reader: {
+      readHead,
+      readCommittedSeq,
+      readStoredEvents,
+      readEvents,
+      readFrames,
+    },
+    basisBefore,
   };
 }
 

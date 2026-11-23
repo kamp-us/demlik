@@ -85,6 +85,7 @@ export {
   type EventLogReaderOptions,
   type EventSourcedOptions,
   type EventSourcedStore,
+  type FrameReadOptions,
   type PersistedEvent,
   type RestoreAttempt,
   RestoreInterruptedError,
@@ -187,7 +188,12 @@ export {
   rebuildProjection,
   runProjection,
 } from "./projection";
-export type { EvidenceEncoding, LogFormat } from "./recording-frames";
+export type {
+  EvidenceEncoding,
+  FrameEvidence,
+  FrameRefusal,
+  LogFormat,
+} from "./recording-frames";
 // The HTTP-PULL control carrier (#92) — a hibernation-correct SIBLING to
 // `acceptCommandSocket`. The hands drive a `/step` loop (execute a tool, POST
 // the result, get the next tool); each POST wakes the DO, settles the result

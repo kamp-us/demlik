@@ -1,16 +1,17 @@
 /**
- * Reading a recording log: `readFrames` sees each cell as a frame, and
- * `readStoredEvents` / `readEvents` still see only Msgs.
+ * Reading a recording log: `readFrames` sees each cell as a frame, rebuilds its
+ * evidence on request, and `readStoredEvents` / `readEvents` still see only Msgs.
  * The logs here are built with the frame codec, one cell per frame.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { fakeDoStorage as fakeStorage } from "../__fixtures__/do-storage";
 import { doEventLogReader, type StoredFrame } from "./index";
 import {
   type Basis,
   encodeFrame,
   type FrameEvidence,
+  FULL_FRAME_EVERY,
 } from "./recording-frames";
 
 interface Msg {
@@ -86,6 +87,111 @@ describe("readFrames on a recording log", () => {
       messageBytes: JSON.stringify({ _tag: "inc", by: 3 }).length,
       encoding: "delta",
     });
+    expect(frames.some((frame) => "evidence" in frame)).toBe(false);
+  });
+
+  it("rebuilds each frame's State and Cmds along a chain of deltas", async () => {
+    const reader = readerOver(await recordedLog(40));
+
+    const frames = await collect(reader.readFrames({}, { evidence: true }));
+
+    expect(
+      frames.map((frame) => "evidence" in frame && frame.evidence),
+    ).toEqual(Array.from({ length: 41 }, (_, at) => evidenceAt(at + 1)));
+  });
+
+  it("rebuilds a range that starts inside a chain, from one page of the frames before it", async () => {
+    const { storage } = fakeStorage(await recordedLog(40));
+    const list = vi.spyOn(storage, "list");
+    const reader = doEventLogReader<Msg>(storage);
+
+    const frames = await collect(
+      reader.readFrames({ fromSeq: 20, toSeq: 22 }, { evidence: true }),
+    );
+
+    expect(frames).toHaveLength(3);
+    expect(frames[2]).toMatchObject({ evidence: evidenceAt(22) });
+    expect(list).toHaveBeenCalledTimes(2);
+    expect(list.mock.calls[1]?.[0]).toMatchObject({
+      end: key(20),
+      reverse: true,
+      limit: FULL_FRAME_EVERY,
+    });
+  });
+
+  it("rebuilds a range that starts after a whole frame, reading back no further than it", async () => {
+    const reader = readerOver(await recordedLog(40));
+
+    const frames = await collect(
+      reader.readFrames({ fromSeq: 35, toSeq: 36 }, { evidence: true }),
+    );
+
+    expect(frames).toMatchObject([
+      { evidence: evidenceAt(35) },
+      { evidence: evidenceAt(36) },
+    ]);
+  });
+
+  it('"verify" checks the evidence and yields none', async () => {
+    const reader = readerOver(await recordedLog(3));
+
+    const frames = await collect(reader.readFrames({}, { evidence: "verify" }));
+
+    expect(frames.map((frame) => frame._tag)).toEqual([
+      "init",
+      "step",
+      "step",
+      "step",
+    ]);
+    expect(frames.some((frame) => "evidence" in frame)).toBe(false);
+  });
+
+  it("refuses a frame whose checksum fails, and each delta that needs it", async () => {
+    const backing = await recordedLog(4);
+    const damaged = JSON.parse(backing.get(key(3)) ?? "");
+    damaged.evidence.delta = btoa("not a delta");
+    backing.set(key(3), JSON.stringify(damaged));
+    const reader = readerOver(backing);
+
+    const frames = await collect(reader.readFrames({}, { evidence: true }));
+
+    expect(refusals(frames)).toEqual([
+      "init",
+      "step",
+      "checksum",
+      "basis",
+      "basis",
+    ]);
+    expect(
+      refusals(await collect(reader.readFrames({}, { evidence: "verify" }))),
+    ).toEqual(["init", "step", "checksum", "basis", "basis"]);
+    expect(refusals(await collect(reader.readFrames()))).toEqual([
+      "init",
+      "step",
+      "step",
+      "step",
+      "step",
+    ]);
+  });
+
+  it("reads a range from its highest seq down, in pages, without evidence", async () => {
+    const reader = readerOver(await recordedLog(200));
+
+    const all = await collect(reader.readFrames({}, { reverse: true }));
+    const top = await collect(
+      reader.readFrames({ toSeq: 100, limit: 2 }, { reverse: true }),
+    );
+    const wanted = await collect(
+      reader.readFrames({}, { reverse: true, evidence: true }),
+    );
+
+    expect(all.map((frame) => ("seq" in frame ? frame.seq : null))).toEqual(
+      Array.from({ length: 201 }, (_, at) => 201 - at),
+    );
+    expect(top.map((frame) => ("seq" in frame ? frame.seq : null))).toEqual([
+      100, 99,
+    ]);
+    expect(wanted.some((frame) => "evidence" in frame)).toBe(false);
   });
 
   it("reports a cell that is not a frame, and a Msg the host does not parse", async () => {
@@ -136,7 +242,7 @@ describe("a log read for its Msgs only", () => {
     ]);
     const reader = readerOver(backing);
 
-    const frames = await collect(reader.readFrames());
+    const frames = await collect(reader.readFrames({}, { evidence: true }));
 
     expect(frames).toEqual([
       {
