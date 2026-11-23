@@ -43,7 +43,7 @@ const slow = tool(
     timeoutMs: 10,
   },
   async (_input, _ctx, { ok }) => {
-    await new Promise((resolve) => setTimeout(resolve, 40));
+    await new Promise((resolve) => setTimeout(resolve, 80));
     return ok({ late: true });
   },
 );
@@ -57,7 +57,7 @@ const hold = tool(
     err: [],
   },
   async (_input, _ctx, { ok }) => {
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, 160));
     return ok({ held: true });
   },
 );
@@ -154,7 +154,6 @@ const tally: AgentDomain<Tally, R> = {
   step: (slice, event) => stepTally(slice, shapeOf(event)),
 };
 
-/** A domain that also logs each event it folds, in order. */
 function recording(log: Shape[]): AgentDomain<Tally, R> {
   return {
     init: () => TALLY,
@@ -175,7 +174,6 @@ const call = (
   args,
 });
 
-/** The script a stateless model answers from: step k, keyed off the transcript. */
 const SCRIPT: Readonly<Record<number, readonly ToolCall[]>> = {
   1: [call("a", "tick"), call("b", "tick")],
   2: [call("c", "tick", { fail: true }), call("d", "slow")],
@@ -186,12 +184,6 @@ const SCRIPT: Readonly<Record<number, readonly ToolCall[]>> = {
 };
 const SUMMARIZING = "Summarize the conversation so far.";
 
-/**
- * A model that is a pure function of the messages it is shown, so a resumed run
- * is answered exactly as the uninterrupted one was: the next step follows the
- * last assistant step in the transcript, and the summarize call is told apart
- * by its system prompt.
- */
 function stepper() {
   const calls: string[] = [];
   const model = async (
@@ -230,7 +222,6 @@ function scriptedAgent(model: ReturnType<typeof stepper>["model"]) {
   });
 }
 
-/** A store that keeps a JSON copy of the first saved Model `pick` accepts. */
 function parking<T>(pick: (state: T) => boolean, from?: T) {
   const live = memoryStore<T>(from);
   const parked: T[] = [];
@@ -405,6 +396,7 @@ describe("an agent's domain slice", () => {
       tools: TOOLS,
       instructions: "Tick.",
       domain: tally,
+      maxTurns: 3,
       stopWhen: (state) => {
         stops.push(state.domain.seen.length);
         return state.domain.toolErr.includes("y:refused");
@@ -489,7 +481,6 @@ function knob(domain: AgentDomain<Tally, string>) {
   });
 }
 
-/** A JSON copy of `s` with its `domain` key removed, as an older save reads back. */
 function withoutDomain<T extends object>(s: T): T {
   const copy = JSON.parse(JSON.stringify(s)) as T;
   Reflect.deleteProperty(copy, "domain");
@@ -529,6 +520,24 @@ describe("the domain slice across the run's lifecycle", () => {
     expect(restarted.domain).toEqual(TALLY);
   });
 
+  it("seeds a finished Model saved without the slice when a new runId starts", () => {
+    const agent = knob(knobTally);
+    const [started] = agent.start(agent.init(), "r1", 0);
+    const [finished] = agent.turn(
+      started,
+      { content: "done", toolCalls: [] },
+      1,
+    );
+    expect(finished.run.phase).toBe("done");
+    const saved = withoutDomain(finished);
+    expect(Object.keys(saved)).not.toContain("domain");
+
+    const [restarted] = agent.start(saved, "r2", 2);
+
+    expect(restarted.run).toMatchObject({ phase: "running", runId: "r2" });
+    expect(restarted.domain).toEqual(TALLY);
+  });
+
   it("throws when step mutates the frozen slice it is handed", async () => {
     const errors: unknown[] = [];
     await expect(
@@ -539,7 +548,7 @@ describe("the domain slice across the run's lifecycle", () => {
         domain: {
           init: () => ({ turns: 0 }),
           step: (slice) => {
-            (slice as { turns: number }).turns += 1;
+            slice.turns += 1;
             return slice;
           },
         },

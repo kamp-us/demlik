@@ -98,6 +98,6 @@ countedHost.runtime().then((runtime) => {
 });
 countedHost.result().then((state) => state?.domain.turns);
 host.runtime().then((runtime) => {
-  // @ts-expect-error A host built without a domain has no `domain` key.
+  // @ts-expect-error
   return runtime.getState().domain;
 });

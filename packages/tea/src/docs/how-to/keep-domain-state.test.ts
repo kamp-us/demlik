@@ -1,14 +1,3 @@
-/**
- * The keep-domain-state recipe's compile-and-run gate.
- *
- * `docs/how-to/keep-domain-state-in-the-model.md` gives a `defineAgent` agent a
- * `domain` slice. The page's blocks are this file's `#region` bodies
- * (`page-mirrors.ts` holds the row), and the tests run them against what the
- * page says of each: `continueWhen` and `stopWhen` read the slice the event
- * just produced, the slice ends in the Model `run` resolves with, and a run
- * resumed from a saved Model ends on the same slice.
- */
-
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import {
@@ -37,7 +26,6 @@ const lookup = tool(
 
 const IDS = ["t1", "t2", "missing", "t3"];
 
-/** Looks one ticket up per turn, then answers. */
 async function model(messages: readonly AgentMessage[]): Promise<AgentTurn> {
   const done = messages.filter((m) => m.role === "tool").length;
   const id = IDS[done];

@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { parseJSONL, recorder, replayTrace } from "../persistence";
@@ -154,9 +154,6 @@ async function recordWith<D>(wired: DefinedAgentWired<typeof tick, D>) {
 
 describe("an agent with no domain", () => {
   it("replays a recording made before the domain slice existed, with no domain key in any state", async () => {
-    if (process.env.TEA_FIXTURE_WRITE === "1") {
-      writeFileSync(INERT, (await recordInert()).jsonl);
-    }
     const trace = parseJSONL<S, M>(readFileSync(INERT, "utf8"));
     expect(trace.steps?.length).toBe(trace.msgs.length);
     expect(trace.msgs.length).toBeGreaterThan(8);

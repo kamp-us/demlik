@@ -163,6 +163,7 @@ import {
   mergeInterpret,
   type SnapshotInterpret,
 } from "./machine";
+import { isMidRun } from "./mid-run";
 import { brainHandler } from "./model";
 import {
   type AnyToolDef,
@@ -188,6 +189,7 @@ import {
   type AgentStateOf,
   type AgentTurn,
   type Conversation,
+  type DomainRequired,
   MissingAgentDomainError,
   type ToolCall,
   type ToolFailure,
@@ -243,10 +245,11 @@ export function createAgent<
   Msg = unknown,
   D = never,
 >(
-  config: AgentConfigCore<Stage, P, O, R, TC, Msg, D> & {
-    readonly snapshotEvery: number;
-    readonly compaction: CompactionPolicy<R, Msg>;
-  },
+  config: AgentConfigCore<Stage, P, O, R, TC, Msg, D> &
+    DomainRequired<D, R> & {
+      readonly snapshotEvery: number;
+      readonly compaction: CompactionPolicy<R, Msg>;
+    },
 ): AgentKnob<Stage, P, O, R, TC, true, true, D>;
 export function createAgent<
   Stage,
@@ -257,10 +260,11 @@ export function createAgent<
   Msg = unknown,
   D = never,
 >(
-  config: AgentConfigCore<Stage, P, O, R, TC, Msg, D> & {
-    readonly snapshotEvery: number;
-    readonly compaction?: never;
-  },
+  config: AgentConfigCore<Stage, P, O, R, TC, Msg, D> &
+    DomainRequired<D, R> & {
+      readonly snapshotEvery: number;
+      readonly compaction?: never;
+    },
 ): AgentKnob<Stage, P, O, R, TC, true, false, D>;
 export function createAgent<
   Stage,
@@ -271,10 +275,11 @@ export function createAgent<
   Msg = unknown,
   D = never,
 >(
-  config: AgentConfigCore<Stage, P, O, R, TC, Msg, D> & {
-    readonly snapshotEvery?: never;
-    readonly compaction: CompactionPolicy<R, Msg>;
-  },
+  config: AgentConfigCore<Stage, P, O, R, TC, Msg, D> &
+    DomainRequired<D, R> & {
+      readonly snapshotEvery?: never;
+      readonly compaction: CompactionPolicy<R, Msg>;
+    },
 ): AgentKnob<Stage, P, O, R, TC, false, true, D>;
 export function createAgent<
   Stage,
@@ -285,10 +290,11 @@ export function createAgent<
   Msg = unknown,
   D = never,
 >(
-  config: AgentConfigCore<Stage, P, O, R, TC, Msg, D> & {
-    readonly snapshotEvery?: never;
-    readonly compaction?: never;
-  },
+  config: AgentConfigCore<Stage, P, O, R, TC, Msg, D> &
+    DomainRequired<D, R> & {
+      readonly snapshotEvery?: never;
+      readonly compaction?: never;
+    },
 ): AgentKnob<Stage, P, O, R, TC, false, false, D>;
 export function createAgent<
   Stage,
@@ -299,7 +305,7 @@ export function createAgent<
   Msg = unknown,
   D = never,
 >(
-  config: AgentConfig<Stage, P, O, R, TC, Msg, D>,
+  config: AgentConfig<Stage, P, O, R, TC, Msg, D> & DomainRequired<D, R>,
 ): AgentKnob<Stage, P, O, R, TC, boolean, boolean, D> {
   const rng = config.rng ?? Math.random;
   // ---- The three composed sub-knobs --------------------------------------
@@ -423,7 +429,7 @@ export function createAgent<
   function seededDomain(s: State): State {
     const domain = config.domain;
     if (domain === undefined || domainOf(s) !== undefined) return s;
-    if (s.run.phase !== "idle") throw new MissingAgentDomainError(runIdOf(s));
+    if (isMidRun(s)) throw new MissingAgentDomainError(runIdOf(s));
     return { ...s, domain: domain.init() };
   }
 

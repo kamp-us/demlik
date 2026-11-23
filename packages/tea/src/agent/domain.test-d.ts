@@ -1,12 +1,3 @@
-// Type-level test for the agent's domain slice. Compiled by `pnpm typecheck`
-// (tsc over `src/**` INCLUDES `*.test-d.ts`). Every `@ts-expect-error` MUST
-// sit on a line that genuinely fails to type-check; every undirected line is a
-// positive case that must compile.
-//
-// The contract: a configured `domain` puts `domain: D` on the Model at the same
-// key in `stopWhen`, `continueWhen` and `machine.init`; with none the Model has
-// no `domain` key; and the event union is exhaustively switchable.
-
 import { z } from "zod";
 import { absurd } from "../index";
 import {
@@ -57,7 +48,7 @@ const fromInit: Tally = seeded.domain;
 void fromInit;
 
 declare const plain: DefinedAgentState<typeof tick>;
-// @ts-expect-error a Model with no configured domain has no `domain` key
+// @ts-expect-error
 void plain.domain;
 
 const withSlice: DefinedAgentState<typeof tick, Tally> = {
@@ -70,9 +61,29 @@ defineAgent({
   model: async () => ({ content: "done", toolCalls: [] }),
   tools: [tick],
   instructions: "Tick.",
-  // @ts-expect-error `stopWhen` sees no `domain` when none is configured
+  // @ts-expect-error
   stopWhen: (state) => state.domain === undefined,
 });
+
+defineAgent<typeof tick, Tally>(
+  // @ts-expect-error
+  {
+    model: async () => ({ content: "done", toolCalls: [] }),
+    tools: [tick],
+    instructions: "Tick.",
+  },
+);
+
+defineAgent(
+  // @ts-expect-error
+  {
+    model: async () => ({ content: "done", toolCalls: [] }),
+    tools: [tick],
+    instructions: "Tick.",
+    stopWhen: (state: DefinedAgentState<typeof tick, Tally>) =>
+      state.domain.stage === "done",
+  },
+);
 
 declare const event: AgentDomainEvent<ToolResult<typeof tick>>;
 switch (event._tag) {
@@ -100,6 +111,6 @@ switch (event._tag) {
   case "nudge":
     break;
   default:
-    // @ts-expect-error the `compaction` arm is left over, not `never`
+    // @ts-expect-error
     absurd(event);
 }

@@ -21,7 +21,7 @@ These are the ones to read first:
 | [`DefinedAgentState`](#DefinedAgentState) | Type the Model a defined agent persists — what a `Store` reads and writes. |
 | [`createAgent`](#createAgent) | Drop below the lid, once you need to walk a stage pipeline `defineAgent` does not express. |
 
-## Exports (164)
+## Exports (165)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -98,6 +98,7 @@ These are the ones to read first:
 | [`DefinedAgentRunOptions`](#DefinedAgentRunOptions) | Type | experimental | Host wiring for one `run`: the store, the ctx the tools need, a runId, a clock. |
 | [`DefinedAgentState`](#DefinedAgentState) | Type | experimental | The Model a defined agent runs — a hand-wired `createAgent`'s, key for key. |
 | [`DefinedAgentWired`](#DefinedAgentWired) | Type | experimental | The machine `defineAgent` builds per `input` beside the handlers it runs under — the interpret table and the `deadline` runner (a machine carries none — #278, #279). |
+| [`DomainRequired`](#DomainRequired) | Type | experimental | What an agent config owes for its domain type `D`: nothing when no domain is configured (`D = never`), and the AgentDomain that builds the slice otherwise. |
 | [`EndedRun`](#EndedRun) | Type | experimental | The ENDED phases — a run that finished (`done`) or was stopped from outside (`cancelled`). |
 | [`fanOutInterpret`](#fanOutInterpret) | Function | experimental | Give a router's interpret cells real wall-clock overlap without touching the kernel — pass the table `toolRouter` built, get back one whose cells launch their tool and RETURN, so `runInterpret` reaches the next Cmd of the turn while the first tool is still running. |
 | [`FILE_OMITTED`](#FILE_OMITTED) | Variable | experimental | The text an omitted file stands in as. |
@@ -1281,7 +1282,7 @@ function createAgent<
   Msg = unknown,
   D = never,
 >(
-  config: AgentConfigCore<Stage, P, O, R, TC, Msg, D> & {
+  config: AgentConfigCore<Stage, P, O, R, TC, Msg, D> & DomainRequired<D, R> & {
     readonly compaction: CompactionPolicy<R, Msg>;
     readonly snapshotEvery: number;
   },
@@ -1295,7 +1296,7 @@ function createAgent<
   Msg = unknown,
   D = never,
 >(
-  config: AgentConfigCore<Stage, P, O, R, TC, Msg, D> & {
+  config: AgentConfigCore<Stage, P, O, R, TC, Msg, D> & DomainRequired<D, R> & {
     readonly compaction?: undefined;
     readonly snapshotEvery: number;
   },
@@ -1309,7 +1310,7 @@ function createAgent<
   Msg = unknown,
   D = never,
 >(
-  config: AgentConfigCore<Stage, P, O, R, TC, Msg, D> & {
+  config: AgentConfigCore<Stage, P, O, R, TC, Msg, D> & DomainRequired<D, R> & {
     readonly compaction: CompactionPolicy<R, Msg>;
     readonly snapshotEvery?: undefined;
   },
@@ -1323,7 +1324,7 @@ function createAgent<
   Msg = unknown,
   D = never,
 >(
-  config: AgentConfigCore<Stage, P, O, R, TC, Msg, D> & {
+  config: AgentConfigCore<Stage, P, O, R, TC, Msg, D> & DomainRequired<D, R> & {
     readonly compaction?: undefined;
     readonly snapshotEvery?: undefined;
   },
@@ -1388,7 +1389,7 @@ type DeadlineSub<N extends string | undefined = undefined> = {
 
 ```ts
 function defineAgent<T extends AnyToolDef, D = never>(
-  config: DefineAgentConfig<T, D>,
+  config: DefineAgentConfig<T, D> & DomainRequired<D, ToolResult<T>>,
 ): DefinedAgent<T, D>
 ```
 
@@ -1840,6 +1841,14 @@ type DefinedAgentWired<T extends AnyToolDef, D = never> = {
   readonly machine: DefinedAgentMachine<T, D>;
   readonly subscribe: Subscribe<DefinedAgentMsg<T>, DeadlinesSub, DefinedAgentCtx<T>>;
 }
+```
+
+<a id="DomainRequired"></a>
+
+### `DomainRequired`
+
+```ts
+type DomainRequired<D, R> = [D] extends [never] ? unknown : { readonly domain: AgentDomain<D, R> }
 ```
 
 <a id="EndedRun"></a>

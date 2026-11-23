@@ -66,6 +66,7 @@ import {
   type AgentTurn,
   agentTurnSchema,
   type Conversation,
+  type DomainRequired,
   isStreamingModel,
   type ModelStream,
   type StreamingModel,
@@ -763,7 +764,7 @@ export interface DefinedAgent<T extends AnyToolDef, D = never> {
  * defined agent, so `createAgent` is for a rebuild rather than for a detour.
  */
 export function defineAgent<T extends AnyToolDef, D = never>(
-  config: DefineAgentConfig<T, D>,
+  config: DefineAgentConfig<T, D> & DomainRequired<D, ToolResult<T>>,
 ): DefinedAgent<T, D> {
   const retain = config.media?.retain;
   if (
@@ -804,7 +805,7 @@ interface LidWiring<T extends AnyToolDef> {
  * not name.
  */
 function definedAgent<T extends AnyToolDef, D = never>(
-  config: DefineAgentConfig<T, D>,
+  config: DefineAgentConfig<T, D> & DomainRequired<D, ToolResult<T>>,
   wiring: LidWiring<T>,
   overlays: readonly InterpretOverlay<T>[],
 ): DefinedAgent<T, D> {
@@ -819,7 +820,7 @@ function definedAgent<T extends AnyToolDef, D = never>(
     // configured. Spread into BOTH arms below rather than mutated into one, so
     // the two `createAgent` calls are provably the same agent apart from the
     // compaction discriminant.
-    const core: LidCoreConfig<T, D> = {
+    const fields: LidCoreFields<T, D> = {
       stages: [input],
       turnOf: () => "act" as const,
       schemas: { act: agentTurnSchema },
@@ -850,6 +851,7 @@ function definedAgent<T extends AnyToolDef, D = never>(
       continueWhen: config.continueWhen,
       ...(config.domain !== undefined ? { domain: config.domain } : {}),
     };
+    const core = fields as LidCoreConfig<T, D>;
     // `AgentCompactionConfig` is a DISCRIMINATED union — compaction is either
     // structurally absent or a whole policy — and the `compact_run` interpret
     // obligation is derived from which member was passed. So the two arms are
@@ -1044,7 +1046,7 @@ function contained<E>(what: string, listener: (event: E) => void) {
  * the compaction discriminant, named so the two arms can be handed one value
  * and provably differ in that field alone.
  */
-type LidCoreConfig<T extends AnyToolDef, D = never> = AgentConfigCore<
+type LidCoreFields<T extends AnyToolDef, D> = AgentConfigCore<
   string,
   LidPurpose,
   LidOutputs,
@@ -1053,6 +1055,8 @@ type LidCoreConfig<T extends AnyToolDef, D = never> = AgentConfigCore<
   AgentMessage,
   D
 >;
+type LidCoreConfig<T extends AnyToolDef, D = never> = LidCoreFields<T, D> &
+  DomainRequired<D, ToolResult<T>>;
 
 /**
  * The compacting arm's machine: the same core config plus the policy, wired to
@@ -1442,11 +1446,8 @@ function assistantOf(turn: AgentTurn): AgentMessage {
  * no tool demands ctx — the `run` signature requires it otherwise — so the
  * empty record is a complete options value there, which is what this asserts.
  */
-function noHost<T extends AnyToolDef, D = never>(): DefinedAgentRunOptions<
-  T,
-  D
-> {
-  return {} as DefinedAgentRunOptions<T, D>;
+function noHost<T extends AnyToolDef>(): DefinedAgentRunOptions<T> {
+  return {} as DefinedAgentRunOptions<T>;
 }
 
 /**

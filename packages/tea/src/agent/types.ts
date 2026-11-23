@@ -848,11 +848,6 @@ export interface AgentState<
   readonly instructions: string | null;
 }
 
-// ===========================================================================
-// Domain — the host's own slice, folded from the transcript events the kernel
-// already settles.
-// ===========================================================================
-
 /**
  * One transcript event the kernel just settled, handed to
  * {@link AgentDomain.step}. Each one is folded at exactly one site in the
@@ -918,6 +913,17 @@ export interface AgentDomain<D, R> {
   readonly init: () => D;
   readonly step: (slice: D, event: AgentDomainEvent<R>) => D;
 }
+
+/**
+ * What an agent config owes for its domain type `D`: nothing when no domain is
+ * configured (`D = never`), and the {@link AgentDomain} that builds the slice
+ * otherwise. A config that names a `D`, directly or through an annotated
+ * `stopWhen` / `continueWhen`, does not compile without `domain`, so a Model
+ * typed to hold `domain` always holds it.
+ */
+export type DomainRequired<D, R> = [D] extends [never]
+  ? unknown
+  : { readonly domain: AgentDomain<D, R> };
 
 /**
  * The agent's Model with its domain slice: {@link AgentState} when no domain is
