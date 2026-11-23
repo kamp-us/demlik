@@ -18,8 +18,9 @@ import type { Trace } from "../recorder";
  * with `cmds: []`; it equals a live run's `init` frame only when `init` starts
  * no Cmds. A step recorded without Cmds is written without Cmd evidence.
  * Throws, before it loads or saves anything, when the trace has no `loaded`
- * State, or when it holds messages but no steps (record with
- * `captureSteps: true`).
+ * State, when it holds messages but no steps (record with
+ * `captureSteps: true`), or when it has a different number of steps than
+ * messages.
  */
 export async function writeTrace<S, M extends { readonly _tag: string }>(
   store: Pick<Store<S>, "load" | "save">,
@@ -31,6 +32,11 @@ export async function writeTrace<S, M extends { readonly _tag: string }>(
   if (trace.steps === undefined && trace.msgs.length > 0) {
     throw new Error(
       "tea writeTrace: the trace kept no steps; record with captureSteps: true",
+    );
+  }
+  if (trace.steps !== undefined && trace.steps.length !== trace.msgs.length) {
+    throw new Error(
+      `tea writeTrace: the trace has ${trace.steps.length} steps for ${trace.msgs.length} messages`,
     );
   }
   await store.load();

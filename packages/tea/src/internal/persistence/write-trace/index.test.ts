@@ -111,6 +111,27 @@ describe("writeTrace", () => {
       trace({ msgs: [inc(1)], finalState: 1 }),
       /kept no steps/,
     ],
+    [
+      "has fewer steps than Msgs",
+      trace({
+        msgs: [inc(1), inc(2)],
+        finalState: 3,
+        steps: [{ msg: inc(1), state: 1 }],
+      }),
+      /1 steps for 2 messages/,
+    ],
+    [
+      "has more steps than Msgs",
+      trace({
+        msgs: [inc(1)],
+        finalState: 3,
+        steps: [
+          { msg: inc(1), state: 1 },
+          { msg: inc(2), state: 3 },
+        ],
+      }),
+      /2 steps for 1 messages/,
+    ],
   ])("refuses a trace that %s, before it loads or saves", async (_name, bad, message) => {
     const { calls, store } = remembering();
 

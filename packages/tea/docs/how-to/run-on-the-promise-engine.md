@@ -187,17 +187,27 @@ const capture = recorder(handle, { captureSteps: true });
 try {
   return await driveToDone(handle, start, isDone);
 } catch (error) {
-  const { store } = doEventSourcedStore(storage, machine, ctx, { recording });
-  await writeTrace(store, capture.dump());
+  try {
+    const { store } = doEventSourcedStore(storage, machine, ctx, { recording });
+    await writeTrace(store, capture.dump());
+  } catch (diagnostic) {
+    console.warn(diagnostic);
+  }
   throw error;
 } finally {
   capture.stop();
 }
 ```
 
+The trace write has its own `try`, and the drive's own `error` is always the one
+rethrown: `capture.dump()` throws when the drive failed before any transition,
+and a store can refuse a write, and a diagnostic must never change how the
+failure surfaces.
+
 The store ends up with the frames a live run on it would have saved, so what
 reads a recording reads this one. `writeTrace` writes an `init` frame for the
 State the run started in, with no Cmds because the recorder's boot observation
 carries none, then a `step` frame per recorded transition. A store that does not
 record keeps the Msgs only. It throws before it saves anything when the trace has
-no starting State or has Msgs but no steps.
+no starting State, has Msgs but no steps, or has a different number of steps
+than Msgs.

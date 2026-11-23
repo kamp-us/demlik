@@ -5,9 +5,9 @@
 
 import { describe, expect, it } from "vitest";
 import { fakeDoStorage as fakeStorage } from "../__fixtures__/do-storage";
-import { defineMachine, type Transitions } from "../index";
+import { DriveStalledError, defineMachine, type Transitions } from "../index";
 import { recorder, writeTrace } from "../persistence";
-import { run } from "../promise";
+import { driveToDone, run } from "../promise";
 import { doEventSourcedStore } from "./index";
 
 interface Model {
@@ -100,5 +100,63 @@ describe("writeTrace", () => {
       writeTrace(storeOver(written, true), { ...trace, steps: undefined }),
     ).rejects.toThrow(/captureSteps/);
     expect(written.size).toBe(0);
+  });
+});
+
+describe("keeping only a failed drive's recording", () => {
+  /** The shape the how-to shows: the trace write has its own `try`, and the drive's error is rethrown. */
+  async function driveKeepingFailure(
+    store: Parameters<typeof writeTrace<Model, Msg>>[0],
+    diagnostics: unknown[],
+  ) {
+    const handle = run(counter, {
+      onError: () => {},
+      interpret: { notify: async () => {} },
+    });
+    const capture = recorder(handle, { captureSteps: true });
+    try {
+      return await driveToDone(handle, { _tag: "inc", by: 1 }, () => false);
+    } catch (error) {
+      try {
+        await writeTrace(store, capture.dump());
+      } catch (diagnostic) {
+        diagnostics.push(diagnostic);
+      }
+      throw error;
+    } finally {
+      capture.stop();
+    }
+  }
+
+  it("writes the recording of a drive that fails, and rethrows the drive's error", async () => {
+    const written = new Map<string, string>();
+    const diagnostics: unknown[] = [];
+
+    await expect(
+      driveKeepingFailure(storeOver(written, true), diagnostics),
+    ).rejects.toBeInstanceOf(DriveStalledError);
+
+    expect(diagnostics).toEqual([]);
+    expect(
+      [...written.keys()].filter((key) => key.startsWith("@@es/evt/")),
+    ).toHaveLength(2);
+  });
+
+  it("rethrows the drive's error, not the store's, when the store cannot load", async () => {
+    const unavailable = new Error("storage is down");
+    const diagnostics: unknown[] = [];
+
+    const failure = await driveKeepingFailure(
+      {
+        load: async () => {
+          throw unavailable;
+        },
+        save: async () => {},
+      },
+      diagnostics,
+    ).catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(DriveStalledError);
+    expect(diagnostics).toEqual([unavailable]);
   });
 });
