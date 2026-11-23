@@ -8,7 +8,7 @@ Tier: `stable`
 import { … } from "@demlik/tea/do";
 ```
 
-## Exports (124)
+## Exports (125)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -106,6 +106,7 @@ import { … } from "@demlik/tea/do";
 | [`ProjectionRunner`](#ProjectionRunner) | Interface | stable | A live, running projection instance: the projection's current `View`, its exclusive stored `offset`, and the `present`/`reset` operations the driver (or a rebuild) calls. |
 | [`ProjectionUpdate`](#ProjectionUpdate) | Interface | stable | One unit the projection driver presents to a projection's `apply`. |
 | [`rebuildProjection`](#rebuildProjection) | Function | stable | Rebuild a projection's view by folding an ordered event stream from the `NoOffset` start. |
+| [`RecordingBreak`](#RecordingBreak) | Interface | stable | A recording whose evidence cannot be rebuilt where the next frame would take its delta from. |
 | [`registerHibernatableSocket`](#registerHibernatableSocket) | Function | stable | Register an already-created `server` socket on the DO via the Cloudflare **Hibernation API**: `ctx.acceptWebSocket(server, tags)` hands the socket to the runtime (it survives eviction and re-delivers inbound frames to the DO's `webSocketMessage` lifecycle method), and — when an `attachment` is supplied — persists it via `server.serializeAttachment` so it survives the wake. |
 | [`RegisterOptions`](#RegisterOptions) | Interface | stable | Optional settings for registerHibernatableSocket / acceptPresenceSocket. |
 | [`reissueSurvivingEffects`](#reissueSurvivingEffects) | Function | stable | Re-fire every round-trip a rehydrated actor still owes, on wake. |
@@ -1000,6 +1001,15 @@ interface EventSourcedOptions<S, M> extends EventLogReaderOptions<M> {
    */
   readonly onReady?: (state: S) => void;
   /**
+   * Hears a recording whose last frames cannot be rebuilt, once per `load()`.
+   * Evidence is not State: the Msgs and the snapshot rebuild the State exactly,
+   * so restore still succeeds and the next frame is written whole, as a new
+   * basis for the frames after it. This reports which frames are broken; a read
+   * of them with `readFrames` still refuses them. Default: a `console.warn`.
+   * A hook that throws is warned about and does not fail the restore.
+   */
+  readonly onRecordingBreak?: (broken: RecordingBreak) => void;
+  /**
    * Boundary parse for the persisted SNAPSHOT cell (the `S` blob). Returns `S`
    * on a recognized shape, `null` on an unrecognized one, and must NOT throw.
    * A present snapshot that returns `null` refuses restore; it never falls
@@ -1593,6 +1603,18 @@ function rebuildProjection<Model, Msg extends { _tag: string }, View>(
     readonly msg: Msg | null;
   }[],
 ): ProjectionRunner<Model, Msg, View>
+```
+
+<a id="RecordingBreak"></a>
+
+### `RecordingBreak`
+
+```ts
+interface RecordingBreak {
+  readonly fromSeq: number;
+  readonly reason: FrameRefusal;
+  readonly toSeq: number;
+}
 ```
 
 <a id="registerHibernatableSocket"></a>

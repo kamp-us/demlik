@@ -234,6 +234,15 @@ export interface EventSourcedOptions<S, M> extends EventLogReaderOptions<M> {
     /** JSON written into every `init` frame, unread by the store. */
     readonly provenance: unknown;
   };
+  /**
+   * Hears a recording whose last frames cannot be rebuilt, once per `load()`.
+   * Evidence is not State: the Msgs and the snapshot rebuild the State exactly,
+   * so restore still succeeds and the next frame is written whole, as a new
+   * basis for the frames after it. This reports which frames are broken; a read
+   * of them with `readFrames` still refuses them. Default: a `console.warn`.
+   * A hook that throws is warned about and does not fail the restore.
+   */
+  readonly onRecordingBreak?: (broken: RecordingBreak) => void;
   readonly keys?: EventLogReaderOptions<M>["keys"] & {
     /** Restore-attempt cell. Default: `${meta}/restore-attempt`. */
     readonly restoreAttempt?: string;
@@ -456,6 +465,24 @@ export type StoredFrame<M> =
     }
   | Extract<StoredEvent<M>, { _tag: "refused" }>;
 
+/**
+ * A recording whose evidence cannot be rebuilt where the next frame would take
+ * its delta from. Frames `fromSeq` to `toSeq` (the log's last) are the ones that
+ * depend on the first frame that does not rebuild, and `reason` is the refusal
+ * {@link EventLogReader.readFrames} gives that frame.
+ */
+export interface RecordingBreak {
+  readonly fromSeq: number;
+  readonly toSeq: number;
+  readonly reason: FrameRefusal;
+}
+
+/** The evidence bytes a delta is taken from, or why there are none. */
+interface BasisRead {
+  readonly basis: Basis | null;
+  readonly broken: RecordingBreak | null;
+}
+
 /** Options for {@link EventLogReader.readFrames}. */
 export interface FrameReadOptions {
   /**
@@ -675,7 +702,7 @@ function openLogReader<M extends { _tag: string }>(
   opts: EventLogReaderOptions<M>,
 ): {
   readonly reader: EventLogReader<M>;
-  basisBefore(seq: number): Promise<Basis | null>;
+  basisBefore(seq: number): Promise<BasisRead>;
 } {
   const parseEvent = opts.parseEvent ?? defaultParseEvent<M>;
   const {
@@ -750,8 +777,13 @@ function openLogReader<M extends { _tag: string }>(
     }
   }
 
-  async function basisBefore(seq: number): Promise<Basis | null> {
-    if (seq <= 1) return null;
+  async function basisBefore(seq: number): Promise<BasisRead> {
+    if (seq <= 1) return { basis: null, broken: null };
+    const toSeq = seq - 1;
+    const broke = (fromSeq: number, reason: FrameRefusal): BasisRead => ({
+      basis: null,
+      broken: { fromSeq, toSeq, reason },
+    });
     const rows = await storage.list<unknown>({
       prefix: eventPrefix,
       end: eventKey(eventPrefix, seq),
@@ -761,7 +793,7 @@ function openLogReader<M extends { _tag: string }>(
     });
     // Walk back to the last whole frame, then rebuild forward from it.
     const chain: (readonly [number, EncodedFrame])[] = [];
-    let expected = seq - 1;
+    let expected = toSeq;
     for (const [key, value] of rows) {
       const { frame, encoded } = decodeStoredFrame(
         eventPrefix,
@@ -769,19 +801,22 @@ function openLogReader<M extends { _tag: string }>(
         key,
         value,
       );
-      if (frame._tag === "refused" || frame.seq !== expected) return null;
-      if (encoded === null) return null;
+      if (frame.seq !== expected) return broke(expected, "basis");
+      if (frame._tag === "refused" || encoded === null) {
+        return broke(expected, "frame");
+      }
       chain.push([expected, encoded]);
       if (encoded.evidence.encoding === "full") break;
       expected -= 1;
     }
+    if (chain.length === 0) return broke(toSeq, "basis");
     let basis: Basis | null = null;
     for (const [at, encoded] of chain.reverse()) {
       const rebuilt = await rebuildEvidence(at, encoded.evidence, basis);
-      if (typeof rebuilt === "string") return null;
+      if (typeof rebuilt === "string") return broke(at, rebuilt);
       basis = rebuilt;
     }
-    return basis;
+    return { basis, broken: null };
   }
 
   async function* readFrames(
@@ -809,7 +844,7 @@ function openLogReader<M extends { _tag: string }>(
         continue;
       }
       if (basis === undefined && encoded.evidence.encoding === "delta") {
-        basis = await basisBefore(frame.seq);
+        basis = (await basisBefore(frame.seq)).basis;
       }
       const rebuilt = await rebuildEvidence(
         frame.seq,
@@ -1061,6 +1096,21 @@ export function doEventSourcedStore<
     return format;
   }
 
+  /** Tell the host where the evidence is broken; a hook that throws is warned about, not fatal. */
+  function hearBreak(broken: RecordingBreak): void {
+    const hear =
+      opts.onRecordingBreak ??
+      ((b: RecordingBreak) =>
+        console.warn(
+          `@demlik/tea/do: the recording's evidence cannot be rebuilt for frames ${b.fromSeq} to ${b.toSeq} (${b.reason}); the next frame is written whole`,
+        ));
+    try {
+      hear(broken);
+    } catch (thrown) {
+      console.warn(thrown);
+    }
+  }
+
   async function load(): Promise<S> {
     fence.takeOver();
     const raw = await storage.get<string>(restoreAttemptKey);
@@ -1088,15 +1138,15 @@ export function doEventSourcedStore<
     }
     format = null;
     const written = await ensureFormat();
-    const next =
-      written === "recording" ? await basisBefore(committedSeq + 1) : null;
-    if (written === "recording" && committedSeq > 0 && next === null) {
-      throw new Error("@demlik/tea/do: recorded evidence could not be rebuilt");
-    }
+    const next: BasisRead =
+      written === "recording"
+        ? await basisBefore(committedSeq + 1)
+        : { basis: null, broken: null };
+    if (next.broken !== null) hearBreak(next.broken);
     latestState = state;
     lastSeq = committedSeq;
     snapshotSeq = snapSeq;
-    basis = next;
+    basis = next.basis;
     sinceSnapshot = Math.max(0, committedSeq - snapSeq - inits);
     if (!readyFired) opts.onReady?.(state);
     await storage.delete(restoreAttemptKey);
