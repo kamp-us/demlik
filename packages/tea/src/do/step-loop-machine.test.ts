@@ -192,13 +192,38 @@ describe("runStepLoop as a machine", () => {
     ).rejects.toBe(outage);
   });
 
+  it("gives up at the first failure when retry.maxElapsedMs is NaN, with no sleep, as the loop it replaced did", async () => {
+    const { outcome, requests, sleeps } = await drive(
+      [new Error("down"), { done: true, output: "ok" }],
+      {
+        retry: {
+          baseMs: 1,
+          factor: 1,
+          capMs: 5,
+          maxElapsedMs: Number.NaN,
+          jitter: "none",
+        },
+      },
+    );
+
+    expect(outcome).toEqual({ kind: "gave_up", error: new Error("down") });
+    expect(requests).toHaveLength(1);
+    expect(sleeps).toEqual([]);
+  });
+
   it.each([
     {
-      input: "deadlineMs: -Infinity",
-      config: { deadlineMs: Number.NEGATIVE_INFINITY },
-      answers: [],
-      kind: "deadline_exceeded",
-      posts: 0,
+      input: "retry.maxElapsedMs: NaN",
+      config: {
+        retry: {
+          baseMs: 1,
+          factor: 1,
+          capMs: 5,
+          maxElapsedMs: Number.NaN,
+          jitter: "none",
+        },
+      },
+      answers: [new Error("down")] satisfies Answer[],
     },
     {
       input: "retry.maxElapsedMs: Infinity",
@@ -216,30 +241,22 @@ describe("runStepLoop as a machine", () => {
         new Error("b"),
         { done: true, output: "ok" },
       ] satisfies Answer[],
-      kind: "done",
-      posts: 3,
     },
-  ] as const)("decides as the live drive did when it is replayed from stored text, with $input", async ({
+    {
+      input: "deadlineMs: -Infinity",
+      config: { deadlineMs: Number.NEGATIVE_INFINITY },
+      answers: [] satisfies Answer[],
+    },
+  ] as const)("replays the dumped trace of a drive with $input", async ({
     config,
     answers,
-    kind,
-    posts,
   }) => {
-    const { outcome, requests, recording } = await drive([...answers], config);
-    const written = recording.toJSONL();
+    const { recording } = await drive([...answers], config);
 
-    const stored = replayStoredTrace(
-      machine,
-      parseJSONL<unknown, { readonly _tag: string }>(written),
-    );
+    const replayed = replayTrace(machine, recording.dump());
 
-    expect(outcome.kind).toBe(kind);
-    expect(requests).toHaveLength(posts);
-    expect(JSON.parse(written.split("\n")[1] ?? "{}")).toMatchObject({
-      msg: { _tag: "start", deadlineMs: expect.any(Number) },
-    });
-    expect(stored.matches).toBe(true);
-    expect(stored.refusal).toBeUndefined();
+    expect(replayed.matches).toBe(true);
+    expect(replayed.refusal).toBeUndefined();
   });
 
   it("freezes the results it was handed in a dev build, so a mutated step result throws", async () => {

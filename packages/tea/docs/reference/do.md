@@ -1898,7 +1898,7 @@ function stepLoopMachine<R, I, O>(): Machine<StepLoopState<R, I, O>, StepLoopMsg
 type StepLoopMsg<R, I, O> =
   | {
     readonly _tag: "start";
-    readonly deadlineMs: number;
+    readonly deadlineMs: number | null;
     readonly policy: AnyRetryPolicy;
   }
   | {
