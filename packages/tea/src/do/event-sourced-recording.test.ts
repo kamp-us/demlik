@@ -356,6 +356,27 @@ describe("restoring a recording whose evidence is broken", () => {
     expect(next).toMatchObject({ encoding: "delta" });
   });
 
+  it("writes the next frame whole when a second load of the same store finds the break", async () => {
+    const backing = new Map<string, string>();
+    await liveRun(backing, [inc(1), inc(1)], recording);
+    const { store } = doEventSourcedStore(
+      fakeStorage(backing).storage,
+      counter,
+      ctx,
+      { ...recording, onRecordingBreak: () => {} },
+    );
+    await store.load();
+    damageDelta(backing, 3);
+
+    await store.load();
+    await store.save(fresh, inc(1), { _tag: "step", cmds: [] });
+
+    expect((await framesOf(backing)).at(-1)).toMatchObject({
+      seq: 4,
+      encoding: "full",
+    });
+  });
+
   it("still refuses to rebuild the broken frames when they are read", async () => {
     const backing = new Map<string, string>();
     await liveRun(backing, [inc(1)], recording);
