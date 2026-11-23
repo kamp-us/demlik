@@ -9,7 +9,7 @@
 import {
   type AgentEvent,
   type AgentMachineMsg,
-  type AgentState,
+  type AgentStateOf,
   type AgentStatus,
   type AgentTurn,
   agentEvents,
@@ -101,10 +101,11 @@ export type AgentHostConfig<
   U extends Sub = Sub,
   Ctx = unknown,
   M extends Tagged = AgentMachineMsg<P, O, R>,
-> = AgentHostWiring<Stage, P, O, R, Frame, C, U, Ctx, M> &
-  StoreAndOnError<AgentState<Stage, P, O, R>> & {
+  D = never,
+> = AgentHostWiring<Stage, P, O, R, Frame, C, U, Ctx, M, D> &
+  StoreAndOnError<AgentStateOf<Stage, P, O, R, D>> & {
     /** The durable `Store` for the agent slice (typically `doStore(storage, parse)`). */
-    readonly store: Store<AgentState<Stage, P, O, R>>;
+    readonly store: Store<AgentStateOf<Stage, P, O, R, D>>;
   };
 
 /** The part of {@link AgentHostConfig} that is not the store and its sink. */
@@ -118,6 +119,7 @@ export interface AgentHostWiring<
   U extends Sub = Sub,
   Ctx = unknown,
   M extends Tagged = AgentMachineMsg<P, O, R>,
+  D = never,
 > {
   /**
    * The engine's `run` — `run` from `@demlik/tea/promise`, or any engine's. The
@@ -125,7 +127,7 @@ export interface AgentHostWiring<
    * the generic engine from widening the messages inferred from `buildMachine`.
    */
   readonly run: EngineRun<
-    AgentState<Stage, P, O, R>,
+    AgentStateOf<Stage, P, O, R, D>,
     AgentMachineMsg<P, O, R> | NoInfer<M>,
     C,
     U,
@@ -140,7 +142,7 @@ export interface AgentHostWiring<
    * here, and `agent.toMachine({ toolInterpret })` already returns exactly this.
    */
   readonly buildMachine: () => Wired<
-    AgentState<Stage, P, O, R>,
+    AgentStateOf<Stage, P, O, R, D>,
     AgentMachineMsg<P, O, R> | M,
     C,
     U,
@@ -152,7 +154,7 @@ export interface AgentHostWiring<
    * The run-terminality predicate (#46) — what makes `result()` first-class.
    * Defaults to the agent's own terminal phases (`done` / `failed`).
    */
-  readonly terminal?: (state: AgentState<Stage, P, O, R>) => boolean;
+  readonly terminal?: (state: AgentStateOf<Stage, P, O, R, D>) => boolean;
   /**
    * Map one semantic {@link AgentEvent} to the consumer's SSE frame, or `null`
    * to skip it. This is the ONLY place the consumer touches the SSE seam — the
@@ -182,6 +184,7 @@ export interface AgentHost<
   R,
   Frame,
   M extends Tagged = AgentMachineMsg<P, O, R>,
+  D = never,
 > {
   /**
    * Get (or build) the booted runtime. Build-once-boot-once: the first call
@@ -201,7 +204,7 @@ export interface AgentHost<
    */
   runtime(): Promise<
     BootedRunHandle<
-      AgentState<Stage, P, O, R>,
+      AgentStateOf<Stage, P, O, R, D>,
       AgentMachineMsg<P, O, R> | M,
       AgentEvent<R>
     >
@@ -220,7 +223,7 @@ export interface AgentHost<
    * run's product off it (e.g. `result()?.output`). Replaces the per-consumer
    * `verdict` plumbing's source. Ensures the runtime is built first.
    */
-  result(): Promise<AgentState<Stage, P, O, R> | undefined>;
+  result(): Promise<AgentStateOf<Stage, P, O, R, D> | undefined>;
   /**
    * The SSE hub — the route (`host.sse.open()`) AND the test seam
    * (`host.sse.register(sink)`). The host drives `hub.emit` off the semantic
@@ -315,10 +318,11 @@ export function createAgentHost<
   U extends Sub = Sub,
   Ctx = unknown,
   M extends Tagged = AgentMachineMsg<P, O, R>,
+  D = never,
 >(
-  config: AgentHostConfig<Stage, P, O, R, Frame, C, U, Ctx, M>,
-): AgentHost<Stage, P, O, R, Frame, M> {
-  type S = AgentState<Stage, P, O, R>;
+  config: AgentHostConfig<Stage, P, O, R, Frame, C, U, Ctx, M, D>,
+): AgentHost<Stage, P, O, R, Frame, M, D> {
+  type S = AgentStateOf<Stage, P, O, R, D>;
   type Msg = AgentMachineMsg<P, O, R> | M;
   type E = AgentEvent<R>;
 
