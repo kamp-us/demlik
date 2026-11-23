@@ -741,6 +741,7 @@ async function runRestoreChild(
     await build({
       configFile: false,
       logLevel: "error",
+      ssr: { noExternal: ["fossil-delta"] },
       build: {
         ssr: fileURLToPath(new URL(fixture, import.meta.url)),
         outDir: work,
@@ -1553,7 +1554,11 @@ describe("doEventLogReader — a host reads an agent's history without waking it
     const reader = doEventLogReader<Msg>(storage);
 
     for (let pass = 0; pass < 2; pass++) {
-      expect(await reader.readHead()).toEqual({ lastSeq: 300, snapshot: true });
+      expect(await reader.readHead()).toEqual({
+        lastSeq: 300,
+        snapshot: true,
+        format: "messages",
+      });
       expect(await reader.readCommittedSeq()).toBe(300);
       const all = await collect(reader.readEvents());
       expect(all.map((e) => e.seq)).toEqual(
@@ -1582,7 +1587,11 @@ describe("doEventLogReader — a host reads an agent's history without waking it
     const reader = doEventLogReader<Msg>(storage);
     expect(await reader.readHead()).toBeNull();
     await liveRun(backing, sampleMsgs, 100);
-    expect(await reader.readHead()).toEqual({ lastSeq: 5, snapshot: false });
+    expect(await reader.readHead()).toEqual({
+      lastSeq: 5,
+      snapshot: false,
+      format: "messages",
+    });
     expect(await reader.readCommittedSeq()).toBe(5);
     for (const call of get.mock.calls) {
       expect(call[1]).toEqual({ noCache: true });
@@ -1607,7 +1616,11 @@ describe("doEventLogReader — a host reads an agent's history without waking it
       ],
     ]);
     const reader = doEventLogReader<Msg>(fakeStorage(backing).storage);
-    expect(await reader.readHead()).toEqual({ lastSeq: 0, snapshot: true });
+    expect(await reader.readHead()).toEqual({
+      lastSeq: 0,
+      snapshot: true,
+      format: null,
+    });
   });
 
   it("a range returns only its events", async () => {
@@ -1712,7 +1725,11 @@ describe("doEventLogReader — a host reads an agent's history without waking it
         return { _tag: type, ...rest } as Msg;
       },
     });
-    expect(await reader.readHead()).toEqual({ lastSeq: 2, snapshot: false });
+    expect(await reader.readHead()).toEqual({
+      lastSeq: 2,
+      snapshot: false,
+      format: "messages",
+    });
     expect(await collect(reader.readEvents())).toEqual([
       { seq: 1, event: { _tag: "inc", by: 1 } },
       { seq: 2, event: { _tag: "reset" } },

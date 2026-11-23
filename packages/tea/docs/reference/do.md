@@ -8,7 +8,7 @@ Tier: `stable`
 import { … } from "@demlik/tea/do";
 ```
 
-## Exports (118)
+## Exports (121)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -68,6 +68,7 @@ import { … } from "@demlik/tea/do";
 | [`EventLogReaderOptions`](#EventLogReaderOptions) | Interface | stable | How a log's events are decoded and where its cells live: the part of EventSourcedOptions that doEventLogReader also takes. |
 | [`EventSourcedOptions`](#EventSourcedOptions) | Interface | stable | Options for doEventSourcedStore. |
 | [`EventSourcedStore`](#EventSourcedStore) | Interface | stable | The handle returned by doEventSourcedStore: a `Store<S>` to hand to `run(...)`, plus the snapshot and read surface the cooperating DO drives. |
+| [`EvidenceEncoding`](#EvidenceEncoding) | Type | stable | How a frame's evidence is stored. |
 | [`ExecutedStep`](#ExecutedStep) | Interface | stable | What ExecutedSteps holds for a step that ran. |
 | [`ExecutedSteps`](#ExecutedSteps) | Interface | stable | The hands' memory of the steps they already ran, keyed by `callId`. |
 | [`ExecuteStep`](#ExecuteStep) | Type | stable | Execute one tool call and produce its result (the consumer's hands). |
@@ -80,6 +81,7 @@ import { … } from "@demlik/tea/do";
 | [`IdempotentOutcome`](#IdempotentOutcome) | Type | stable | The outcome of running a keyed effect through the guard. |
 | [`isApplied`](#isApplied) | Function | stable | Has this key's effect already been applied (folded into the set)? |
 | [`isOwed`](#isOwed) | Function | stable | Is this id still owed (unconfirmed) in the ledger? |
+| [`LogFormat`](#LogFormat) | Type | stable | Which format a log's cells are written in. |
 | [`mintRunToken`](#mintRunToken) | Function | stable | Mint a fresh per-run capability token: 32 random bytes, hex-encoded. |
 | [`NextStep`](#NextStep) | Interface | stable | The next tool call to execute — the "continue" arm of a `/step` response. |
 | [`OwedEffect`](#OwedEffect) | Interface | stable | A single surviving entry to re-emit: its id and the effect it owes. |
@@ -127,7 +129,8 @@ import { … } from "@demlik/tea/do";
 | [`StepWorking`](#StepWorking) | Interface | stable | The NOT-READY arm — the run is computing OUT-OF-BAND under a defer-resume host (a production incident: a non-blocking pull carrier must answer a pull with an explicit "computing, poll again" instead of holding the request across a multi-second step). |
 | [`StoredEvent`](#StoredEvent) | Type | stable | One stored event cell as read, decoded or refused. |
 | [`StoredEventRange`](#StoredEventRange) | Interface | stable | An EventLogRange with an optional cap on how many stored cells are read. |
-| [`StoredEventRefusal`](#StoredEventRefusal) | Type | stable | Why a stored event cell did not decode: its value is not text (`not-text`), its key carries no integer sequence (`key`), its text is not JSON (`json`), or `parseEvent` returned `null` (`event`). |
+| [`StoredEventRefusal`](#StoredEventRefusal) | Type | stable | Why a stored event cell did not decode: its value is not text (`not-text`), its key carries no integer sequence (`key`), its text is not JSON (`json`), `parseEvent` returned `null` (`event`), or it is a recording cell that does not decode as a frame (`frame`). |
+| [`StoredFrame`](#StoredFrame) | Type | stable | One stored cell read as a frame of the log. |
 | [`survivingEffects`](#survivingEffects) | Function | stable | RE-EMIT ON ACTIVATION. |
 | [`WS_READY_STATE_OPEN`](#WS_READY_STATE_OPEN) | Variable | stable | The OPEN `readyState` value (`WebSocket.READY_STATE_OPEN` in the Cloudflare runtime). |
 
@@ -892,6 +895,8 @@ function emptyLedger<E>(): PendingEffectsLedger<E>
 
 ```ts
 interface EventLogHead {
+  /** The format of the log's first cell, or `null` when it has none. */
+  readonly format: LogFormat | null;
   readonly lastSeq: number;
   readonly snapshot: boolean;
 }
@@ -924,6 +929,11 @@ interface EventLogReader<M> {
    * dropped, and text that is not JSON throws.
    */
   readEvents(range?: EventLogRange): AsyncIterable<PersistedEvent<M>>;
+  /**
+   * Every stored cell in range as a StoredFrame, in `seq` order, with
+   * refusals reported instead of thrown. Read in pages of at most 128 rows.
+   */
+  readFrames(range?: StoredEventRange): AsyncIterable<StoredFrame<M>>;
   /** The log's head, or `null` when neither meta nor snapshot cell exists. */
   readHead(): Promise<EventLogHead | null>;
   /**
@@ -1089,6 +1099,14 @@ interface EventSourcedStore<S, M> {
 }
 ```
 
+<a id="EvidenceEncoding"></a>
+
+### `EvidenceEncoding`
+
+```ts
+type EvidenceEncoding = StoredEvidence["encoding"]
+```
+
 <a id="ExecutedStep"></a>
 
 ### `ExecutedStep`
@@ -1216,6 +1234,14 @@ function isApplied(applied: AppliedEffects, key: string): boolean
 
 ```ts
 function isOwed<E>(ledger: PendingEffectsLedger<E>, id: number): boolean
+```
+
+<a id="LogFormat"></a>
+
+### `LogFormat`
+
+```ts
+type LogFormat = "messages" | "recording"
 ```
 
 <a id="mintRunToken"></a>
@@ -1962,7 +1988,42 @@ interface StoredEventRange extends EventLogRange {
 ### `StoredEventRefusal`
 
 ```ts
-type StoredEventRefusal = "event" | "json" | "key" | "not-text"
+type StoredEventRefusal = "event" | "frame" | "json" | "key" | "not-text"
+```
+
+<a id="StoredFrame"></a>
+
+### `StoredFrame`
+
+```ts
+type StoredFrame<M> =
+  | {
+    readonly _tag: "message";
+    readonly event: M;
+    readonly key: string;
+    readonly messageBytes: number;
+    readonly seq: number;
+    readonly serializedBytes: number;
+  }
+  | {
+    readonly _tag: "step";
+    readonly encoding: EvidenceEncoding;
+    readonly event: M;
+    readonly key: string;
+    readonly messageBytes: number;
+    readonly seq: number;
+    readonly serializedBytes: number;
+  }
+  | {
+    readonly _tag: "init";
+    readonly encoding: EvidenceEncoding;
+    readonly key: string;
+    readonly provenance: unknown;
+    readonly restored: boolean;
+    readonly seq: number;
+    readonly serializedBytes: number;
+  }
+  | Extract<StoredEvent<M>, { _tag: "refused" }>
 ```
 
 <a id="survivingEffects"></a>

@@ -356,6 +356,14 @@ A host that reads an agent's log without loading it — its head, committed
 sequence or events in a range — uses
 [`doEventLogReader`](../reference/do.md#doEventLogReader) with the store's options.
 
+A log can be written as a recording: a frame per cell instead of a bare Msg, an
+`init` frame for each boot and a `step` frame for each applied Msg, each holding
+the State after it and the Cmds the engine started for it. `readHead()` says
+which format the first cell is (`format`). `readFrames(range)` reads every cell
+as a [`StoredFrame`](../reference/do.md#StoredFrame): a `message`, an `init`
+frame, a `step` frame or a `refused` cell with its reason. `readStoredEvents`
+and `readEvents` still yield Msgs only, whichever format the log has.
+
 See [`EventSourcedOptions`](../reference/do.md#EventSourcedOptions) for the
 restore-attempt key override and parsing options, and
 [`EventLogReaderOptions`](../reference/do.md#EventLogReaderOptions) for the
