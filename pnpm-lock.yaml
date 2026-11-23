@@ -76,6 +76,9 @@ catalogs:
     fast-check:
       specifier: 3.23.2
       version: 3.23.2
+    fossil-delta:
+      specifier: 2.0.0
+      version: 2.0.0
     happy-dom:
       specifier: 20.11.2
       version: 20.11.2
@@ -337,6 +340,9 @@ importers:
       '@standard-schema/spec':
         specifier: 'catalog:'
         version: 1.1.0
+      fossil-delta:
+        specifier: 'catalog:'
+        version: 2.0.0
     devDependencies:
       '@anthropic-ai/sdk':
         specifier: 'catalog:'
@@ -2008,6 +2014,9 @@ packages:
 
   fix-dts-default-cjs-exports@1.0.1:
     resolution: {integrity: sha512-pVIECanWFC61Hzl2+oOCtoJ3F17kglZC/6N94eRWycFgBH35hHx0Li604ZIzhseh97mf2p0cv7vVrOZGoqhlEg==}
+
+  fossil-delta@2.0.0:
+    resolution: {integrity: sha512-rcvnd0xjV7KNkEbXhTCsjHhONvdami+WWhTYGf4ORkPk9ixkQDmVeII96F6wBD/6qa9zBjH15bOzSARKsQ/rKg==}
 
   fs-extra@7.0.1:
     resolution: {integrity: sha512-YJDaCJZEnBmcbw13fvdAM9AwNOJwOzrE4pqMqBq5nFiEqXUqHwlK4B+3pUw6JNvfSPtX05xFHtYy/1ni01eGCw==}
@@ -4072,6 +4081,8 @@ snapshots:
       magic-string: 0.30.21
       mlly: 1.8.2
       rollup: 4.62.4
+
+  fossil-delta@2.0.0: {}
 
   fs-extra@7.0.1:
     dependencies:

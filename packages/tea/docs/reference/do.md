@@ -8,7 +8,7 @@ Tier: `stable`
 import { … } from "@demlik/tea/do";
 ```
 
-## Exports (122)
+## Exports (129)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -68,11 +68,15 @@ import { … } from "@demlik/tea/do";
 | [`EventLogReaderOptions`](#EventLogReaderOptions) | Interface | stable | How a log's events are decoded and where its cells live: the part of EventSourcedOptions that doEventLogReader also takes. |
 | [`EventSourcedOptions`](#EventSourcedOptions) | Interface | stable | Options for doEventSourcedStore. |
 | [`EventSourcedStore`](#EventSourcedStore) | Interface | stable | The handle returned by doEventSourcedStore: a `Store<S>` to hand to `run(...)`, plus the snapshot and read surface the cooperating DO drives. |
+| [`EvidenceEncoding`](#EvidenceEncoding) | Type | stable | How a frame's evidence is stored. |
 | [`ExecutedStep`](#ExecutedStep) | Interface | stable | What ExecutedSteps holds for a step that ran. |
 | [`ExecutedSteps`](#ExecutedSteps) | Interface | stable | The hands' memory of the steps they already ran, keyed by `callId`. |
 | [`ExecuteStep`](#ExecuteStep) | Type | stable | Execute one tool call and produce its result (the consumer's hands). |
 | [`foldApplied`](#foldApplied) | Function | stable | THE FOLD. |
 | [`foldLedger`](#foldLedger) | Function | stable | THE FOLD. |
+| [`FrameEvidence`](#FrameEvidence) | Interface | stable | A frame's evidence: the State after it and the Cmds it started. |
+| [`FrameReadOptions`](#FrameReadOptions) | Interface | stable | Options for EventLogReader.readFrames. |
+| [`FrameRefusal`](#FrameRefusal) | Type | stable | Why a recording cell does not decode as a frame: its text is not a frame of this format (`frame`), a delta's basis is missing (`basis`), or the evidence does not rebuild, or fails its checksum (`checksum`). |
 | [`HibernatableCtx`](#HibernatableCtx) | Interface | stable | The slice of `DurableObjectState` the durable carrier needs: the Hibernation API accept + the registry of hibernatable sockets. |
 | [`HostOverlapError`](#HostOverlapError) | Class | stable | Thrown by `createAgentHost` when a call overlaps a lifecycle step that has to finish first: a `reset()` while another `reset()` is still stopping the run, a `reset()` from inside `run()`, or a `runtime()` while a `reset()` is still stopping the run. |
 | [`idempotentEffect`](#idempotentEffect) | Function | stable | Pair a durable `key` with an external effect `fn` — this module's primary surface. |
@@ -80,6 +84,7 @@ import { … } from "@demlik/tea/do";
 | [`IdempotentOutcome`](#IdempotentOutcome) | Type | stable | The outcome of running a keyed effect through the guard. |
 | [`isApplied`](#isApplied) | Function | stable | Has this key's effect already been applied (folded into the set)? |
 | [`isOwed`](#isOwed) | Function | stable | Is this id still owed (unconfirmed) in the ledger? |
+| [`LogFormat`](#LogFormat) | Type | stable | Which format a log's cells are written in. |
 | [`mintRunToken`](#mintRunToken) | Function | stable | Mint a fresh per-run capability token: 32 random bytes, hex-encoded. |
 | [`NextStep`](#NextStep) | Interface | stable | The next tool call to execute — the "continue" arm of a `/step` response. |
 | [`OwedEffect`](#OwedEffect) | Interface | stable | A single surviving entry to re-emit: its id and the effect it owes. |
@@ -101,6 +106,7 @@ import { … } from "@demlik/tea/do";
 | [`ProjectionRunner`](#ProjectionRunner) | Interface | stable | A live, running projection instance: the projection's current `View`, its exclusive stored `offset`, and the `present`/`reset` operations the driver (or a rebuild) calls. |
 | [`ProjectionUpdate`](#ProjectionUpdate) | Interface | stable | One unit the projection driver presents to a projection's `apply`. |
 | [`rebuildProjection`](#rebuildProjection) | Function | stable | Rebuild a projection's view by folding an ordered event stream from the `NoOffset` start. |
+| [`RecordingBreak`](#RecordingBreak) | Interface | stable | A recording whose evidence cannot be rebuilt where the next frame would take its delta from. |
 | [`registerHibernatableSocket`](#registerHibernatableSocket) | Function | stable | Register an already-created `server` socket on the DO via the Cloudflare **Hibernation API**: `ctx.acceptWebSocket(server, tags)` hands the socket to the runtime (it survives eviction and re-delivers inbound frames to the DO's `webSocketMessage` lifecycle method), and — when an `attachment` is supplied — persists it via `server.serializeAttachment` so it survives the wake. |
 | [`RegisterOptions`](#RegisterOptions) | Interface | stable | Optional settings for registerHibernatableSocket / acceptPresenceSocket. |
 | [`reissueSurvivingEffects`](#reissueSurvivingEffects) | Function | stable | Re-fire every round-trip a rehydrated actor still owes, on wake. |
@@ -131,7 +137,8 @@ import { … } from "@demlik/tea/do";
 | [`StepWorking`](#StepWorking) | Interface | stable | The NOT-READY arm — the run is computing OUT-OF-BAND under a defer-resume host (a production incident: a non-blocking pull carrier must answer a pull with an explicit "computing, poll again" instead of holding the request across a multi-second step). |
 | [`StoredEvent`](#StoredEvent) | Type | stable | One stored event cell as read, decoded or refused. |
 | [`StoredEventRange`](#StoredEventRange) | Interface | stable | An EventLogRange with an optional cap on how many stored cells are read. |
-| [`StoredEventRefusal`](#StoredEventRefusal) | Type | stable | Why a stored event cell did not decode: its value is not text (`not-text`), its key carries no integer sequence (`key`), its text is not JSON (`json`), or `parseEvent` returned `null` (`event`). |
+| [`StoredEventRefusal`](#StoredEventRefusal) | Type | stable | Why a stored event cell did not decode: its value is not text (`not-text`), its key carries no integer sequence (`key`), its text is not JSON (`json`), `parseEvent` returned `null` (`event`), or it is a recording cell that does not decode as a frame, lacks the frame its delta needs, or fails its checksum (FrameRefusal). |
+| [`StoredFrame`](#StoredFrame) | Type | stable | One stored cell read as a frame of the log. |
 | [`survivingEffects`](#survivingEffects) | Function | stable | RE-EMIT ON ACTIVATION. |
 | [`WS_READY_STATE_OPEN`](#WS_READY_STATE_OPEN) | Variable | stable | The OPEN `readyState` value (`WebSocket.READY_STATE_OPEN` in the Cloudflare runtime). |
 
@@ -896,6 +903,8 @@ function emptyLedger<E>(): PendingEffectsLedger<E>
 
 ```ts
 interface EventLogHead {
+  /** The format of the log's first cell, or `null` when it has none. */
+  readonly format: LogFormat | null;
   readonly lastSeq: number;
   readonly snapshot: boolean;
 }
@@ -928,6 +937,17 @@ interface EventLogReader<M> {
    * dropped, and text that is not JSON throws.
    */
   readEvents(range?: EventLogRange): AsyncIterable<PersistedEvent<M>>;
+  /**
+   * Every stored cell in range as a StoredFrame, in `seq` order, with
+   * refusals reported instead of thrown. With `evidence`, each recording
+   * frame's State and Cmds are rebuilt; a delta whose basis is missing or whose
+   * checksum fails is refused. Only the current basis is held, and the frames
+   * before the range that a delta needs are read in one bounded page.
+   */
+  readFrames(
+    range?: StoredEventRange,
+    options?: FrameReadOptions,
+  ): AsyncIterable<StoredFrame<M>>;
   /** The log's head, or `null` when neither meta nor snapshot cell exists. */
   readHead(): Promise<EventLogHead | null>;
   /**
@@ -985,6 +1005,15 @@ interface EventSourcedOptions<S, M> extends EventLogReaderOptions<M> {
    */
   readonly onReady?: (state: S) => void;
   /**
+   * Hears a recording whose last frames cannot be rebuilt, once per `load()`.
+   * Evidence is not State: the Msgs and the snapshot rebuild the State exactly,
+   * so restore still succeeds and the next frame is written whole, as a new
+   * basis for the frames after it. This reports which frames are broken; a read
+   * of them with `readFrames` still refuses them. Default: a `console.warn`.
+   * A hook that throws is warned about and does not fail the restore.
+   */
+  readonly onRecordingBreak?: (broken: RecordingBreak) => void;
+  /**
    * Boundary parse for the persisted SNAPSHOT cell (the `S` blob). Returns `S`
    * on a recognized shape, `null` on an unrecognized one, and must NOT throw.
    * A present snapshot that returns `null` refuses restore; it never falls
@@ -992,6 +1021,19 @@ interface EventSourcedOptions<S, M> extends EventLogReaderOptions<M> {
    * non-array object as `S`.
    */
   readonly parse?: (raw: unknown) => S | null;
+  /**
+   * Record each boundary's evidence. A log this store starts is written as a
+   * recording: an `init` frame for every boot save, carrying `provenance`, and
+   * a `step` frame for every applied Msg, each with the State after it and the
+   * Cmds the engine started for it. A log already written as bare messages
+   * keeps being written that way; its missing evidence is never invented.
+   * A recording log is written as one whatever this option says, and gets no
+   * `init` frame without it.
+   */
+  readonly recording?: {
+    /** JSON written into every `init` frame, unread by the store. */
+    readonly provenance: unknown;
+  };
   /**
    * Automatic retries after an unfinished restore. Default 1: an initial
    * attempt and one retry; a second unfinished attempt refuses before reading
@@ -1022,8 +1064,10 @@ interface EventSourcedStore<S, M> {
    * when `snapshotEvery` events have accumulated, writes the snapshot, all in
    * one storage transaction that settles before the engine starts the
    * transition's Cmds. A save without a Msg (the boot save, the flush at
-   * `stop()`) appends nothing. A write that fails rejects the save and leaves
-   * the stored bytes as they were. `migrate` forwards to `parse`.
+   * `stop()`) appends nothing, except that the boot save of a recording
+   * (`recording`) appends an `init` frame; a recording's frames are not Msgs,
+   * so restore skips them. A write that fails rejects the save and leaves the
+   * stored bytes as they were. `migrate` forwards to `parse`.
    *
    * Its `load()` also takes the log for this isolate. A store built earlier on
    * the same storage can no longer write: a `save` or `snapshotNow()` it called
@@ -1093,6 +1137,14 @@ interface EventSourcedStore<S, M> {
 }
 ```
 
+<a id="EvidenceEncoding"></a>
+
+### `EvidenceEncoding`
+
+```ts
+type EvidenceEncoding = StoredEvidence["encoding"]
+```
+
 <a id="ExecutedStep"></a>
 
 ### `ExecutedStep`
@@ -1142,6 +1194,43 @@ function foldApplied(events: Iterable<AppliedEffectsEvent>): AppliedEffects
 function foldLedger<E>(
   events: Iterable<EffectLedgerEvent<E>>,
 ): PendingEffectsLedger<E>
+```
+
+<a id="FrameEvidence"></a>
+
+### `FrameEvidence`
+
+```ts
+interface FrameEvidence {
+  /** `null` when the engine did not report the Cmds. */
+  readonly cmds: readonly unknown[] | null;
+  readonly state: unknown;
+}
+```
+
+<a id="FrameReadOptions"></a>
+
+### `FrameReadOptions`
+
+```ts
+interface FrameReadOptions {
+  /**
+   * Rebuild each recording frame's evidence. `"verify"` rebuilds and checks
+   * it, refusing a frame that does not rebuild, but yields no evidence.
+   * Default `false`.
+   */
+  readonly evidence?: boolean | "verify";
+  /** Read the range from its highest `seq` down. Evidence is not rebuilt. */
+  readonly reverse?: boolean;
+}
+```
+
+<a id="FrameRefusal"></a>
+
+### `FrameRefusal`
+
+```ts
+type FrameRefusal = "basis" | "checksum" | "frame"
 ```
 
 <a id="HibernatableCtx"></a>
@@ -1220,6 +1309,14 @@ function isApplied(applied: AppliedEffects, key: string): boolean
 
 ```ts
 function isOwed<E>(ledger: PendingEffectsLedger<E>, id: number): boolean
+```
+
+<a id="LogFormat"></a>
+
+### `LogFormat`
+
+```ts
+type LogFormat = "messages" | "recording"
 ```
 
 <a id="mintRunToken"></a>
@@ -1510,6 +1607,18 @@ function rebuildProjection<Model, Msg extends { _tag: string }, View>(
     readonly msg: Msg | null;
   }[],
 ): ProjectionRunner<Model, Msg, View>
+```
+
+<a id="RecordingBreak"></a>
+
+### `RecordingBreak`
+
+```ts
+interface RecordingBreak {
+  readonly fromSeq: number;
+  readonly reason: FrameRefusal;
+  readonly toSeq: number;
+}
 ```
 
 <a id="registerHibernatableSocket"></a>
@@ -2093,7 +2202,44 @@ interface StoredEventRange extends EventLogRange {
 ### `StoredEventRefusal`
 
 ```ts
-type StoredEventRefusal = "event" | "json" | "key" | "not-text"
+type StoredEventRefusal = "not-text" | "key" | "json" | "event" | FrameRefusal
+```
+
+<a id="StoredFrame"></a>
+
+### `StoredFrame`
+
+```ts
+type StoredFrame<M> =
+  | {
+    readonly _tag: "message";
+    readonly event: M;
+    readonly key: string;
+    readonly messageBytes: number;
+    readonly seq: number;
+    readonly serializedBytes: number;
+  }
+  | {
+    readonly _tag: "step";
+    readonly encoding: EvidenceEncoding;
+    readonly event: M;
+    readonly evidence?: FrameEvidence;
+    readonly key: string;
+    readonly messageBytes: number;
+    readonly seq: number;
+    readonly serializedBytes: number;
+  }
+  | {
+    readonly _tag: "init";
+    readonly encoding: EvidenceEncoding;
+    readonly evidence?: FrameEvidence;
+    readonly key: string;
+    readonly provenance: unknown;
+    readonly restored: boolean;
+    readonly seq: number;
+    readonly serializedBytes: number;
+  }
+  | Extract<StoredEvent<M>, { _tag: "refused" }>
 ```
 
 <a id="survivingEffects"></a>
