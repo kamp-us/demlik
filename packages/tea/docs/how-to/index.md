@@ -102,6 +102,10 @@ guides use are each defined in the [glossary](../glossary.md).
   `defineAgent(cfg).with({ interpret })` to give one tool a behaviour the [lid](../glossary.md#lid) has
   no option for — a queue, an audit log — without rebuilding the agent with
   `createAgent`.
+- [Keep an agent's domain state in its Model](./keep-domain-state-in-the-model.md) —
+  give `defineAgent` a `domain: { init, step }` that folds each settled turn,
+  tool outcome, nudge and compaction into a slice `stopWhen` and
+  `continueWhen` read as `state.domain`, saved and replayed with the run.
 - [Delegate to a sub-agent](./delegate-to-a-sub-agent.md) — wrap a child
   `defineAgent` with `agentTool` so a parent agent calls it like a tool and
   waits for its typed result, with the child's run under its own Store, so an

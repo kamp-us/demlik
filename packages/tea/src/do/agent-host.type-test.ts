@@ -70,3 +70,34 @@ createAgentHost({
   toSseFrame: () => null,
   onError: () => {},
 });
+
+const counted = defineAgent({
+  instructions: "",
+  tools: [echo],
+  model: async () => ({ content: "", toolCalls: [] }),
+  domain: {
+    init: () => ({ turns: 0 }),
+    step: (slice, event) =>
+      event._tag === "turn" ? { turns: slice.turns + 1 } : slice,
+  },
+}).machine("domain");
+declare const countedStore: Store<
+  DefinedAgentState<typeof echo, { readonly turns: number }>
+>;
+const countedHost = createAgentHost({
+  buildMachine: () => counted,
+  ctx: {},
+  run,
+  store: countedStore,
+  toSseFrame: () => null,
+  onError: () => {},
+});
+countedHost.runtime().then((runtime) => {
+  const turns: number = runtime.getState().domain.turns;
+  return turns;
+});
+countedHost.result().then((state) => state?.domain.turns);
+host.runtime().then((runtime) => {
+  // @ts-expect-error A host built without a domain has no `domain` key.
+  return runtime.getState().domain;
+});
