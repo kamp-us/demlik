@@ -159,7 +159,8 @@
     "verify-optional-peer-install": "node scripts/verify-optional-peer-install.mjs"
   },
   "dependencies": {
-    "@standard-schema/spec": "catalog:"
+    "@standard-schema/spec": "catalog:",
+    "fossil-delta": "catalog:"
   },
   "peerDependencies": {
     "@opentelemetry/api": "catalog:peers",
