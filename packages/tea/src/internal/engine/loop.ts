@@ -68,6 +68,7 @@ import type {
   PersistedLogRecord,
   RuntimeErrorContext,
   RuntimeErrorPhase,
+  SaveBoundary,
   Store,
 } from "../../runtime-types";
 import {
@@ -1322,12 +1323,13 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
     cmds: readonly C[],
     // The State is the store's own (a restored boot): nothing to write.
     saved = false,
+    boundary: SaveBoundary = { _tag: "step", cmds },
   ): Promise<void> {
     state = next;
     saveStatus = { _tag: saved ? "saved" : "pending" };
     if (store && gate !== "abandoned" && !saved) {
       try {
-        await store.save(next, msg);
+        await store.save(next, msg, boundary);
         persisted = next;
         saveStatus = { _tag: "saved" };
       } catch (error) {
@@ -1413,11 +1415,13 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
     // A wake (`boot: "restored"`, ADR 0039): init's Cmds are not run, and the
     // State is written only if init moved it off what the store holds.
     const wake = config.boot === "restored" && loaded !== null;
+    const started = wake ? [] : cmds;
     await commit(
       initial,
       undefined,
-      wake ? [] : cmds,
+      started,
       wake && Object.is(initial, loaded),
+      { _tag: "init", cmds: started },
     );
   }
 
@@ -1626,7 +1630,7 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
       bootError === null
     ) {
       try {
-        await store.save(state);
+        await store.save(state, undefined, { _tag: "stop" });
       } catch (error) {
         report(error, "stop-save");
       }

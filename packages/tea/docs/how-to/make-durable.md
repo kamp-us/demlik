@@ -92,6 +92,13 @@ process restart. The optional `doEventSourcedStore` also records each applied
 message from `save`, before that transition's commands run; see
 [snapshot restore versus replay](../explanation/durability-model.md#event-log-replay).
 
+`save` also receives a third argument, a
+[`SaveBoundary`](../reference/tea.md#SaveBoundary), that says which boundary the
+save is: `init` for the State `init` produced and the Cmds the engine starts for
+it, `step` for an applied Msg's transition and its Cmds, or `stop` for the flush
+at `stop()`. A store that keeps a recording reads the State and the Cmds there;
+every other store ignores it, as the `memStore` above does.
+
 ## 2. Boot with the Store, and let it persist
 
 ```ts

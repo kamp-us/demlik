@@ -658,12 +658,28 @@ export function definePort<T>(name: string): Port<T> {
  * A store that keeps only the State can ignore it. The boot save and the final
  * flush at `stop()` carry no Msg, and a transition that folds to `null` is not
  * saved at all.
+ *
+ * The third argument, {@link SaveBoundary}, says which boundary the save is:
+ * the State `init` produced and the Cmds it starts, an applied Msg's
+ * transition and its Cmds, or the flush at `stop()`. A recording store keeps
+ * the evidence it carries; others ignore it.
  */
 export interface Store<S> {
   load(): Promise<unknown>;
-  save(state: S, msg?: unknown): Promise<void>;
+  save(state: S, msg?: unknown, boundary?: SaveBoundary): Promise<void>;
   migrate(raw: unknown): Migrated<S>;
 }
+
+/**
+ * Which boundary a {@link Store.save} records. `init` is the State `init`
+ * produced at boot, with the Cmds the engine starts for it (`[]` when it
+ * starts none). `step` is an applied Msg's transition, with the Cmds it
+ * starts. `stop` is the final flush.
+ */
+export type SaveBoundary =
+  | { readonly _tag: "init"; readonly cmds: readonly unknown[] }
+  | { readonly _tag: "step"; readonly cmds: readonly unknown[] }
+  | { readonly _tag: "stop" };
 
 /**
  * What `Store.migrate` answers: the parsed `S`, `null` when nothing was saved,
