@@ -348,6 +348,18 @@ logged store in steps 5–6.
    needed to rediscover the sequence. A projection with an older checkpoint
    must resume from its own saved sequence, rather than skipping to the head.
 
+5. To keep evidence of each boundary, pass `recording: { provenance }`. The
+   store then writes a recording: an `init` frame for each boot, carrying your
+   `provenance` (any JSON, unread by the store), and a `step` frame for each
+   applied Msg, each holding the State after it and the Cmds the engine started
+   for it. A log already written as bare messages keeps being written that way,
+   since its missing evidence is never invented. A recording stays a recording
+   without the option, and gets no `init` frame. Restore folds the step frames
+   and skips the init frames, and `snapshotEvery` counts Msgs only. Evidence is
+   stored as a delta against the frame before it, so a restart reads the last
+   frames to continue the chain; if they cannot be rebuilt, restore refuses with
+   `StoreRefusedError`.
+
 A host that reads an agent's log without loading it — its head, committed
 sequence or events in a range — uses
 [`doEventLogReader`](../reference/do.md#doEventLogReader) with the store's options.

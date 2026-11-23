@@ -29,6 +29,13 @@
  *      use; it is reused here, not reinvented (ADR 0003: "the fold already
  *      exists; wire it to Store").
  *
+ * With `recording`, the store keeps evidence instead of bare Msgs. Each cell is a
+ * frame: an `init` frame for every boot save and a `step` frame for every
+ * applied Msg, each holding the State after it and the Cmds the engine started
+ * for it (see `./recording-frames`). The recovery fold skips the `init` frames,
+ * and `snapshotEvery` counts only Msgs, so a recording snapshots, restores and
+ * reads (`doEventLogReader`) like the log of Msgs it contains.
+ *
  * The "recovered/ready" signal (recovery.md `RecoveryCompleted`) is delivered
  * exactly once per activation via `onReady`, EVEN for a fresh actor with an
  * empty log, and is documented to be idempotent (it may fire again on a later
@@ -64,13 +71,14 @@
  * its recovery never runs a committed reducer again. Do not give one run both.
  */
 
-import type { Cmd, Machine, Store, Sub } from "../index";
+import type { Cmd, Machine, SaveBoundary, Store, Sub } from "../index";
 import { foldMsgs } from "../index";
 import {
   type Basis,
   cellFormatOf,
   type EncodedFrame,
   type EvidenceEncoding,
+  encodeFrame,
   type FrameEvidence,
   type FrameRefusal,
   FULL_FRAME_EVERY,
@@ -213,6 +221,19 @@ export interface EventSourcedOptions<S, M> extends EventLogReaderOptions<M> {
    * replay).
    */
   readonly onReady?: (state: S) => void;
+  /**
+   * Record each boundary's evidence. A log this store starts is written as a
+   * recording: an `init` frame for every boot save, carrying `provenance`, and
+   * a `step` frame for every applied Msg, each with the State after it and the
+   * Cmds the engine started for it. A log already written as bare messages
+   * keeps being written that way; its missing evidence is never invented.
+   * A recording log is written as one whatever this option says, and gets no
+   * `init` frame without it.
+   */
+  readonly recording?: {
+    /** JSON written into every `init` frame, unread by the store. */
+    readonly provenance: unknown;
+  };
   readonly keys?: EventLogReaderOptions<M>["keys"] & {
     /** Restore-attempt cell. Default: `${meta}/restore-attempt`. */
     readonly restoreAttempt?: string;
@@ -257,8 +278,10 @@ export interface EventSourcedStore<S, M> {
    * when `snapshotEvery` events have accumulated, writes the snapshot, all in
    * one storage transaction that settles before the engine starts the
    * transition's Cmds. A save without a Msg (the boot save, the flush at
-   * `stop()`) appends nothing. A write that fails rejects the save and leaves
-   * the stored bytes as they were. `migrate` forwards to `parse`.
+   * `stop()`) appends nothing, except that the boot save of a recording
+   * (`recording`) appends an `init` frame; a recording's frames are not Msgs,
+   * so restore skips them. A write that fails rejects the save and leaves the
+   * stored bytes as they were. `migrate` forwards to `parse`.
    *
    * Its `load()` also takes the log for this isolate. A store built earlier on
    * the same storage can no longer write: a `save` or `snapshotNow()` it called
@@ -932,6 +955,17 @@ export function doEventSourcedStore<
   // The log's generation in this isolate: a `load()` takes it, and a write that
   // was called under an older one is refused at its write point (./save-fence).
   const fence = saveFence(storage, metaKey);
+  // The format this log is written in, learned from its first cell (or, for a
+  // log with none, from `recording`) and reset by every `load()`.
+  let format: LogFormat | null = null;
+  // The evidence bytes of the frame at `lastSeq`, which the next frame's delta
+  // is taken from: `null` when a log is written as messages, or until one is
+  // written whole.
+  let basis: Basis | null = null;
+  // The Msg events since the last snapshot, init frames not counted, so that
+  // `snapshotEvery` counts the same events for either format. `null` until
+  // `load()` has counted them.
+  let sinceSnapshot: number | null = null;
   // Idempotency latch for onReady within a single activation.
   let readyFired = false;
   // One write at a time: `snapshotNow()` is called by the host, outside the
@@ -939,7 +973,7 @@ export function doEventSourcedStore<
   let writing: Promise<unknown> = Promise.resolve();
   // The read side of the log: the one owner of the event-key convention and
   // the stored-event decode, shared with hosts that read without loading.
-  const reader = doEventLogReader<M>(storage, opts);
+  const { reader, basisBefore } = openLogReader(storage, opts);
 
   async function readMeta(): Promise<number> {
     const raw = await storage.get<string>(metaKey);
@@ -987,12 +1021,44 @@ export function doEventSourcedStore<
    */
   const readEvents = reader.readEvents;
 
-  /** Fold one decoded event at a time, retaining neither the tail nor its Cmds. */
-  async function readLog(state: S, afterSeq: number): Promise<S> {
-    for await (const { event } of readEvents({ fromSeq: afterSeq + 1 })) {
-      state = foldMsgs(machine, state, [event]);
+  /**
+   * Fold one decoded event at a time, retaining neither the tail nor its Cmds,
+   * and count the init frames the fold skips. A recording cell that is not a
+   * frame refuses the restore, as text that is not JSON does.
+   */
+  async function readLog(
+    state: S,
+    afterSeq: number,
+  ): Promise<{ state: S; inits: number }> {
+    let inits = 0;
+    for await (const frame of reader.readFrames({ fromSeq: afterSeq + 1 })) {
+      if (frame._tag === "init") {
+        inits += 1;
+        continue;
+      }
+      if (frame._tag === "refused") {
+        if (frame.reason === "json") throw frame.cause;
+        if (frame.reason === "frame") {
+          throw new Error("@demlik/tea/do: recording frame was refused");
+        }
+        continue;
+      }
+      state = foldMsgs(machine, state, [frame.event]);
     }
-    return state;
+    return { state, inits };
+  }
+
+  /** The format this log is written in: its first cell's, or `recording`'s when it has none. */
+  async function ensureFormat(): Promise<LogFormat> {
+    if (format !== null) return format;
+    const first = await storage.get<unknown>(eventKey(eventPrefix, 1));
+    format =
+      first === undefined || first === null
+        ? opts.recording === undefined
+          ? "messages"
+          : "recording"
+        : cellFormatOf(first);
+    return format;
   }
 
   async function load(): Promise<S> {
@@ -1016,13 +1082,22 @@ export function doEventSourcedStore<
     const { state: snapshot, seq: snapSeq } = await readSnapshot();
     const committedSeq = await readMeta();
     const initialState = snapshot ?? machine.init(null, ctx)[0];
-    const state = await readLog(initialState, snapSeq);
+    const { state, inits } = await readLog(initialState, snapSeq);
     if (parse(state) === null) {
       throw new Error("@demlik/tea/do: recovered state was refused");
+    }
+    format = null;
+    const written = await ensureFormat();
+    const next =
+      written === "recording" ? await basisBefore(committedSeq + 1) : null;
+    if (written === "recording" && committedSeq > 0 && next === null) {
+      throw new Error("@demlik/tea/do: recorded evidence could not be rebuilt");
     }
     latestState = state;
     lastSeq = committedSeq;
     snapshotSeq = snapSeq;
+    basis = next;
+    sinceSnapshot = Math.max(0, committedSeq - snapSeq - inits);
     if (!readyFired) opts.onReady?.(state);
     await storage.delete(restoreAttemptKey);
     readyFired = true;
@@ -1044,29 +1119,65 @@ export function doEventSourcedStore<
       return result;
     },
 
-    async save(state: S, msg?: unknown): Promise<void> {
-      // Boot and the final flush at `stop()` carry no Msg: there is no event to
-      // write, and their State is not one an event produced.
-      if (msg === undefined) return;
+    async save(
+      state: S,
+      msg?: unknown,
+      boundary?: SaveBoundary,
+    ): Promise<void> {
+      const init = boundary?._tag === "init" ? boundary : null;
+      // The flush at `stop()` has no event to write. The boot save has none
+      // either, unless the log is a recording, which opens each boot with a frame.
+      if (boundary?._tag === "stop") return;
+      if (msg === undefined && (init === null || opts.recording === undefined))
+        return;
       const admit = fence.issue();
       await exclusive(async () => {
         const seq = (await ensureLastSeq()) + 1;
+        const written = await ensureFormat();
+        // A log written as messages never gets a frame: its evidence is not invented.
+        if (init !== null && written !== "recording") return;
         // Count-based retention (Akka `RetentionCriteria.snapshotEvery`). When
-        // the events since the last snapshot reach `snapshotEvery`, checkpoint
-        // the post-this-event State under THIS seq, in the same transaction as
-        // the event, so the snapshot's `seq` and `state` agree and the recovery
-        // fold replays only events strictly after `seq`. A snapshot bounds
-        // replay length; it never changes the fold's result (snapshotting.md).
-        const snapshotDue = seq - snapshotSeq >= snapshotEvery;
+        // the Msg events since the last snapshot reach `snapshotEvery`,
+        // checkpoint the post-this-event State under THIS seq, in the same
+        // transaction as the event, so the snapshot's `seq` and `state` agree
+        // and the recovery fold replays only events strictly after `seq`. A
+        // snapshot bounds replay length; it never changes the fold's result
+        // (snapshotting.md). An init frame is not an event and is never one.
+        const since = sinceSnapshot ?? seq - 1 - snapshotSeq;
+        const snapshotDue = init === null && since + 1 >= snapshotEvery;
+        const cell =
+          written === "messages"
+            ? { json: JSON.stringify(msg), basis: null }
+            : await encodeFrame(
+                seq,
+                init === null
+                  ? { frame: "step", msgJson: JSON.stringify(msg) }
+                  : {
+                      frame: "init",
+                      restored: seq > 1,
+                      provenance: opts.recording?.provenance ?? null,
+                    },
+                {
+                  state,
+                  cmds: boundary === undefined ? null : boundary.cmds,
+                },
+                basis,
+              );
         await persist(
           {
-            event: { seq, json: JSON.stringify(msg) },
+            event: { seq, json: cell.json },
             snapshot: snapshotDue ? { seq, state } : null,
           },
           admit,
         );
         lastSeq = seq;
+        basis = cell.basis;
+        if (init !== null) {
+          sinceSnapshot = since;
+          return;
+        }
         latestState = state;
+        sinceSnapshot = snapshotDue ? 0 : since + 1;
         if (snapshotDue) snapshotSeq = seq;
       });
     },
@@ -1136,6 +1247,7 @@ export function doEventSourcedStore<
       if (latestState === null || seq <= snapshotSeq) return false;
       await persist({ snapshot: { seq, state: latestState } }, admit);
       snapshotSeq = seq;
+      sinceSnapshot = 0;
       return true;
     });
   }

@@ -1008,6 +1008,19 @@ interface EventSourcedOptions<S, M> extends EventLogReaderOptions<M> {
    */
   readonly parse?: (raw: unknown) => S | null;
   /**
+   * Record each boundary's evidence. A log this store starts is written as a
+   * recording: an `init` frame for every boot save, carrying `provenance`, and
+   * a `step` frame for every applied Msg, each with the State after it and the
+   * Cmds the engine started for it. A log already written as bare messages
+   * keeps being written that way; its missing evidence is never invented.
+   * A recording log is written as one whatever this option says, and gets no
+   * `init` frame without it.
+   */
+  readonly recording?: {
+    /** JSON written into every `init` frame, unread by the store. */
+    readonly provenance: unknown;
+  };
+  /**
    * Automatic retries after an unfinished restore. Default 1: an initial
    * attempt and one retry; a second unfinished attempt refuses before reading
    * the snapshot or journal. Must be a non-negative safe integer. A thrown
@@ -1037,8 +1050,10 @@ interface EventSourcedStore<S, M> {
    * when `snapshotEvery` events have accumulated, writes the snapshot, all in
    * one storage transaction that settles before the engine starts the
    * transition's Cmds. A save without a Msg (the boot save, the flush at
-   * `stop()`) appends nothing. A write that fails rejects the save and leaves
-   * the stored bytes as they were. `migrate` forwards to `parse`.
+   * `stop()`) appends nothing, except that the boot save of a recording
+   * (`recording`) appends an `init` frame; a recording's frames are not Msgs,
+   * so restore skips them. A write that fails rejects the save and leaves the
+   * stored bytes as they were. `migrate` forwards to `parse`.
    *
    * Its `load()` also takes the log for this isolate. A store built earlier on
    * the same storage can no longer write: a `save` or `snapshotNow()` it called
