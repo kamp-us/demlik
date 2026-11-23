@@ -508,6 +508,8 @@ export type AgentSnapshotConfig =
  *                 `TC["_tag"]` — with no laundering cast. Defaults to `Cmd` for
  *                 the consumer that does not care to name its tool Cmd.
  *   - `Msg`     — the model's message shape (threaded through the llm-call loader).
+ *   - `D`       — the host's domain slice ({@link AgentDomain}). Defaults to
+ *                 `never`: no `domain` key on the Model.
  */
 export interface AgentConfigCore<
   Stage,
@@ -516,6 +518,7 @@ export interface AgentConfigCore<
   R,
   TC extends Cmd = Cmd,
   Msg = unknown,
+  D = never,
 > {
   // ---- monitored-run seam (the outer pipeline) ----------------------------
   /** The ordered stages. Omit / empty → a single-shot run (one agentic stage). */
@@ -638,7 +641,7 @@ export interface AgentConfigCore<
    * it with the same state and must get the same answer. It is config, not
    * Model: a resumed run consults the predicate the config passed to THIS boot.
    */
-  readonly stopWhen?: (state: AgentState<Stage, P, O, R>) => boolean;
+  readonly stopWhen?: (state: AgentStateOf<Stage, P, O, R, D>) => boolean;
   /**
    * Consulted when a turn asks for no tools. `null` lets the stage retire;
    * a string keeps it running and is read next turn as a user message.
@@ -649,7 +652,15 @@ export interface AgentConfigCore<
    * get the same answer. It is config, not Model: a resumed run consults the
    * predicate the config passed to THIS boot.
    */
-  readonly continueWhen?: (state: AgentState<Stage, P, O, R>) => string | null;
+  readonly continueWhen?: (
+    state: AgentStateOf<Stage, P, O, R, D>,
+  ) => string | null;
+  /**
+   * The host's own domain state, folded from the transcript events the kernel
+   * settles and kept in the Model under `domain`. See {@link AgentDomain}.
+   * Omit → the Model has no `domain` key and the reducer is unchanged.
+   */
+  readonly domain?: AgentDomain<D, R>;
 
   // ---- determinism seam ----------------------------------------------------
   /**
@@ -675,7 +686,8 @@ export type AgentConfig<
   R,
   TC extends Cmd = Cmd,
   Msg = unknown,
-> = AgentConfigCore<Stage, P, O, R, TC, Msg> &
+  D = never,
+> = AgentConfigCore<Stage, P, O, R, TC, Msg, D> &
   AgentSnapshotConfig &
   AgentCompactionConfig<R, Msg>;
 
@@ -834,6 +846,109 @@ export interface AgentState<
    * what a closure happens to hold now.
    */
   readonly instructions: string | null;
+}
+
+// ===========================================================================
+// Domain — the host's own slice, folded from the transcript events the kernel
+// already settles.
+// ===========================================================================
+
+/**
+ * One transcript event the kernel just settled, handed to
+ * {@link AgentDomain.step}. Each one is folded at exactly one site in the
+ * reducer, in transcript order:
+ *
+ *   - `turn`       — a model turn settled. `turn` carries its `provider` and
+ *                    `usage` as the model reported them.
+ *   - `tool`       — a tool call settled: its handler's success or failure, or
+ *                    the ladder's `timeout` / `retry_exhausted`. A late result
+ *                    for a call that already settled folds nothing.
+ *   - `nudge`      — `continueWhen` answered an empty turn with feedback.
+ *   - `compaction` — the oldest `folded` turns were replaced by `summary`.
+ *
+ * A brain retry, a re-fired `boot`, a failed compaction and a ladder retry
+ * fold nothing, so they step nothing. `at` is the transition's clock: `step`
+ * reads it instead of a clock of its own, which keeps a replay exact.
+ *
+ * @typeParam R - the agent's tool result type.
+ */
+export type AgentDomainEvent<R> =
+  | { readonly _tag: "turn"; readonly at: number; readonly turn: AgentTurn }
+  | {
+      readonly _tag: "tool";
+      readonly at: number;
+      readonly call: ToolCall;
+      readonly outcome: ToolOutcome<R>;
+    }
+  | { readonly _tag: "nudge"; readonly at: number; readonly nudge: Nudge }
+  | {
+      readonly _tag: "compaction";
+      readonly at: number;
+      readonly folded: number;
+      readonly summary: AgentTurn;
+    };
+
+/**
+ * The host's own domain state, kept in the agent's Model under `domain` and
+ * updated by one pure fold over {@link AgentDomainEvent}s. Configure it and the
+ * slice is persisted by every Store, replayed by `replayTrace`, frozen in dev
+ * like the rest of the Model, and read by `stopWhen` / `continueWhen` as
+ * `state.domain`, already holding the event that just settled.
+ *
+ *   - `init`  — the slice a new run starts from. A `start` for a new `runId`
+ *               resets to it; a repeated `start` for the same `runId` does not.
+ *   - `step`  — the slice after one event. It must be PURE: read no clock and
+ *               no randomness (use `event.at`), return new objects rather than
+ *               mutate (the slice it receives is frozen in dev), and emit
+ *               nothing. Effects stay in tool cells.
+ *
+ * The slice must be plain JSON data — no `Map`, `Set`, `Date`, class instance
+ * or function — because it is saved and compared like every other field of the
+ * Model.
+ *
+ * A Model saved without the slice is seeded from `init` while the run is
+ * `idle`; met mid-run it throws {@link MissingAgentDomainError}, because
+ * seeding there would silently restart the position. Upgrade such saves in the
+ * Store's `migrate`.
+ *
+ * @typeParam D - the domain slice.
+ * @typeParam R - the agent's tool result type.
+ */
+export interface AgentDomain<D, R> {
+  readonly init: () => D;
+  readonly step: (slice: D, event: AgentDomainEvent<R>) => D;
+}
+
+/**
+ * The agent's Model with its domain slice: {@link AgentState} when no domain is
+ * configured (`D = never`), and {@link AgentState} plus `domain: D` otherwise.
+ */
+export type AgentStateOf<
+  Stage,
+  P extends string,
+  O extends Record<P, unknown>,
+  R,
+  D = never,
+> = [D] extends [never]
+  ? AgentState<Stage, P, O, R>
+  : AgentState<Stage, P, O, R> & { readonly domain: D };
+
+/**
+ * Thrown when an agent configured with a `domain` meets a Model that is mid-run
+ * and has no domain slice — a save from before the domain was configured.
+ * Seeding `init` there would restart the slice at a position the run has long
+ * passed, so the transition refuses instead. Upgrade the save in the Store's
+ * `migrate`.
+ */
+export class MissingAgentDomainError extends Error {
+  override readonly name = "MissingAgentDomainError";
+  readonly _tag = "MissingAgentDomainError" as const;
+  constructor(readonly runId: string | null) {
+    super(
+      "@demlik/tea: this agent keeps a domain slice, but the Model it met is " +
+        "mid-run and has none. Upgrade the saved Model in the Store's `migrate`.",
+    );
+  }
 }
 
 // ===========================================================================
