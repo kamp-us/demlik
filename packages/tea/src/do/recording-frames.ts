@@ -21,6 +21,22 @@ export const RECORDING_PREFIX = `{"tea":"${RECORDING_FORMAT}"`;
 /** A delta chain is cut by a whole frame at least this often. */
 export const FULL_FRAME_EVERY = 32;
 
+/** Which format a log's cells are written in. */
+export type LogFormat = "messages" | "recording";
+
+/** How a frame's evidence is stored. */
+export type EvidenceEncoding = StoredEvidence["encoding"];
+
+/**
+ * The format of one stored cell. Any cell that starts `{"tea":` is a recording
+ * cell, so a format this build does not know is refused, never read as a Msg.
+ */
+export function cellFormatOf(value: unknown): LogFormat {
+  return typeof value === "string" && value.startsWith('{"tea":')
+    ? "recording"
+    : "messages";
+}
+
 /** A frame's evidence: the State after it and the Cmds it started. */
 export interface FrameEvidence {
   readonly state: unknown;

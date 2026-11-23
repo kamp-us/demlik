@@ -66,6 +66,13 @@
 
 import type { Cmd, Machine, Store, Sub } from "../index";
 import { foldMsgs } from "../index";
+import {
+  cellFormatOf,
+  type EvidenceEncoding,
+  type LogFormat,
+  parseFrame,
+  RECORDING_PREFIX,
+} from "./recording-frames";
 import { saveFence } from "./save-fence";
 
 /** Default cell prefixes. Chosen to sort log keys lexicographically by seq. */
@@ -333,6 +340,8 @@ const defaultParseEvent = <M>(raw: unknown): M | null =>
 export interface EventLogHead {
   readonly lastSeq: number;
   readonly snapshot: boolean;
+  /** The format of the log's first cell, or `null` when it has none. */
+  readonly format: LogFormat | null;
 }
 
 /**
@@ -346,13 +355,20 @@ export interface StoredEventRange extends EventLogRange {
 /**
  * Why a stored event cell did not decode: its value is not text (`not-text`),
  * its key carries no integer sequence (`key`), its text is not JSON (`json`),
- * or `parseEvent` returned `null` (`event`).
+ * `parseEvent` returned `null` (`event`), or it is a recording cell that does
+ * not decode as a frame (`frame`).
  */
-export type StoredEventRefusal = "not-text" | "key" | "json" | "event";
+export type StoredEventRefusal =
+  | "not-text"
+  | "key"
+  | "json"
+  | "event"
+  | "frame";
 
 /**
  * One stored event cell as read, decoded or refused. `serializedBytes` is the
- * UTF-8 size of the stored text (0 when the value is not text).
+ * UTF-8 size of the stored text (0 when the value is not text); for a step
+ * frame of a recording it is the size of the Msg JSON inside it.
  */
 export type StoredEvent<M> =
   | {
@@ -370,6 +386,41 @@ export type StoredEvent<M> =
       readonly reason: StoredEventRefusal;
       readonly cause?: unknown;
     };
+
+/**
+ * One stored cell read as a frame of the log. A `message` is a cell of a log
+ * written as bare messages. An `init` or `step` frame is a recording frame.
+ * `serializedBytes` is the UTF-8 size of the whole stored text and
+ * `messageBytes` the size of the Msg JSON inside it.
+ */
+export type StoredFrame<M> =
+  | {
+      readonly _tag: "message";
+      readonly key: string;
+      readonly seq: number;
+      readonly serializedBytes: number;
+      readonly messageBytes: number;
+      readonly event: M;
+    }
+  | {
+      readonly _tag: "step";
+      readonly key: string;
+      readonly seq: number;
+      readonly serializedBytes: number;
+      readonly messageBytes: number;
+      readonly event: M;
+      readonly encoding: EvidenceEncoding;
+    }
+  | {
+      readonly _tag: "init";
+      readonly key: string;
+      readonly seq: number;
+      readonly serializedBytes: number;
+      readonly restored: boolean;
+      readonly provenance: unknown;
+      readonly encoding: EvidenceEncoding;
+    }
+  | Extract<StoredEvent<M>, { _tag: "refused" }>;
 
 /**
  * A read-only view over a durable agent's event log, built by
@@ -392,6 +443,11 @@ export interface EventLogReader<M> {
    * dropped, and text that is not JSON throws.
    */
   readEvents(range?: EventLogRange): AsyncIterable<PersistedEvent<M>>;
+  /**
+   * Every stored cell in range as a {@link StoredFrame}, in `seq` order, with
+   * refusals reported instead of thrown. Read in pages of at most 128 rows.
+   */
+  readFrames(range?: StoredEventRange): AsyncIterable<StoredFrame<M>>;
 }
 
 const utf8 = new TextEncoder();
@@ -451,6 +507,78 @@ function decodeStoredEvent<M>(
   return { _tag: "decoded", key, seq: position, serializedBytes, event };
 }
 
+function jsonBytes(value: unknown): number {
+  return utf8.encode(JSON.stringify(value)).byteLength;
+}
+
+type Refused = Extract<StoredFrame<never>, { _tag: "refused" }>;
+
+/** Decode one stored cell as a frame, in whichever format it was written. */
+function decodeStoredFrame<M>(
+  eventPrefix: string,
+  parseEvent: (raw: unknown) => M | null,
+  key: string,
+  value: unknown,
+): StoredFrame<M> {
+  if (typeof value !== "string" || cellFormatOf(value) === "messages") {
+    const stored = decodeStoredEvent(eventPrefix, parseEvent, key, value);
+    if (stored._tag === "refused") return stored;
+    const { event, serializedBytes } = stored;
+    return {
+      _tag: "message",
+      key,
+      seq: stored.seq,
+      serializedBytes,
+      messageBytes: serializedBytes,
+      event,
+    };
+  }
+  const serializedBytes = utf8.encode(value).byteLength;
+  const seq = Number(key.slice(eventPrefix.length));
+  const refused = (reason: Refused["reason"], cause?: unknown): Refused => ({
+    _tag: "refused",
+    key,
+    seq: Number.isSafeInteger(seq) ? seq : null,
+    serializedBytes,
+    reason,
+    ...(cause === undefined ? {} : { cause }),
+  });
+  if (!Number.isSafeInteger(seq)) return refused("key");
+  if (!value.startsWith(RECORDING_PREFIX)) return refused("frame");
+  let raw: unknown;
+  try {
+    raw = JSON.parse(value);
+  } catch (cause) {
+    return refused("json", cause);
+  }
+  const encoded = parseFrame(raw);
+  if (encoded === null) return refused("frame");
+  const { encoding } = encoded.evidence;
+  if (encoded.frame === "init") {
+    const { restored, provenance } = encoded;
+    return {
+      _tag: "init",
+      key,
+      seq,
+      serializedBytes,
+      restored,
+      provenance,
+      encoding,
+    };
+  }
+  const event = parseEvent(encoded.msg);
+  if (event === null) return refused("event");
+  return {
+    _tag: "step",
+    key,
+    seq,
+    serializedBytes,
+    messageBytes: jsonBytes(encoded.msg),
+    event,
+    encoding,
+  };
+}
+
 /**
  * Read a durable agent's event log without waking it.
  *
@@ -481,11 +609,13 @@ export function doEventLogReader<M extends { _tag: string } = { _tag: string }>(
   }
 
   async function readHead(): Promise<EventLogHead | null> {
-    const cells = await storage.get<string>([metaKey, snapshotKey], {
+    const firstKey = eventKey(eventPrefix, 1);
+    const cells = await storage.get<string>([metaKey, snapshotKey, firstKey], {
       noCache: true,
     });
     const meta = cells.get(metaKey);
     const snapshot = cells.get(snapshotKey);
+    const first = cells.get(firstKey);
     const absent = (
       cell: string | undefined | null,
     ): cell is undefined | null => cell === undefined || cell === null;
@@ -493,12 +623,13 @@ export function doEventLogReader<M extends { _tag: string } = { _tag: string }>(
     return {
       lastSeq: absent(meta) ? 0 : parseMeta(meta),
       snapshot: !absent(snapshot),
+      format: absent(first) ? null : cellFormatOf(first),
     };
   }
 
-  async function* readStoredEvents(
+  async function* readFrames(
     range: StoredEventRange = {},
-  ): AsyncGenerator<StoredEvent<M>> {
+  ): AsyncGenerator<StoredFrame<M>> {
     const fromSeq = Math.max(1, Math.ceil(range.fromSeq ?? 1));
     const toSeq = Math.floor(range.toSeq ?? Number.POSITIVE_INFINITY);
     const limit = range.limit ?? Number.POSITIVE_INFINITY;
@@ -521,9 +652,28 @@ export function doEventLogReader<M extends { _tag: string } = { _tag: string }>(
       for (const [key, value] of rows) {
         startAfter = key;
         yielded += 1;
-        yield decodeStoredEvent(eventPrefix, parseEvent, key, value);
+        yield decodeStoredFrame(eventPrefix, parseEvent, key, value);
       }
       if (rows.size < EVENT_PAGE_SIZE || yielded >= limit) return;
+    }
+  }
+
+  async function* readStoredEvents(
+    range: StoredEventRange = {},
+  ): AsyncGenerator<StoredEvent<M>> {
+    for await (const frame of readFrames(range)) {
+      if (frame._tag === "init") continue;
+      if (frame._tag === "refused") {
+        yield frame;
+        continue;
+      }
+      yield {
+        _tag: "decoded",
+        key: frame.key,
+        seq: frame.seq,
+        serializedBytes: frame.messageBytes,
+        event: frame.event,
+      };
     }
   }
 
@@ -542,7 +692,13 @@ export function doEventLogReader<M extends { _tag: string } = { _tag: string }>(
     }
   }
 
-  return { readHead, readCommittedSeq, readStoredEvents, readEvents };
+  return {
+    readHead,
+    readCommittedSeq,
+    readStoredEvents,
+    readEvents,
+    readFrames,
+  };
 }
 
 /**
