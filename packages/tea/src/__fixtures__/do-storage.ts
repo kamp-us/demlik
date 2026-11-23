@@ -75,12 +75,15 @@ export function fakeDoStorage<V = string>(
       readonly start?: string;
       readonly startAfter?: string;
       readonly end?: string;
+      readonly reverse?: boolean;
       readonly limit?: number;
     }): Promise<Map<string, T>> {
       const prefix = options?.prefix ?? "";
       const listed = new Map<string, T>();
-      // The platform lists keys in lexicographic order.
-      for (const key of [...backing.keys()].sort()) {
+      // The platform lists keys in lexicographic order, or in reverse of it.
+      const keys = [...backing.keys()].sort();
+      if (options?.reverse === true) keys.reverse();
+      for (const key of keys) {
         if (
           key.startsWith(prefix) &&
           (options?.start === undefined || key >= options.start) &&

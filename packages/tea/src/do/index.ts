@@ -85,12 +85,15 @@ export {
   type EventLogReaderOptions,
   type EventSourcedOptions,
   type EventSourcedStore,
+  type FrameReadOptions,
   type PersistedEvent,
+  type RecordingBreak,
   type RestoreAttempt,
   RestoreInterruptedError,
   type StoredEvent,
   type StoredEventRange,
   type StoredEventRefusal,
+  type StoredFrame,
 } from "./event-sourced-store";
 // The minimum-viable DO HOST for a `createAgent` runtime — the deferred-tool
 // gateway, auto-boot, WS accept + inbound bridge, runtime→SSE plumbing, the
@@ -186,6 +189,12 @@ export {
   rebuildProjection,
   runProjection,
 } from "./projection";
+export type {
+  EvidenceEncoding,
+  FrameEvidence,
+  FrameRefusal,
+  LogFormat,
+} from "./recording-frames";
 // The HTTP-PULL control carrier (#92) — a hibernation-correct SIBLING to
 // `acceptCommandSocket`. The hands drive a `/step` loop (execute a tool, POST
 // the result, get the next tool); each POST wakes the DO, settles the result

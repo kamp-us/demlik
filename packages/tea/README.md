@@ -14,8 +14,9 @@ Before writing @demlik/tea code, read node_modules/@demlik/tea/AGENTS.md.
 pnpm add @demlik/tea
 ```
 
-The one runtime dependency is `@standard-schema/spec`, a types-only package
-installed for you. [`Cmd.define`](https://github.com/kamp-us/demlik/blob/main/packages/tea/docs/glossary.md#cmd) takes any Standard Schema, so bring the schema
+The runtime dependencies are `@standard-schema/spec`, a types-only package, and
+`fossil-delta`, a small package with none of its own that `@demlik/tea/do` uses to
+store an event log's recordings; both are installed for you. [`Cmd.define`](https://github.com/kamp-us/demlik/blob/main/packages/tea/docs/glossary.md#cmd) takes any Standard Schema, so bring the schema
 library you already use (zod as it is, or Effect Schema through the
 `Cmd.make` that `@demlik/tea/effect` exports). The host and
 testing adapters ride on optional peers you add only for the surface you use:

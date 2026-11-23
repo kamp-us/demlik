@@ -75,6 +75,7 @@ A fenced driver returned by `open()` exposes `fenced: true` and `appendFenced`; 
 | [`TraceAttachment`](#TraceAttachment) | Interface | battery | A Sentry-shaped attachment carrying the full Trace as JSONL. |
 | [`TraceBreadcrumb`](#TraceBreadcrumb) | Interface | battery | A Sentry-shaped breadcrumb. |
 | [`TraceStep`](#TraceStep) | Interface | battery | One recorded transition: the msg, the State after it, and its Cmds. |
+| [`writeTrace`](#writeTrace) | Function | battery | Write a captured Trace into a Store as the frames a live run would have saved: an `init` boundary for `loaded`, then one `step` boundary per recorded transition, each with the State after it and the Cmds it started. |
 
 ## Declarations
 
@@ -817,4 +818,15 @@ interface TraceStep<S, M> {
   readonly msg: M;
   readonly state: S;
 }
+```
+
+<a id="writeTrace"></a>
+
+### `writeTrace`
+
+```ts
+function writeTrace<S, M extends { readonly _tag: string }>(
+  store: Pick<Store<S>, "load" | "save">,
+  trace: Trace<S, M>,
+): Promise<void>
 ```
