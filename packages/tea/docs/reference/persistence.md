@@ -32,7 +32,7 @@ Call `await journalConformance(make, { records: 10000, now: () => performance.no
 
 A fenced driver returned by `open()` exposes `fenced: true` and `appendFenced`; the same call then checks K7's atomic expected-head comparison and competing writers. K7 is skipped for plain drivers, and K8 for non-file fixtures. K3, the atomic-batch case, needs the fixture's interruption controls: a fixture whose `writePoints` returns no point gets K3 `failed` with "Fixture exposes no interruption points", and its other results still stand. See [the host fixture and deliberately broken driver](https://github.com/kamp-us/demlik/blob/main/packages/tea/examples/journal-store.ts) for a runnable example.
 
-## Exports (39)
+## Exports (40)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
