@@ -27,12 +27,17 @@ export type LogFormat = "messages" | "recording";
 /** How a frame's evidence is stored. */
 export type EvidenceEncoding = StoredEvidence["encoding"];
 
+const RECORDING_FAMILY = '{"tea":"recording/';
+
 /**
- * The format of one stored cell. Any cell that starts `{"tea":` is a recording
- * cell, so a format this build does not know is refused, never read as a Msg.
+ * The format of one stored cell. A cell is a recording cell when its text
+ * starts with a `tea` field of `recording/<version>`, so a version this build
+ * does not know is refused, never read as a Msg. A bare Msg with another `tea`
+ * field is a Msg. The one collision is a Msg whose own first field is `tea`,
+ * with a value that starts `recording/`.
  */
 export function cellFormatOf(value: unknown): LogFormat {
-  return typeof value === "string" && value.startsWith('{"tea":')
+  return typeof value === "string" && value.startsWith(RECORDING_FAMILY)
     ? "recording"
     : "messages";
 }
@@ -98,9 +103,30 @@ function isObject(raw: unknown): raw is Record<string, unknown> {
   return raw !== null && typeof raw === "object" && !Array.isArray(raw);
 }
 
+/**
+ * What a recording cell holds apart from its evidence, which is all a fold of
+ * its Msgs needs: an init frame (which a fold skips) or a step frame and its
+ * Msg. `null` when the JSON is not a frame of this format. The evidence is not
+ * read, so a cell whose evidence is unreadable still gives its Msg.
+ */
+export function parseCellMsg(
+  raw: unknown,
+):
+  | { readonly frame: "init" }
+  | { readonly frame: "step"; readonly msg: unknown }
+  | null {
+  if (!isObject(raw) || raw.tea !== RECORDING_FORMAT) return null;
+  if (raw.frame === "init") return { frame: "init" };
+  if (raw.frame === "step" && "msg" in raw) {
+    return { frame: "step", msg: raw.msg };
+  }
+  return null;
+}
+
 /** Parse a recording cell's JSON, or `null` when it is not a frame of this format. */
 export function parseFrame(raw: unknown): EncodedFrame | null {
-  if (!isObject(raw) || raw.tea !== RECORDING_FORMAT) return null;
+  const cell = parseCellMsg(raw);
+  if (cell === null || !isObject(raw)) return null;
   const stored = raw.evidence;
   if (!isObject(stored)) return null;
   if (stored.cmds !== undefined && typeof stored.cmds !== "string") return null;
@@ -119,18 +145,14 @@ export function parseFrame(raw: unknown): EncodedFrame | null {
   } else {
     return null;
   }
-  if (raw.frame === "init" && typeof raw.restored === "boolean") {
-    return {
-      frame: "init",
-      restored: raw.restored,
-      provenance: raw.provenance ?? null,
-      evidence,
-    };
-  }
-  if (raw.frame === "step" && "msg" in raw) {
-    return { frame: "step", msg: raw.msg, evidence };
-  }
-  return null;
+  if (cell.frame === "step") return { frame: "step", msg: cell.msg, evidence };
+  if (typeof raw.restored !== "boolean") return null;
+  return {
+    frame: "init",
+    restored: raw.restored,
+    provenance: raw.provenance ?? null,
+    evidence,
+  };
 }
 
 function toBase64(bytes: Uint8Array): string {

@@ -83,6 +83,7 @@ import {
   type FrameRefusal,
   FULL_FRAME_EVERY,
   type LogFormat,
+  parseCellMsg,
   parseFrame,
   RECORDING_PREFIX,
   readEvidence,
@@ -592,10 +593,43 @@ function jsonBytes(value: unknown): number {
 
 type Refused = Extract<StoredFrame<never>, { _tag: "refused" }>;
 
+/** A recording cell's text, parsed, with the seq its key names; or why it is not one. */
+function openRecordingCell(
+  eventPrefix: string,
+  key: string,
+  value: string,
+):
+  | Refused
+  | {
+      readonly seq: number;
+      readonly serializedBytes: number;
+      readonly raw: unknown;
+    } {
+  const serializedBytes = utf8.encode(value).byteLength;
+  const seq = Number(key.slice(eventPrefix.length));
+  const refused = (reason: Refused["reason"], cause?: unknown): Refused => ({
+    _tag: "refused",
+    key,
+    seq: Number.isSafeInteger(seq) ? seq : null,
+    serializedBytes,
+    reason,
+    ...(cause === undefined ? {} : { cause }),
+  });
+  if (!Number.isSafeInteger(seq)) return refused("key");
+  if (!value.startsWith(RECORDING_PREFIX)) return refused("frame");
+  try {
+    return { seq, serializedBytes, raw: JSON.parse(value) };
+  } catch (cause) {
+    return refused("json", cause);
+  }
+}
+
 /**
  * Decode one stored cell as a frame, in whichever format it was written. The
  * parsed recording cell is returned beside it, evidence still encoded, for a
- * read that rebuilds it. A cell of a log written as bare messages has none.
+ * read that rebuilds it. A cell of a log written as bare messages has none. A
+ * step whose Msg the host refuses (`event`) keeps its parsed cell: only its Msg
+ * is refused, and the deltas after it still rebuild against its evidence.
  */
 function decodeStoredFrame<M>(
   eventPrefix: string,
@@ -619,28 +653,20 @@ function decodeStoredFrame<M>(
       encoded: null,
     };
   }
-  const serializedBytes = utf8.encode(value).byteLength;
-  const seq = Number(key.slice(eventPrefix.length));
-  const refused = (reason: Refused["reason"], cause?: unknown) => ({
+  const opened = openRecordingCell(eventPrefix, key, value);
+  if ("_tag" in opened) return { frame: opened, encoded: null };
+  const { seq, serializedBytes } = opened;
+  const refused = (reason: Refused["reason"]) => ({
     frame: {
       _tag: "refused",
       key,
-      seq: Number.isSafeInteger(seq) ? seq : null,
+      seq,
       serializedBytes,
       reason,
-      ...(cause === undefined ? {} : { cause }),
     } satisfies Refused,
     encoded: null,
   });
-  if (!Number.isSafeInteger(seq)) return refused("key");
-  if (!value.startsWith(RECORDING_PREFIX)) return refused("frame");
-  let raw: unknown;
-  try {
-    raw = JSON.parse(value);
-  } catch (cause) {
-    return refused("json", cause);
-  }
-  const encoded = parseFrame(raw);
+  const encoded = parseFrame(opened.raw);
   if (encoded === null) return refused("frame");
   const { encoding } = encoded.evidence;
   if (encoded.frame === "init") {
@@ -659,7 +685,7 @@ function decodeStoredFrame<M>(
     };
   }
   const event = parseEvent(encoded.msg);
-  if (event === null) return refused("event");
+  if (event === null) return { frame: refused("event").frame, encoded };
   return {
     frame: {
       _tag: "step",
@@ -672,6 +698,45 @@ function decodeStoredFrame<M>(
     },
     encoded,
   };
+}
+
+/** What a fold of a log's Msgs takes from one cell: nothing (an init frame), a Msg, or why it cannot. */
+type FoldCell<M> =
+  | { readonly _tag: "init" }
+  | { readonly _tag: "decoded"; readonly event: M }
+  | Refused;
+
+/**
+ * Decode one stored cell for a fold of the log's Msgs. A recording cell's
+ * evidence is not read, so a cell whose evidence is unreadable still gives its
+ * Msg: the Msgs and the snapshot rebuild the State, whatever the evidence holds.
+ */
+function decodeFoldCell<M>(
+  eventPrefix: string,
+  parseEvent: (raw: unknown) => M | null,
+  key: string,
+  value: unknown,
+): FoldCell<M> {
+  if (typeof value !== "string" || cellFormatOf(value) === "messages") {
+    const stored = decodeStoredEvent(eventPrefix, parseEvent, key, value);
+    return stored._tag === "refused"
+      ? stored
+      : { _tag: "decoded", event: stored.event };
+  }
+  const opened = openRecordingCell(eventPrefix, key, value);
+  if ("_tag" in opened) return opened;
+  const refused = (reason: Refused["reason"]): Refused => ({
+    _tag: "refused",
+    key,
+    seq: opened.seq,
+    serializedBytes: opened.serializedBytes,
+    reason,
+  });
+  const cell = parseCellMsg(opened.raw);
+  if (cell === null) return refused("frame");
+  if (cell.frame === "init") return { _tag: "init" };
+  const event = parseEvent(cell.msg);
+  return event === null ? refused("event") : { _tag: "decoded", event };
 }
 
 /**
@@ -694,8 +759,9 @@ export function doEventLogReader<M extends { _tag: string } = { _tag: string }>(
 }
 
 /**
- * The reader, and the one read the writing store also needs: the evidence
- * bytes of the frame before `seq`, which the next delta is taken from.
+ * The reader, and the two reads the writing store also needs: the evidence
+ * bytes of the frame before `seq`, which the next delta is taken from, and the
+ * cells after `afterSeq` as a fold of the Msgs reads them.
  */
 function openLogReader<M extends { _tag: string }>(
   storage: DurableObjectStorage,
@@ -703,6 +769,7 @@ function openLogReader<M extends { _tag: string }>(
 ): {
   readonly reader: EventLogReader<M>;
   basisBefore(seq: number): Promise<BasisRead>;
+  foldCells(afterSeq: number): AsyncGenerator<FoldCell<M>>;
 } {
   const parseEvent = opts.parseEvent ?? defaultParseEvent<M>;
   const {
@@ -802,9 +869,7 @@ function openLogReader<M extends { _tag: string }>(
         value,
       );
       if (frame.seq !== expected) return broke(expected, "basis");
-      if (frame._tag === "refused" || encoded === null) {
-        return broke(expected, "frame");
-      }
+      if (encoded === null) return broke(expected, "frame");
       chain.push([expected, encoded]);
       if (encoded.evidence.encoding === "full") break;
       expected -= 1;
@@ -836,8 +901,8 @@ function openLogReader<M extends { _tag: string }>(
       if (
         !rebuild ||
         encoded === null ||
-        frame._tag === "refused" ||
-        frame._tag === "message"
+        frame._tag === "message" ||
+        frame.seq === null
       ) {
         basis = null;
         yield frame;
@@ -855,17 +920,30 @@ function openLogReader<M extends { _tag: string }>(
         typeof rebuilt === "string" ? null : readEvidence(rebuilt.bytes);
       if (typeof rebuilt === "string" || read === null) {
         basis = null;
-        yield {
-          _tag: "refused",
-          key,
-          seq: frame.seq,
-          serializedBytes: frame.serializedBytes,
-          reason: typeof rebuilt === "string" ? rebuilt : "frame",
-        };
+        yield frame._tag === "refused"
+          ? frame
+          : {
+              _tag: "refused",
+              key,
+              seq: frame.seq,
+              serializedBytes: frame.serializedBytes,
+              reason: typeof rebuilt === "string" ? rebuilt : "frame",
+            };
         continue;
       }
       basis = rebuilt;
-      yield evidence === "verify" ? frame : { ...frame, evidence: read };
+      yield frame._tag === "refused" || evidence === "verify"
+        ? frame
+        : { ...frame, evidence: read };
+    }
+  }
+
+  async function* foldCells(afterSeq: number): AsyncGenerator<FoldCell<M>> {
+    for await (const [key, value] of listCells(
+      { fromSeq: afterSeq + 1 },
+      false,
+    )) {
+      yield decodeFoldCell(eventPrefix, parseEvent, key, value);
     }
   }
 
@@ -912,6 +990,7 @@ function openLogReader<M extends { _tag: string }>(
       readFrames,
     },
     basisBefore,
+    foldCells,
   };
 }
 
@@ -1008,7 +1087,7 @@ export function doEventSourcedStore<
   let writing: Promise<unknown> = Promise.resolve();
   // The read side of the log: the one owner of the event-key convention and
   // the stored-event decode, shared with hosts that read without loading.
-  const { reader, basisBefore } = openLogReader(storage, opts);
+  const { reader, basisBefore, foldCells } = openLogReader(storage, opts);
 
   async function readMeta(): Promise<number> {
     const raw = await storage.get<string>(metaKey);
@@ -1059,26 +1138,28 @@ export function doEventSourcedStore<
   /**
    * Fold one decoded event at a time, retaining neither the tail nor its Cmds,
    * and count the init frames the fold skips. A recording cell that is not a
-   * frame refuses the restore, as text that is not JSON does.
+   * frame refuses the restore, as text that is not JSON does. A cell whose
+   * evidence is unreadable does not: the fold reads only its Msg, and the break
+   * is reported from the frames before the head.
    */
   async function readLog(
     state: S,
     afterSeq: number,
   ): Promise<{ state: S; inits: number }> {
     let inits = 0;
-    for await (const frame of reader.readFrames({ fromSeq: afterSeq + 1 })) {
-      if (frame._tag === "init") {
+    for await (const cell of foldCells(afterSeq)) {
+      if (cell._tag === "init") {
         inits += 1;
         continue;
       }
-      if (frame._tag === "refused") {
-        if (frame.reason === "json") throw frame.cause;
-        if (frame.reason === "frame") {
+      if (cell._tag === "refused") {
+        if (cell.reason === "json") throw cell.cause;
+        if (cell.reason === "frame") {
           throw new Error("@demlik/tea/do: recording frame was refused");
         }
         continue;
       }
-      state = foldMsgs(machine, state, [frame.event]);
+      state = foldMsgs(machine, state, [cell.event]);
     }
     return { state, inits };
   }
@@ -1105,7 +1186,9 @@ export function doEventSourcedStore<
           `@demlik/tea/do: the recording's evidence cannot be rebuilt for frames ${b.fromSeq} to ${b.toSeq} (${b.reason}); the next frame is written whole`,
         ));
     try {
-      hear(broken);
+      void Promise.resolve(hear(broken)).catch((thrown: unknown) => {
+        console.warn(thrown);
+      });
     } catch (thrown) {
       console.warn(thrown);
     }
@@ -1177,7 +1260,6 @@ export function doEventSourcedStore<
       const init = boundary?._tag === "init" ? boundary : null;
       // The flush at `stop()` has no event to write. The boot save has none
       // either, unless the log is a recording, which opens each boot with a frame.
-      if (boundary?._tag === "stop") return;
       if (msg === undefined && (init === null || opts.recording === undefined))
         return;
       const admit = fence.issue();
@@ -1209,7 +1291,10 @@ export function doEventSourcedStore<
                     },
                 {
                   state,
-                  cmds: boundary === undefined ? null : boundary.cmds,
+                  cmds:
+                    boundary !== undefined && "cmds" in boundary
+                      ? boundary.cmds
+                      : null,
                 },
                 basis,
               );

@@ -424,7 +424,240 @@ describe("restoring a recording whose evidence is broken", () => {
     });
 
     expect(ended.count).toBe(2);
+    expect(warn).toHaveBeenCalledTimes(1);
     expect(warn).toHaveBeenCalledWith(hookFailure);
     warn.mockRestore();
+  });
+
+  it("is not stopped by a hook that rejects, and warns about what it rejected with", async () => {
+    const backing = new Map<string, string>();
+    await liveRun(backing, [inc(1)], recording);
+    damageDelta(backing, 2);
+    const hookFailure = new Error("async hook");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const ended = await liveRun(backing, [inc(1)], {
+      ...recording,
+      onRecordingBreak: async () => {
+        throw hookFailure;
+      },
+    });
+    await new Promise((settled) => setTimeout(settled, 0));
+
+    expect(ended.count).toBe(2);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(hookFailure);
+    warn.mockRestore();
+  });
+});
+
+describe("restoring a recording from its Msgs, whatever its evidence holds", () => {
+  it.each([
+    ["evidence that is null", null],
+    ["an evidence encoding a newer writer chose", { zstd: "AAAA" }],
+    ["evidence of the wrong shape", ["full"]],
+  ])("folds a step with %s, and reports the frame as a break", async (_name, evidence) => {
+    const backing = new Map<string, string>();
+    await liveRun(backing, [inc(1), inc(1)], recording);
+    const cell = JSON.parse(backing.get(key(3)) ?? "");
+    cell.evidence = evidence;
+    backing.set(key(3), JSON.stringify(cell));
+    const heard: unknown[] = [];
+
+    const ended = await liveRun(backing, [inc(10)], {
+      ...recording,
+      onRecordingBreak: (broken) => heard.push(broken),
+    });
+
+    expect(ended.count).toBe(12);
+    expect(heard).toEqual([{ fromSeq: 3, toSeq: 3, reason: "frame" }]);
+    const frames = await framesOf(backing);
+    expect(frames.slice(-2)).toMatchObject([
+      { _tag: "init", encoding: "full" },
+      { _tag: "step", encoding: "delta" },
+    ]);
+  });
+
+  it("folds an init frame whose evidence is unreadable, as an init frame", async () => {
+    const backing = new Map<string, string>();
+    await liveRun(backing, [inc(2)], recording);
+    const cell = JSON.parse(backing.get(key(1)) ?? "");
+    delete cell.evidence;
+    backing.set(key(1), JSON.stringify(cell));
+
+    const ended = await liveRun(backing, [inc(1)], {
+      ...recording,
+      onRecordingBreak: () => {},
+    });
+
+    expect(ended.count).toBe(3);
+  });
+});
+
+describe("restoring a log with a cell that is not JSON", () => {
+  it("refuses a recording cell cut off in the middle", async () => {
+    const backing = new Map<string, string>();
+    await liveRun(backing, [inc(1), inc(1)], recording);
+    backing.set(key(3), (backing.get(key(3)) ?? "").slice(0, 40));
+
+    await expect(
+      doEventSourcedStore(
+        fakeStorage(backing).storage,
+        counter,
+        ctx,
+        recording,
+      ).store.load(),
+    ).rejects.toThrow(SyntaxError);
+  });
+
+  it("refuses a bare Msg that is not JSON", async () => {
+    const backing = new Map<string, string>();
+    await liveRun(backing, [inc(1), inc(1)], {});
+    backing.set(key(2), "{not json");
+
+    await expect(
+      doEventSourcedStore(
+        fakeStorage(backing).storage,
+        counter,
+        ctx,
+        {},
+      ).store.load(),
+    ).rejects.toThrow(SyntaxError);
+  });
+});
+
+describe("a log of bare Msgs", () => {
+  it("restores a Msg whose own first field is `tea`, because it is not a recording frame", async () => {
+    const backing = new Map<string, string>();
+    const writer = doEventSourcedStore(
+      fakeStorage(backing).storage,
+      counter,
+      ctx,
+      {},
+    );
+    await writer.store.load();
+    await writer.store.save(
+      { ...fresh, count: 1 },
+      { tea: "earl grey", _tag: "inc", by: 1 },
+    );
+
+    const restored = await doEventSourcedStore(
+      fakeStorage(backing).storage,
+      counter,
+      ctx,
+      {},
+    ).store.load();
+    const reader = doEventLogReader<Msg>(fakeStorage(backing).storage);
+
+    expect(restored).toMatchObject({ count: 1 });
+    expect(await reader.readHead()).toMatchObject({ format: "messages" });
+  });
+
+  it("restores a Msg whose own first field is `tea`, in a log that asks for a recording", async () => {
+    const backing = new Map<string, string>();
+    backing.set(key(1), '{"tea":"earl grey","_tag":"inc","by":4}');
+    backing.set("@@es/meta", '{"lastSeq":1}');
+
+    const ended = await liveRun(backing, [inc(1)], recording);
+
+    expect(ended.count).toBe(5);
+    expect(tags(await framesOf(backing))).toEqual(["message", "message"]);
+  });
+});
+
+describe("a recording across restarts", () => {
+  it("does not snapshot at an init frame that lands on the snapshotEvery boundary", async () => {
+    const backing = new Map<string, string>();
+    await liveRun(backing, [inc(1), inc(1)], {
+      ...recording,
+      snapshotEvery: 3,
+    });
+
+    await liveRun(backing, [], { ...recording, snapshotEvery: 3 });
+
+    expect(backing.has("@@es/snapshot")).toBe(false);
+    expect(tags(await framesOf(backing))).toEqual([
+      "init",
+      "step",
+      "step",
+      "init",
+    ]);
+  });
+
+  it("continues the chain from a log of one init frame", async () => {
+    const backing = new Map<string, string>();
+    await liveRun(backing, [], recording);
+    await liveRun(backing, [], recording);
+
+    expect(
+      (await framesOf(backing)).map(
+        (frame) => "encoding" in frame && frame.encoding,
+      ),
+    ).toEqual(["full", "delta"]);
+  });
+
+  it("puts a whole frame at least every 32 frames over many restarts, and reports no break", async () => {
+    const backing = new Map<string, string>();
+    const heard: unknown[] = [];
+    for (let boot = 0; boot < 14; boot += 1) {
+      await liveRun(backing, [inc(1), inc(1), inc(1), inc(1), inc(1)], {
+        ...recording,
+        snapshotEvery: 1000,
+        onRecordingBreak: (broken) => heard.push(broken),
+      });
+    }
+
+    let chain = 0;
+    let longest = 0;
+    const frames = await framesOf(backing);
+    for (const frame of frames) {
+      chain = "encoding" in frame && frame.encoding === "delta" ? chain + 1 : 0;
+      longest = Math.max(longest, chain);
+    }
+
+    expect(frames).toHaveLength(14 * 6);
+    expect(frames.some((frame) => frame._tag === "refused")).toBe(false);
+    expect(longest).toBe(31);
+    expect(heard).toEqual([]);
+  });
+
+  it("writes a frame once another store has started the recording, after this one learned an empty log is messages", async () => {
+    const backing = new Map<string, string>();
+    const bare = doEventSourcedStore(
+      fakeStorage(backing).storage,
+      counter,
+      ctx,
+      {},
+    );
+    await bare.store.load();
+    await bare.store.save(fresh, undefined, { _tag: "init", cmds: [] });
+    const other = doEventSourcedStore(
+      fakeStorage(backing).storage,
+      counter,
+      ctx,
+      recording,
+    );
+    await other.store.load();
+    await other.store.save(fresh, undefined, { _tag: "init", cmds: [] });
+
+    await bare.store.load();
+    await bare.store.save({ ...fresh, count: 1 }, inc(1), {
+      _tag: "step",
+      cmds: [],
+    });
+
+    expect(tags(await framesOf(backing))).toEqual(["init", "step"]);
+  });
+
+  it("writes a provenance that is not JSON as null, and restores", async () => {
+    const backing = new Map<string, string>();
+    const opts = { recording: { provenance: () => 1 } };
+
+    await liveRun(backing, [inc(1)], opts);
+    const ended = await liveRun(backing, [inc(1)], opts);
+
+    expect(ended.count).toBe(2);
+    expect(JSON.parse(backing.get(key(1)) ?? "").provenance).toBeNull();
+    expect((await framesOf(backing))[0]).toMatchObject({ provenance: null });
   });
 });
