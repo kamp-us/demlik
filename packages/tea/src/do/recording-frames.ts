@@ -103,17 +103,18 @@ export function parseFrame(raw: unknown): EncodedFrame | null {
   if (!isObject(raw) || raw.tea !== RECORDING_FORMAT) return null;
   const stored = raw.evidence;
   if (!isObject(stored)) return null;
+  if (stored.cmds !== undefined && typeof stored.cmds !== "string") return null;
+  if (stored.delta !== undefined && typeof stored.delta !== "string") {
+    return null;
+  }
   let evidence: StoredEvidence;
-  if (
-    typeof stored.full === "string" &&
-    (stored.cmds === undefined || typeof stored.cmds === "string")
-  ) {
+  if (typeof stored.full === "string") {
     evidence = {
       encoding: "full",
       state: stored.full,
       cmds: stored.cmds ?? null,
     };
-  } else if (typeof stored.delta === "string") {
+  } else if (stored.delta !== undefined) {
     evidence = { encoding: "delta", delta: stored.delta };
   } else {
     return null;
@@ -203,7 +204,7 @@ export async function encodeFrame(
   }
   const json =
     head.frame === "init"
-      ? `{"tea":"${RECORDING_FORMAT}","frame":"init","restored":${head.restored},"provenance":${JSON.stringify(head.provenance)},"evidence":${stored}}`
+      ? `{"tea":"${RECORDING_FORMAT}","frame":"init","restored":${head.restored},"provenance":${JSON.stringify(head.provenance) ?? "null"},"evidence":${stored}}`
       : `{"tea":"${RECORDING_FORMAT}","frame":"step","msg":${head.msgJson},"evidence":${stored}}`;
   return { json, basis: { seq, bytes: target, chain } };
 }

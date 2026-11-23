@@ -256,3 +256,115 @@ describe("a log read for its Msgs only", () => {
     ]);
   });
 });
+
+describe("a cell the reader refuses", () => {
+  const frameAt = async (backing: Map<string, string>, seq: number) => {
+    const frames = await collect(
+      readerOver(backing).readFrames({ fromSeq: seq, toSeq: seq }),
+    );
+    return frames[0];
+  };
+
+  it("reports a recording cell under a key that is not a sequence, with no seq", async () => {
+    const backing = await recordedLog(1);
+    const cell = backing.get(key(2)) ?? "";
+    backing.set("@@es/evt/not-a-seq", cell);
+
+    const frames = await collect(readerOver(backing).readFrames());
+
+    expect(frames.at(-1)).toStrictEqual({
+      _tag: "refused",
+      key: "@@es/evt/not-a-seq",
+      seq: null,
+      serializedBytes: cell.length,
+      reason: "key",
+    });
+  });
+
+  it.each([
+    [
+      "another version of the format",
+      '{"tea":"recording/2","frame":"step","msg":{}}',
+    ],
+    ["another version of the format, cut short", '{"tea":"recording/2",'],
+    ["a step with no Msg", '{"tea":"recording/1","frame":"step"}'],
+  ])("reports %s as a frame, with no cause", async (_name, cell) => {
+    const backing = await recordedLog(1);
+    backing.set(key(2), cell);
+
+    expect(await frameAt(backing, 2)).toStrictEqual({
+      _tag: "refused",
+      key: key(2),
+      seq: 2,
+      serializedBytes: cell.length,
+      reason: "frame",
+    });
+  });
+
+  it("keeps what JSON.parse threw as the cause of a json refusal", async () => {
+    const backing = await recordedLog(1);
+    backing.set(key(2), '{"tea":"recording/1",');
+
+    const frame = await frameAt(backing, 2);
+
+    if (frame?._tag !== "refused") throw new Error("not refused");
+    expect(frame.reason).toBe("json");
+    expect(frame.cause).toBeInstanceOf(SyntaxError);
+  });
+});
+
+describe("an init frame", () => {
+  it("says whether the boot restored a log", async () => {
+    const backing = await recordedLog(1);
+    const second = await encodeFrame(
+      3,
+      { frame: "init", restored: true, provenance: { run: "again" } },
+      evidenceAt(3),
+      null,
+    );
+    backing.set(key(3), second.json);
+
+    const frames = await collect(readerOver(backing).readFrames());
+
+    expect(frames.map((frame) => frame._tag)).toEqual(["init", "step", "init"]);
+    expect(
+      frames.map((frame) => frame._tag === "init" && frame.restored),
+    ).toEqual([false, false, true]);
+    expect(frames[2]).toMatchObject({ provenance: { run: "again" } });
+  });
+});
+
+describe("the head of a log", () => {
+  const meta = (lastSeq: number) => ["@@es/meta", `{"lastSeq":${lastSeq}}`];
+
+  it.each([
+    ["has no format before its first cell", [meta(0)], null],
+    [
+      "is messages for a log of one Msg",
+      [[key(1), '{"_tag":"inc"}'], meta(1)],
+      "messages",
+    ],
+    [
+      "is a recording for a log of one init frame",
+      [
+        [
+          key(1),
+          '{"tea":"recording/1","frame":"init","restored":false,"evidence":{"full":""}}',
+        ],
+        meta(1),
+      ],
+      "recording",
+    ],
+    [
+      "is a recording when the first cell is a format this build does not know",
+      [[key(1), '{"tea":"recording/2","frame":"init"}'], meta(1)],
+      "recording",
+    ],
+  ] as const)("%s", async (_name, cells, format) => {
+    const reader = readerOver(
+      new Map(cells.map(([cellKey, text]) => [cellKey, text])),
+    );
+
+    expect(await reader.readHead()).toMatchObject({ format });
+  });
+});
