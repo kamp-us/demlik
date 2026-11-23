@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import type { Store } from "../index";
 import { memoryStore } from "../mem";
+import { recorder, replayTrace } from "../persistence";
+import { driveToDone, run } from "../promise";
+import { MsgType } from "../protocol";
 import {
   type AgentDomain,
   type AgentDomainEvent,
@@ -318,6 +321,33 @@ describe("an agent's domain slice", () => {
       nudges: ["nudged after 4 turns"],
       folded: [4],
     });
+  });
+
+  it("replays the recording of that run to the same states, domain slice included", async () => {
+    const wired = scriptedAgent(stepper().model).machine("go");
+    const handle = run(wired.machine, {
+      interpret: wired.interpret,
+      subscribe: wired.subscribe,
+      ctx: {},
+    });
+    const rec = recorder(handle, { captureSteps: true });
+    const final = await driveToDone(
+      handle,
+      { _tag: MsgType.AgentStart, runId: "recorded", at: Date.now() },
+      (s) => s.run.phase === "done",
+      { failed: (s) => s.failure !== null },
+    );
+    await (await handle.ready).stop();
+    expect(final.domain).toEqual(EXPECTED.reduce(stepTally, TALLY));
+
+    const trace = rec.dump();
+    const replayed = replayTrace(
+      scriptedAgent(stepper().model).machine("go").machine,
+      trace,
+    );
+    expect(replayed.divergence).toBeUndefined();
+    expect(replayed.matches).toBe(true);
+    expect(replayed.actual.domain).toEqual(final.domain);
   });
 
   it("folds turn, tool, nudge and compaction events in transcript order", async () => {
