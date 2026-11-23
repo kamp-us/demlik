@@ -709,7 +709,8 @@ export interface DefinedAgent<T extends AnyToolDef, D = never> {
   ) => Promise<DefinedAgentResolvedState<T, D>>;
   /**
    * The machine `run` drives for `input` and the interpret table it runs under
-   * — the way down to the raw kernel.
+   * — the way down to the raw kernel. Its compaction settle is stamped with
+   * `Date.now` at the settle, not with the clock a raw `run` is given.
    */
   readonly machine: (input: string) => DefinedAgentWired<T, D>;
   /**
@@ -814,6 +815,7 @@ function definedAgent<T extends AnyToolDef, D = never>(
   const machineWith = (
     input: string,
     onChunk: ((chunk: TurnChunk) => void) | undefined,
+    clock: () => number,
   ): DefinedAgentWired<T, D> => {
     const brain = brainOf(config.model, onChunk);
     // The half of the core config that does not depend on whether compaction is
@@ -880,22 +882,29 @@ function definedAgent<T extends AnyToolDef, D = never>(
           >(core).toMachine<DefinedAgentCtx<T>, T>({
             tools,
           }) as unknown as DefinedAgentWired<T, D>)
-        : compactingMachine(core, compaction, brain, tools, config.media);
+        : compactingMachine(
+            core,
+            compaction,
+            brain,
+            tools,
+            config.media,
+            clock,
+          );
     return overlaid(agent, overlays);
   };
   // The public way down carries no chunk sink: `machine(input)` is handed to
   // the raw kernel by a caller who has no run options to read one from.
   const machine = (input: string): DefinedAgentWired<T, D> =>
-    machineWith(input, undefined);
+    machineWith(input, undefined, () => Date.now());
   const drive: DefinedAgent<T, D>["run"] = (input, ...[opts = noHost<T>()]) => {
     const { onEvent, onChunk } = opts;
     // No listener → no projector, so an omitted `onEvent` leaves the run the
     // kernel wiring it always had.
-    const wired = machineWith(input, onChunk);
+    const clock = opts.clock ?? Date.now;
+    const wired = machineWith(input, onChunk, clock);
     // The `interpret` table is checked where it is built; over the generic `T`
     // TS defers `run`'s conditional `InterpretArg` and cannot relate the two, so
     // the options are read at `run`'s own parameter type.
-    const clock = opts.clock ?? Date.now;
     const signal = opts.signal;
     const handle = run(wired.machine, {
       ...opts,
@@ -1077,6 +1086,7 @@ function compactingMachine<T extends AnyToolDef, D = never>(
   brain: PlainModel<AgentMessage, AgentTurn>,
   tools: ToolRouter<T>,
   media: DefineAgentConfig<T, D>["media"],
+  clock: () => number,
 ): DefinedAgentWired<T, D> {
   const agent = createAgent<
     string,
@@ -1092,7 +1102,9 @@ function compactingMachine<T extends AnyToolDef, D = never>(
   });
   const wiring = {
     tools,
-    toolInterpret: { compact_run: summarizeWith(brain, tools.partsOf, media) },
+    toolInterpret: {
+      compact_run: summarizeWith(brain, tools.partsOf, media, clock),
+    },
   } as Parameters<typeof agent.toMachine<DefinedAgentCtx<T>, T>>[0];
   return agent.toMachine<DefinedAgentCtx<T>, T>(
     wiring,
@@ -1279,6 +1291,7 @@ function summarizeWith(
   model: PlainModel<AgentMessage, AgentTurn>,
   partsOf: ToolPartsOf,
   media: DefineAgentConfig<AnyToolDef>["media"],
+  clock: () => number,
 ): (cmd: AgentCompactRunCmd) => Promise<AgentCompactOkMsg> {
   return async (cmd) => {
     const messages =
@@ -1286,8 +1299,6 @@ function summarizeWith(
         ? renderPrompt(cmd.input.payload as AgentPrompt<unknown>, partsOf)
         : (cmd.input.payload as readonly AgentMessage[]);
     const turn = await model(messages.map(withoutMedia));
-    // `Date.now()` at the settle, exactly as the composed llm-call handler
-    // stamps the brain call's own settle Msg.
     return {
       _tag: MsgType.CompactOk,
       key: COMPACTION_PURPOSE,
@@ -1296,7 +1307,7 @@ function summarizeWith(
         purpose: COMPACTION_PURPOSE,
         output: { summary: turn.content },
       },
-      at: Date.now(),
+      at: clock(),
     };
   };
 }
