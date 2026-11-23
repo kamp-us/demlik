@@ -87,6 +87,7 @@ export {
   type EventSourcedStore,
   type FrameReadOptions,
   type PersistedEvent,
+  type RecordingBreak,
   type RestoreAttempt,
   RestoreInterruptedError,
   type StoredEvent,

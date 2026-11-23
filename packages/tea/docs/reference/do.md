@@ -8,7 +8,7 @@ Tier: `stable`
 import { … } from "@demlik/tea/do";
 ```
 
-## Exports (124)
+## Exports (125)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -106,6 +106,7 @@ import { … } from "@demlik/tea/do";
 | [`ProjectionRunner`](#ProjectionRunner) | Interface | stable | A live, running projection instance: the projection's current `View`, its exclusive stored `offset`, and the `present`/`reset` operations the driver (or a rebuild) calls. |
 | [`ProjectionUpdate`](#ProjectionUpdate) | Interface | stable | One unit the projection driver presents to a projection's `apply`. |
 | [`rebuildProjection`](#rebuildProjection) | Function | stable | Rebuild a projection's view by folding an ordered event stream from the `NoOffset` start. |
+| [`RecordingBreak`](#RecordingBreak) | Interface | stable | A recording whose evidence cannot be rebuilt where the next frame would take its delta from. |
 | [`registerHibernatableSocket`](#registerHibernatableSocket) | Function | stable | Register an already-created `server` socket on the DO via the Cloudflare **Hibernation API**: `ctx.acceptWebSocket(server, tags)` hands the socket to the runtime (it survives eviction and re-delivers inbound frames to the DO's `webSocketMessage` lifecycle method), and — when an `attachment` is supplied — persists it via `server.serializeAttachment` so it survives the wake. |
 | [`RegisterOptions`](#RegisterOptions) | Interface | stable | Optional settings for registerHibernatableSocket / acceptPresenceSocket. |
 | [`reissueSurvivingEffects`](#reissueSurvivingEffects) | Function | stable | Re-fire every round-trip a rehydrated actor still owes, on wake. |
@@ -1000,6 +1001,15 @@ interface EventSourcedOptions<S, M> extends EventLogReaderOptions<M> {
    */
   readonly onReady?: (state: S) => void;
   /**
+   * Hears a recording whose last frames cannot be rebuilt, once per `load()`.
+   * Evidence is not State: the Msgs and the snapshot rebuild the State exactly,
+   * so restore still succeeds and the next frame is written whole, as a new
+   * basis for the frames after it. This reports which frames are broken; a read
+   * of them with `readFrames` still refuses them. Default: a `console.warn`.
+   * A hook that throws is warned about and does not fail the restore.
+   */
+  readonly onRecordingBreak?: (broken: RecordingBreak) => void;
+  /**
    * Boundary parse for the persisted SNAPSHOT cell (the `S` blob). Returns `S`
    * on a recognized shape, `null` on an unrecognized one, and must NOT throw.
    * A present snapshot that returns `null` refuses restore; it never falls
@@ -1007,6 +1017,19 @@ interface EventSourcedOptions<S, M> extends EventLogReaderOptions<M> {
    * non-array object as `S`.
    */
   readonly parse?: (raw: unknown) => S | null;
+  /**
+   * Record each boundary's evidence. A log this store starts is written as a
+   * recording: an `init` frame for every boot save, carrying `provenance`, and
+   * a `step` frame for every applied Msg, each with the State after it and the
+   * Cmds the engine started for it. A log already written as bare messages
+   * keeps being written that way; its missing evidence is never invented.
+   * A recording log is written as one whatever this option says, and gets no
+   * `init` frame without it.
+   */
+  readonly recording?: {
+    /** JSON written into every `init` frame, unread by the store. */
+    readonly provenance: unknown;
+  };
   /**
    * Automatic retries after an unfinished restore. Default 1: an initial
    * attempt and one retry; a second unfinished attempt refuses before reading
@@ -1037,8 +1060,10 @@ interface EventSourcedStore<S, M> {
    * when `snapshotEvery` events have accumulated, writes the snapshot, all in
    * one storage transaction that settles before the engine starts the
    * transition's Cmds. A save without a Msg (the boot save, the flush at
-   * `stop()`) appends nothing. A write that fails rejects the save and leaves
-   * the stored bytes as they were. `migrate` forwards to `parse`.
+   * `stop()`) appends nothing, except that the boot save of a recording
+   * (`recording`) appends an `init` frame; a recording's frames are not Msgs,
+   * so restore skips them. A write that fails rejects the save and leaves the
+   * stored bytes as they were. `migrate` forwards to `parse`.
    *
    * Its `load()` also takes the log for this isolate. A store built earlier on
    * the same storage can no longer write: a `save` or `snapshotNow()` it called
@@ -1578,6 +1603,18 @@ function rebuildProjection<Model, Msg extends { _tag: string }, View>(
     readonly msg: Msg | null;
   }[],
 ): ProjectionRunner<Model, Msg, View>
+```
+
+<a id="RecordingBreak"></a>
+
+### `RecordingBreak`
+
+```ts
+interface RecordingBreak {
+  readonly fromSeq: number;
+  readonly reason: FrameRefusal;
+  readonly toSeq: number;
+}
 ```
 
 <a id="registerHibernatableSocket"></a>
