@@ -118,6 +118,14 @@ interface SnapshotCell<S> {
   readonly state: S;
 }
 
+interface SnapshotPartsCell {
+  readonly seq: number;
+  readonly parts: number;
+}
+
+const MIN_ROW_BYTES = 1024;
+const PART_WIDTH = 8;
+
 /** Persisted meta cell: the highest sequence number ever appended. */
 interface MetaCell {
   readonly lastSeq: number;
@@ -259,9 +267,18 @@ export interface EventSourcedOptions<S, M> extends EventLogReaderOptions<M> {
      * Each marker is reported to `onRecordingBreak` with `reason: "oversized"`.
      * A recording that holds a marker is not replayable: `readFrames` refuses
      * it as `oversized` and `readTrace` reports the recording unavailable.
-     * Applies to a log written as a recording only. Must be a positive safe
-     * integer. A Durable Object row holds at most 8 MB. Default: no budget,
-     * and every frame is written as it encodes.
+     * Markers apply to a log written as a recording only.
+     *
+     * The budget also holds every snapshot this store writes, so the marker
+     * and the snapshot that recovers past it always fit, whatever the State's
+     * size. A snapshot over the budget is written as a small head cell and its
+     * State's JSON split across part rows (`<snapshot key>/part/<n>`), in the
+     * same transaction, and restore joins them. When storage still rejects a
+     * write with `SQLITE_TOOBIG`, the store first writes the frame as a marker,
+     * then halves the row size it splits to, until a write lands or the size
+     * would fall below 1024 bytes, when the rejection propagates. Must be a
+     * safe integer of at least 1024. A Durable Object row holds at most 8 MB.
+     * Default: no budget; every frame and snapshot is written as it encodes.
      */
     readonly maxRowBytes?: number;
   };
@@ -468,8 +485,8 @@ export type StoredEvent<M> =
  * written as bare messages, with no evidence. An `init` or `step` frame is a
  * recording frame; its `evidence` is rebuilt only when the read asked for it.
  * `serializedBytes` is the UTF-8 size of the whole stored text and
- * `messageBytes` the size of the Msg JSON inside it. An `init` frame's
- * `skipped` is the count of transitions before a moved anchor (`0` for a boot).
+ * `messageBytes` the size of the Msg JSON inside it. An `init` frame at a
+ * moved anchor carries `skipped`, the transitions before it; a boot has none.
  */
 export type StoredFrame<M> =
   | {
@@ -497,7 +514,7 @@ export type StoredFrame<M> =
       readonly serializedBytes: number;
       readonly restored: boolean;
       readonly provenance: unknown;
-      readonly skipped: number;
+      readonly skipped?: number;
       readonly encoding: EvidenceEncoding;
       readonly evidence?: FrameEvidence;
     }
@@ -510,38 +527,36 @@ export type StoredFrame<M> =
  * on the first frame that does not rebuild, and `reason` is the refusal
  * {@link EventLogReader.readFrames} gives that frame. With `oversized`, a save
  * wrote a refusal marker at `seq` in place of a frame of `bytes` bytes (its
- * key plus its encoded cell), and `fromSeq` and `toSeq` are both `seq`.
+ * key plus its encoded cell); `fromSeq` and `toSeq` are both `seq`, and `seq`
+ * and `bytes` are present only then.
  */
-export type RecordingBreak =
-  | {
-      readonly fromSeq: number;
-      readonly toSeq: number;
-      readonly reason: Exclude<FrameRefusal, "oversized">;
-    }
-  | {
-      readonly fromSeq: number;
-      readonly toSeq: number;
-      readonly reason: "oversized";
-      readonly seq: number;
-      readonly bytes: number;
-    };
+export interface RecordingBreak {
+  readonly fromSeq: number;
+  readonly toSeq: number;
+  readonly reason: FrameRefusal;
+  readonly seq?: number;
+  readonly bytes?: number;
+}
 
 /**
- * Why {@link EventLogReader.readTrace} has no trace to give: the log or range
- * is empty (`empty`), it is written as bare messages (`messages`), its first
- * frame is not an `init` frame (`anchor`), a second `init` frame opens another
- * boot (`boot`), or a frame is refused, with the refusal `readFrames` gives
- * it, `oversized` among them.
+ * Why {@link readTrace} has no trace to give: the log or range is empty
+ * (`empty`), it is written as bare messages (`messages`), its first frame is
+ * not an `init` frame (`anchor`), a second `init` frame opens another boot
+ * (`boot`), a seq inside the range has no cell (`gap`), the cells stop before
+ * the committed head (`tail`), or a frame is refused, with the refusal
+ * `readFrames` gives it, `oversized` among them.
  */
 export type TraceUnavailableReason =
   | StoredEventRefusal
   | "empty"
   | "messages"
   | "anchor"
-  | "boot";
+  | "boot"
+  | "gap"
+  | "tail";
 
 /**
- * What {@link EventLogReader.readTrace} reads back: a whole `Trace`, or why
+ * What {@link readTrace} reads back: a whole `Trace`, or why
  * the recording cannot be replayed. A recording with any frame missing is
  * `unavailable`, never a trace of the frames before it.
  */
@@ -604,19 +619,6 @@ export interface EventLogReader<M> {
     range?: StoredEventRange,
     options?: FrameReadOptions,
   ): AsyncIterable<StoredFrame<M>>;
-  /**
-   * Read a recording back as the `Trace` it was written from, for
-   * `replayTrace`. The range's first frame is the anchor and must be an `init`
-   * frame: its State is `loaded` and its `skipped` the trace's `skipped`, so a
-   * trace written with `writeTrace` reads back as it was dumped. Each `step`
-   * frame after it gives a Msg and a step with its State and Cmds, and
-   * `finalState` is the last State. A range that holds a second boot, a frame
-   * written as a bare message, or any refused frame (an `oversized` marker, a
-   * delta that does not rebuild) is `unavailable` at that frame's seq; no
-   * prefix of it is returned. To read the boot after a restart, start the
-   * range at its `init` frame.
-   */
-  readTrace<S = unknown>(range?: EventLogRange): Promise<RecordedTrace<S, M>>;
 }
 
 const utf8 = new TextEncoder();
@@ -701,6 +703,10 @@ async function firstCell(
   });
   for (const [, value] of rows) return value;
   return undefined;
+}
+
+function rowSize(key: string, value: string): number {
+  return utf8.encode(key).byteLength + utf8.encode(value).byteLength;
 }
 
 function isTooBig(thrown: unknown): boolean {
@@ -820,7 +826,7 @@ function decodeStoredFrame<M>(
         serializedBytes,
         restored,
         provenance,
-        skipped,
+        ...(skipped > 0 ? { skipped } : {}),
         encoding,
       },
       encoded,
@@ -1149,54 +1155,6 @@ function openLogReader<M extends { _tag: string }>(
     }
   }
 
-  async function readTrace<S>(
-    range: EventLogRange = {},
-  ): Promise<RecordedTrace<S, M>> {
-    const unavailable = (
-      seq: number | null,
-      reason: TraceUnavailableReason,
-      bytes?: number,
-    ): RecordedTrace<S, M> => ({
-      _tag: "unavailable",
-      seq,
-      reason,
-      ...(bytes === undefined ? {} : { bytes }),
-    });
-    let anchor: { readonly state: S; readonly skipped: number } | null = null;
-    const steps: TraceStep<S, M>[] = [];
-    for await (const frame of readFrames(range, { evidence: true })) {
-      if (frame._tag === "refused") {
-        return unavailable(frame.seq, frame.reason, frame.bytes);
-      }
-      if (frame._tag === "message") return unavailable(frame.seq, "messages");
-      if (frame.evidence === undefined) return unavailable(frame.seq, "frame");
-      const state = frame.evidence.state as S;
-      if (frame._tag === "init") {
-        if (anchor !== null) return unavailable(frame.seq, "boot");
-        anchor = { state, skipped: frame.skipped };
-        continue;
-      }
-      if (anchor === null) return unavailable(frame.seq, "anchor");
-      const { cmds } = frame.evidence;
-      steps.push(
-        cmds === null
-          ? { msg: frame.event, state }
-          : { msg: frame.event, state, cmds: cmds as readonly Cmd[] },
-      );
-    }
-    if (anchor === null) return unavailable(null, "empty");
-    return {
-      _tag: "trace",
-      trace: {
-        loaded: anchor.state,
-        ...(anchor.skipped > 0 ? { skipped: anchor.skipped } : {}),
-        msgs: steps.map((step) => step.msg),
-        finalState: steps.at(-1)?.state ?? anchor.state,
-        steps,
-      },
-    };
-  }
-
   return {
     reader: {
       readHead,
@@ -1204,10 +1162,104 @@ function openLogReader<M extends { _tag: string }>(
       readStoredEvents,
       readEvents,
       readFrames,
-      readTrace,
     },
     basisBefore,
     foldCells,
+  };
+}
+
+/**
+ * Read a recording back as the `Trace` it was written from, for `replayTrace`.
+ *
+ * The committed head is read first and bounds the read. The range's first
+ * frame is the anchor and must be an `init` frame: its State is `loaded` and
+ * its `skipped` the trace's `skipped`, so a trace written with `writeTrace`
+ * reads back as it was dumped. Each `step` frame after it gives a Msg and a
+ * step with its State and Cmds, and `finalState` is the last State.
+ *
+ * The answer is a whole trace or `unavailable` at a seq, never a prefix: every
+ * seq from the anchor (or `range.fromSeq`) to the committed head (or
+ * `range.toSeq`, when lower) must hold a frame that reads. A missing cell inside
+ * the range is a `gap`, cells that stop before the head are a `tail`, and a
+ * second boot, a bare message or any refused frame (an `oversized` marker, a
+ * delta that does not rebuild) is unavailable at its seq. To read the boot
+ * after a restart, start the range at its `init` frame.
+ *
+ * ```ts
+ * const back = await readTrace<State, Msg>(doEventLogReader<Msg>(storage));
+ * if (back._tag === "trace") replayTrace(machine, back.trace);
+ * ```
+ */
+export async function readTrace<S, M extends { _tag: string }>(
+  reader: Pick<EventLogReader<M>, "readCommittedSeq" | "readFrames">,
+  range: EventLogRange = {},
+): Promise<RecordedTrace<S, M>> {
+  const unavailable = (
+    seq: number | null,
+    reason: TraceUnavailableReason,
+    bytes?: number,
+  ): RecordedTrace<S, M> => ({
+    _tag: "unavailable",
+    seq,
+    reason,
+    ...(bytes === undefined ? {} : { bytes }),
+  });
+  const head = await reader.readCommittedSeq();
+  const toSeq = Math.min(
+    Math.floor(range.toSeq ?? Number.POSITIVE_INFINITY),
+    head,
+  );
+  const fromSeq =
+    range.fromSeq === undefined ? null : Math.max(1, Math.ceil(range.fromSeq));
+  if (toSeq < 1 || (fromSeq !== null && fromSeq > toSeq)) {
+    return unavailable(null, "empty");
+  }
+  let expected = fromSeq;
+  let anchor: { readonly state: S; readonly skipped: number } | null = null;
+  const steps: TraceStep<S, M>[] = [];
+  for await (const frame of reader.readFrames(
+    { fromSeq: fromSeq ?? 1, toSeq },
+    { evidence: true },
+  )) {
+    const seq = frame.seq;
+    if (seq === null) {
+      return unavailable(null, frame._tag === "refused" ? frame.reason : "key");
+    }
+    if (expected !== null && seq !== expected) {
+      return unavailable(expected, "gap");
+    }
+    expected = seq + 1;
+    if (frame._tag === "refused") {
+      return unavailable(frame.seq, frame.reason, frame.bytes);
+    }
+    if (frame._tag === "message") return unavailable(frame.seq, "messages");
+    if (frame.evidence === undefined) return unavailable(frame.seq, "frame");
+    const state = frame.evidence.state as S;
+    if (frame._tag === "init") {
+      if (anchor !== null) return unavailable(frame.seq, "boot");
+      anchor = { state, skipped: frame.skipped ?? 0 };
+      continue;
+    }
+    if (anchor === null) return unavailable(frame.seq, "anchor");
+    const { cmds } = frame.evidence;
+    steps.push(
+      cmds === null
+        ? { msg: frame.event, state }
+        : { msg: frame.event, state, cmds: cmds as readonly Cmd[] },
+    );
+  }
+  if (expected === null) return unavailable(null, "empty");
+  if (expected <= toSeq) return unavailable(expected, "tail");
+  if (anchor === null) return unavailable(null, "empty");
+  return {
+    _tag: "trace",
+    trace: {
+      loaded: anchor.state,
+      ...(anchor.skipped > 0 ? { skipped: anchor.skipped } : {}),
+      msgs: steps.map((step) => step.msg),
+      finalState: steps.at(-1)?.state ?? anchor.state,
+      steps,
+    },
   };
 }
 
@@ -1265,10 +1317,10 @@ export function doEventSourcedStore<
   const maxRowBytes = opts.recording?.maxRowBytes;
   if (
     maxRowBytes !== undefined &&
-    (!Number.isSafeInteger(maxRowBytes) || maxRowBytes < 1)
+    (!Number.isSafeInteger(maxRowBytes) || maxRowBytes < MIN_ROW_BYTES)
   ) {
     throw new Error(
-      `@demlik/tea/do: recording.maxRowBytes must be a positive safe integer, got ${maxRowBytes}`,
+      `@demlik/tea/do: recording.maxRowBytes must be a safe integer >= ${MIN_ROW_BYTES}, got ${maxRowBytes}`,
     );
   }
   const parse = opts.parse ?? defaultParse;
@@ -1292,6 +1344,7 @@ export function doEventSourcedStore<
   // boundary. A save without a Msg, and a transition whose write failed, never
   // replace it.
   let latestState: S | null = null;
+  let snapshotParts: number | null = null;
   // The log's generation in this isolate: a `load()` takes it, and a write that
   // was called under an older one is refused at its write point (./save-fence).
   const fence = saveFence(storage, metaKey);
@@ -1339,17 +1392,49 @@ export function doEventSourcedStore<
    */
   async function readSnapshot(): Promise<{ state: S | null; seq: number }> {
     const raw = await storage.get<string>(snapshotKey);
-    if (raw === undefined || raw === null) return { state: null, seq: 0 };
+    if (raw === undefined || raw === null) {
+      snapshotParts = 0;
+      return { state: null, seq: 0 };
+    }
     // Structural JSON malformation throws here, as in doStore — infra error,
     // not a schema mismatch.
-    const cell = JSON.parse(raw) as SnapshotCell<unknown>;
-    const parsed = parse(cell.state);
+    const cell = JSON.parse(raw) as SnapshotCell<unknown> &
+      Partial<SnapshotPartsCell>;
+    let state: unknown = cell.state;
+    snapshotParts = 0;
+    if (cell.parts !== undefined) {
+      if (!Number.isSafeInteger(cell.parts) || cell.parts < 1) {
+        throw new Error("@demlik/tea/do: invalid snapshot part count");
+      }
+      state = JSON.parse(await readParts(cell.parts));
+      snapshotParts = cell.parts;
+    }
+    const parsed = parse(state);
     if (parsed === null)
       throw new Error("@demlik/tea/do: persisted snapshot was refused");
     if (!Number.isSafeInteger(cell.seq) || cell.seq < 0) {
       throw new Error("@demlik/tea/do: invalid snapshot sequence");
     }
     return { state: parsed, seq: cell.seq };
+  }
+
+  async function readParts(count: number): Promise<string> {
+    let text = "";
+    for (let from = 0; from < count; from += EVENT_PAGE_SIZE) {
+      const keys = Array.from(
+        { length: Math.min(EVENT_PAGE_SIZE, count - from) },
+        (_, at) => partKey(from + at),
+      );
+      const found = await storage.get<string>(keys);
+      for (const key of keys) {
+        const part = found.get(key);
+        if (typeof part !== "string") {
+          throw new Error("@demlik/tea/do: a snapshot part is missing");
+        }
+        text += part;
+      }
+    }
+    return text;
   }
 
   /**
@@ -1492,9 +1577,13 @@ export function doEventSourcedStore<
     ): Promise<void> {
       const init = boundary?._tag === "init" ? boundary : null;
       const skipped = init?.skipped ?? 0;
-      if (!Number.isSafeInteger(skipped) || skipped < 0) {
+      if (
+        !Number.isSafeInteger(skipped) ||
+        skipped < 0 ||
+        !Number.isSafeInteger(skipped + 1)
+      ) {
         throw new Error(
-          `@demlik/tea/do: an init boundary's skipped count must be an integer >= 0, got ${skipped}`,
+          `@demlik/tea/do: an init boundary's skipped count must be an integer >= 0 that leaves a safe sequence after it, got ${skipped}`,
         );
       }
       const moved = skipped > 0;
@@ -1514,16 +1603,19 @@ export function doEventSourcedStore<
           );
         }
         const seq = moved ? skipped + 1 : prior + 1;
+        if (!Number.isSafeInteger(seq)) {
+          throw new Error(
+            `@demlik/tea/do: the log's next sequence ${seq} is not a safe integer`,
+          );
+        }
         const written = await ensureFormat();
         if (init !== null && written !== "recording") {
           // A log written as messages never gets a frame: its evidence is not invented.
           if (!moved) return;
-          await persist(
-            {
-              committed: skipped,
-              snapshot: { seq: skipped, state },
-            },
+          await persistFitting(
+            () => ({ committed: skipped, snapshot: { seq: skipped, state } }),
             admit,
+            false,
           );
           lastSeq = skipped;
           latestState = state;
@@ -1564,13 +1656,18 @@ export function doEventSourcedStore<
               );
         const budgeted = maxRowBytes !== undefined && written === "recording";
         const bytes = budgeted
-          ? utf8.encode(eventKey(eventPrefix, seq)).byteLength +
-            utf8.encode(cell.json).byteLength
+          ? rowSize(eventKey(eventPrefix, seq), cell.json)
           : 0;
-        const of = init === null ? "step" : "init";
-        const write = (marker: OversizedMarker | null) =>
-          persist(
-            {
+        const over: OversizedMarker = {
+          of: init === null ? "step" : "init",
+          seq,
+          bytes,
+        };
+        const measured = budgeted && bytes > maxRowBytes;
+        const marked = await persistFitting(
+          (retried) => {
+            const marker = measured || retried ? over : null;
+            return {
               event: {
                 seq,
                 json: marker === null ? cell.json : encodeOversized(marker),
@@ -1579,18 +1676,12 @@ export function doEventSourcedStore<
                 moved || snapshotDue || marker?.of === "step"
                   ? { seq, state }
                   : null,
-            },
-            admit,
-          );
-        let marker: OversizedMarker | null =
-          budgeted && bytes > maxRowBytes ? { of, seq, bytes } : null;
-        try {
-          await write(marker);
-        } catch (thrown) {
-          if (!budgeted || marker !== null || !isTooBig(thrown)) throw thrown;
-          marker = { of, seq, bytes };
-          await write(marker);
-        }
+            };
+          },
+          admit,
+          budgeted && !measured,
+        );
+        const marker = measured || marked ? over : null;
         lastSeq = seq;
         basis = marker === null ? cell.basis : null;
         if (init !== null) {
@@ -1647,8 +1738,11 @@ export function doEventSourcedStore<
       readonly snapshot: { readonly seq: number; readonly state: S } | null;
     },
     admit: () => void,
+    rowBytes: number | null = null,
   ): Promise<void> {
     const cells: [string, string][] = [];
+    let stale: string[] = [];
+    let parts = snapshotParts;
     if (write.event !== undefined) {
       cells.push([eventKey(eventPrefix, write.event.seq), write.event.json]);
     }
@@ -1661,12 +1755,100 @@ export function doEventSourcedStore<
     }
     if (write.snapshot !== null) {
       const cell: SnapshotCell<S> = write.snapshot;
-      cells.push([snapshotKey, JSON.stringify(cell)]);
+      const json = JSON.stringify(cell);
+      const split =
+        rowBytes === null || rowBytes >= rowSize(snapshotKey, json)
+          ? null
+          : splitRows(JSON.stringify(cell.state), rowBytes);
+      const before = snapshotParts ?? (await storedSnapshotParts());
+      if (split === null) {
+        cells.push([snapshotKey, json]);
+        parts = 0;
+      } else {
+        cells.push([
+          snapshotKey,
+          JSON.stringify({
+            seq: cell.seq,
+            parts: split.length,
+          } satisfies SnapshotPartsCell),
+        ]);
+        for (const [at, part] of split.entries()) {
+          cells.push([partKey(at), part]);
+        }
+        parts = split.length;
+      }
+      const kept = parts;
+      stale = Array.from({ length: Math.max(0, before - kept) }, (_, at) =>
+        partKey(kept + at),
+      );
     }
     await storage.transaction(async (txn) => {
       admit();
       for (const [key, value] of cells) await txn.put(key, value);
+      for (const key of stale) await txn.delete(key);
     });
+    snapshotParts = parts;
+  }
+
+  function partKey(at: number): string {
+    return `${snapshotKey}/part/${String(at).padStart(PART_WIDTH, "0")}`;
+  }
+
+  function splitRows(text: string, rowBytes: number): string[] {
+    const room = rowBytes - utf8.encode(partKey(0)).byteLength;
+    if (room < 4) {
+      throw new Error("@demlik/tea/do: a snapshot part has no room in its row");
+    }
+    const rows: string[] = [];
+    let start = 0;
+    let used = 0;
+    let at = 0;
+    while (at < text.length) {
+      const code = text.codePointAt(at) as number;
+      const width = code < 0x80 ? 1 : code < 0x800 ? 2 : code < 0x10000 ? 3 : 4;
+      const step = code >= 0x10000 ? 2 : 1;
+      if (used + width > room) {
+        rows.push(text.slice(start, at));
+        start = at;
+        used = 0;
+      }
+      used += width;
+      at += step;
+    }
+    rows.push(text.slice(start));
+    return rows;
+  }
+
+  async function storedSnapshotParts(): Promise<number> {
+    const raw = await storage.get<string>(snapshotKey);
+    if (raw === undefined || raw === null) return 0;
+    const cell = JSON.parse(raw) as Partial<SnapshotPartsCell>;
+    return typeof cell.parts === "number" && Number.isSafeInteger(cell.parts)
+      ? cell.parts
+      : 0;
+  }
+
+  async function persistFitting(
+    build: (mark: boolean) => Parameters<typeof persist>[0],
+    admit: () => void,
+    canMark: boolean,
+  ): Promise<boolean> {
+    let rowBytes = maxRowBytes ?? null;
+    let mark = false;
+    for (;;) {
+      try {
+        await persist(build(mark), admit, rowBytes);
+        return mark;
+      } catch (thrown) {
+        if (rowBytes === null || !isTooBig(thrown)) throw thrown;
+        if (canMark && !mark) {
+          mark = true;
+          continue;
+        }
+        rowBytes = Math.floor(rowBytes / 2);
+        if (rowBytes < MIN_ROW_BYTES) throw thrown;
+      }
+    }
   }
 
   /**
@@ -1682,7 +1864,8 @@ export function doEventSourcedStore<
       // the last snapshot (`seq <= snapshotSeq`). Both keep the snapshot's `seq`
       // and `state` paired on the same boundary the count-based path guarantees.
       if (latestState === null || seq <= snapshotSeq) return false;
-      await persist({ snapshot: { seq, state: latestState } }, admit);
+      const state = latestState;
+      await persistFitting(() => ({ snapshot: { seq, state } }), admit, false);
       snapshotSeq = seq;
       sinceSnapshot = 0;
       return true;

@@ -27,7 +27,8 @@ import type { Trace } from "../recorder";
  * Throws, before it loads or saves anything, when the trace has no `loaded`
  * State, when it holds messages but no steps (record with
  * `captureSteps: true`), when it has a different number of steps than
- * messages, or when its `skipped` is not a non-negative integer.
+ * messages, when its `skipped` is not a non-negative integer, or when its
+ * last step would be numbered past `Number.MAX_SAFE_INTEGER`.
  */
 export async function writeTrace<S, M extends { readonly _tag: string }>(
   store: Pick<Store<S>, "load" | "save">,
@@ -53,6 +54,12 @@ export async function writeTrace<S, M extends { readonly _tag: string }>(
   ) {
     throw new Error(
       `tea writeTrace: the trace's skipped count must be an integer >= 0, got ${skipped}`,
+    );
+  }
+  const last = (skipped ?? 0) + (trace.steps?.length ?? 0) + 1;
+  if (!Number.isSafeInteger(last)) {
+    throw new Error(
+      `tea writeTrace: the trace's last sequence ${last} is not a safe integer`,
     );
   }
   await store.load();

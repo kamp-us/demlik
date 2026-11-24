@@ -72,7 +72,11 @@ await live.stop();
 const { storage } = fakeDoStorage();
 
 // #region store
-import { doEventLogReader, doEventSourcedStore } from "@demlik/tea/do";
+import {
+  doEventLogReader,
+  doEventSourcedStore,
+  readTrace,
+} from "@demlik/tea/do";
 import { writeTrace } from "@demlik/tea/persistence";
 
 const kept = run(downloader, { terminal: (s) => s.phase === "done" });
@@ -90,7 +94,7 @@ const es = doEventSourcedStore(
 );
 await writeTrace(es.store, capture.dump());
 
-const back = await doEventLogReader<Msg>(storage).readTrace<State>();
+const back = await readTrace<State, Msg>(doEventLogReader<Msg>(storage));
 if (back._tag !== "trace") throw new Error(`unavailable: ${back.reason}`);
 expect(back.trace.skipped).toBe(2);
 expect(replayTrace(downloader, back.trace).matches).toBe(true);

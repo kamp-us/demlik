@@ -116,12 +116,16 @@ narrower:
   rejects with `SQLITE_TOOBIG`, is not written. A small marker naming its seq
   and measured bytes stands in its place, and every frame after it is still
   kept. A step's marker keeps neither its evidence nor its Msg, so the store
-  snapshots the State after it in the same write. Any other storage failure
-  still fails the save.
+  snapshots the State after it in the same write, and a snapshot too large for
+  one row is split across rows, so the recovery path fits whatever the State's
+  size. Any other storage failure still fails the save.
+- **Numbers stay safe.** A seq past `Number.MAX_SAFE_INTEGER` is refused before
+  it is written, so two frames never share a key.
 - **Replay.** A recording reads back as a whole `Trace` or not at all.
-  `readTrace` reports a recording with a marker, or any frame it cannot
-  rebuild, as unavailable at that seq, and never hands back the frames before
-  it as if they were the run.
+  `readTrace` checks every seq up to the committed head. It reports a missing
+  cell, a missing tail, a marker, or any frame it cannot rebuild as unavailable
+  at that seq, and never hands back the frames before it as if they were the
+  run.
 
 ## Effects are at-least-once
 

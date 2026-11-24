@@ -8,7 +8,7 @@ Tier: `stable`
 import { … } from "@demlik/tea/do";
 ```
 
-## Exports (135)
+## Exports (136)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -105,9 +105,10 @@ import { … } from "@demlik/tea/do";
 | [`ProjectionRegistry`](#ProjectionRegistry) | Interface | stable | A driver over a set of projections sharing one write-model stream. |
 | [`ProjectionRunner`](#ProjectionRunner) | Interface | stable | A live, running projection instance: the projection's current `View`, its exclusive stored `offset`, and the `present`/`reset` operations the driver (or a rebuild) calls. |
 | [`ProjectionUpdate`](#ProjectionUpdate) | Interface | stable | One unit the projection driver presents to a projection's `apply`. |
+| [`readTrace`](#readTrace) | Function | stable | Read a recording back as the `Trace` it was written from, for `replayTrace`. |
 | [`rebuildProjection`](#rebuildProjection) | Function | stable | Rebuild a projection's view by folding an ordered event stream from the `NoOffset` start. |
-| [`RecordedTrace`](#RecordedTrace) | Type | stable | What EventLogReader.readTrace reads back: a whole `Trace`, or why the recording cannot be replayed. |
-| [`RecordingBreak`](#RecordingBreak) | Type | stable | Where a recording's evidence is broken. |
+| [`RecordedTrace`](#RecordedTrace) | Type | stable | What readTrace reads back: a whole `Trace`, or why the recording cannot be replayed. |
+| [`RecordingBreak`](#RecordingBreak) | Interface | stable | Where a recording's evidence is broken. |
 | [`registerHibernatableSocket`](#registerHibernatableSocket) | Function | stable | Register an already-created `server` socket on the DO via the Cloudflare **Hibernation API**: `ctx.acceptWebSocket(server, tags)` hands the socket to the runtime (it survives eviction and re-delivers inbound frames to the DO's `webSocketMessage` lifecycle method), and — when an `attachment` is supplied — persists it via `server.serializeAttachment` so it survives the wake. |
 | [`RegisterOptions`](#RegisterOptions) | Interface | stable | Optional settings for registerHibernatableSocket / acceptPresenceSocket. |
 | [`reissueSurvivingEffects`](#reissueSurvivingEffects) | Function | stable | Re-fire every round-trip a rehydrated actor still owes, on wake. |
@@ -145,7 +146,7 @@ import { … } from "@demlik/tea/do";
 | [`StoredEventRefusal`](#StoredEventRefusal) | Type | stable | Why a stored event cell did not decode: its value is not text (`not-text`), its key carries no integer sequence (`key`), its text is not JSON (`json`), `parseEvent` returned `null` (`event`), or it is a recording cell that does not decode as a frame, lacks the frame its delta needs, or fails its checksum (FrameRefusal). |
 | [`StoredFrame`](#StoredFrame) | Type | stable | One stored cell read as a frame of the log. |
 | [`survivingEffects`](#survivingEffects) | Function | stable | RE-EMIT ON ACTIVATION. |
-| [`TraceUnavailableReason`](#TraceUnavailableReason) | Type | stable | Why EventLogReader.readTrace has no trace to give: the log or range is empty (`empty`), it is written as bare messages (`messages`), its first frame is not an `init` frame (`anchor`), a second `init` frame opens another boot (`boot`), or a frame is refused, with the refusal `readFrames` gives it, `oversized` among them. |
+| [`TraceUnavailableReason`](#TraceUnavailableReason) | Type | stable | Why readTrace has no trace to give: the log or range is empty (`empty`), it is written as bare messages (`messages`), its first frame is not an `init` frame (`anchor`), a second `init` frame opens another boot (`boot`), a seq inside the range has no cell (`gap`), the cells stop before the committed head (`tail`), or a frame is refused, with the refusal `readFrames` gives it, `oversized` among them. |
 | [`WS_READY_STATE_OPEN`](#WS_READY_STATE_OPEN) | Variable | stable | The OPEN `readyState` value (`WebSocket.READY_STATE_OPEN` in the Cloudflare runtime). |
 
 ## Declarations
@@ -965,19 +966,6 @@ interface EventLogReader<M> {
    * instead of thrown. Read in pages of at most 128 rows.
    */
   readStoredEvents(range?: StoredEventRange): AsyncIterable<StoredEvent<M>>;
-  /**
-   * Read a recording back as the `Trace` it was written from, for
-   * `replayTrace`. The range's first frame is the anchor and must be an `init`
-   * frame: its State is `loaded` and its `skipped` the trace's `skipped`, so a
-   * trace written with `writeTrace` reads back as it was dumped. Each `step`
-   * frame after it gives a Msg and a step with its State and Cmds, and
-   * `finalState` is the last State. A range that holds a second boot, a frame
-   * written as a bare message, or any refused frame (an `oversized` marker, a
-   * delta that does not rebuild) is `unavailable` at that frame's seq; no
-   * prefix of it is returned. To read the boot after a restart, start the
-   * range at its `init` frame.
-   */
-  readTrace<S = unknown>(range?: EventLogRange): Promise<RecordedTrace<S, M>>;
 }
 ```
 
@@ -1078,9 +1066,18 @@ interface EventSourcedOptions<S, M> extends EventLogReaderOptions<M> {
      * Each marker is reported to `onRecordingBreak` with `reason: "oversized"`.
      * A recording that holds a marker is not replayable: `readFrames` refuses
      * it as `oversized` and `readTrace` reports the recording unavailable.
-     * Applies to a log written as a recording only. Must be a positive safe
-     * integer. A Durable Object row holds at most 8 MB. Default: no budget,
-     * and every frame is written as it encodes.
+     * Markers apply to a log written as a recording only.
+     *
+     * The budget also holds every snapshot this store writes, so the marker
+     * and the snapshot that recovers past it always fit, whatever the State's
+     * size. A snapshot over the budget is written as a small head cell and its
+     * State's JSON split across part rows (`<snapshot key>/part/<n>`), in the
+     * same transaction, and restore joins them. When storage still rejects a
+     * write with `SQLITE_TOOBIG`, the store first writes the frame as a marker,
+     * then halves the row size it splits to, until a write lands or the size
+     * would fall below 1024 bytes, when the rejection propagates. Must be a
+     * safe integer of at least 1024. A Durable Object row holds at most 8 MB.
+     * Default: no budget; every frame and snapshot is written as it encodes.
      */
     readonly maxRowBytes?: number;
     /** JSON written into every `init` frame, unread by the store. */
@@ -1647,6 +1644,17 @@ interface ProjectionUpdate<Model, Msg> {
 }
 ```
 
+<a id="readTrace"></a>
+
+### `readTrace`
+
+```ts
+function readTrace<S, M extends { _tag: string }>(
+  reader: Pick<EventLogReader<M>, "readCommittedSeq" | "readFrames">,
+  range?: EventLogRange,
+): Promise<RecordedTrace<S, M>>
+```
+
 <a id="rebuildProjection"></a>
 
 ### `rebuildProjection`
@@ -1684,19 +1692,13 @@ type RecordedTrace<S, M> =
 ### `RecordingBreak`
 
 ```ts
-type RecordingBreak =
-  | {
-    readonly fromSeq: number;
-    readonly reason: Exclude<FrameRefusal, "oversized">;
-    readonly toSeq: number;
-  }
-  | {
-    readonly bytes: number;
-    readonly fromSeq: number;
-    readonly reason: "oversized";
-    readonly seq: number;
-    readonly toSeq: number;
-  }
+interface RecordingBreak {
+  readonly bytes?: number;
+  readonly fromSeq: number;
+  readonly reason: FrameRefusal;
+  readonly seq?: number;
+  readonly toSeq: number;
+}
 ```
 
 <a id="registerHibernatableSocket"></a>
@@ -2424,7 +2426,7 @@ type StoredFrame<M> =
     readonly restored: boolean;
     readonly seq: number;
     readonly serializedBytes: number;
-    readonly skipped: number;
+    readonly skipped?: number;
   }
   | Extract<StoredEvent<M>, { _tag: "refused" }>
 ```
@@ -2444,7 +2446,7 @@ function survivingEffects<E>(
 ### `TraceUnavailableReason`
 
 ```ts
-type TraceUnavailableReason = StoredEventRefusal | "empty" | "messages" | "anchor" | "boot"
+type TraceUnavailableReason = StoredEventRefusal | "empty" | "messages" | "anchor" | "boot" | "gap" | "tail"
 ```
 
 <a id="WS_READY_STATE_OPEN"></a>

@@ -91,6 +91,7 @@ export {
   type RecordingBreak,
   type RestoreAttempt,
   RestoreInterruptedError,
+  readTrace,
   type StoredEvent,
   type StoredEventRange,
   type StoredEventRefusal,

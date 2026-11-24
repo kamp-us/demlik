@@ -10,6 +10,7 @@ import {
   doEventSourcedStore,
   type EventSourcedOptions,
   type RecordingBreak,
+  readTrace,
 } from "./index";
 
 interface Model {
@@ -122,7 +123,7 @@ describe("a windowed trace written into an empty recording store", () => {
     });
 
     const reader = doEventLogReader<Msg>(fakeDoStorage(backing).storage);
-    const back = await reader.readTrace<Model>();
+    const back = await readTrace<Model, Msg>(reader);
     if (back._tag !== "trace") throw new Error(`unavailable: ${back.reason}`);
     expect(back.trace.skipped).toBe(990);
     expect(back.trace.loaded).toEqual(trace.loaded);
@@ -313,10 +314,9 @@ describe("a frame over its row budget", () => {
     });
     expect(marker.bytes).toBeGreaterThan(budget);
     expect((backing.get(key(3)) as string).length).toBeLessThan(200);
-    for (const [seq, cell] of backing) {
-      if (seq.startsWith("@@es/evt/")) {
-        expect(seq.length + cell.length).toBeLessThanOrEqual(budget);
-      }
+    expect(backing.has("@@es/snapshot/part/00000000")).toBe(true);
+    for (const [cellKey, cell] of backing) {
+      expect(cellKey.length + cell.length).toBeLessThanOrEqual(budget);
     }
     expect(breaks).toEqual([
       {
@@ -359,9 +359,9 @@ describe("a frame over its row budget", () => {
     const backing = new Map<string, string>();
     await liveRun(backing, run5, opts);
 
-    const back = await doEventLogReader<Msg>(
-      fakeDoStorage(backing).storage,
-    ).readTrace<Model>();
+    const back = await readTrace<Model, Msg>(
+      doEventLogReader<Msg>(fakeDoStorage(backing).storage),
+    );
 
     expect(back._tag).toBe("unavailable");
     expect(back).toMatchObject({ seq: 3, reason: "oversized" });
@@ -396,9 +396,9 @@ describe("a frame over its row budget", () => {
     expect(eventSeqs(backing)).toEqual([3, 4, 5, 6]);
     expect(breaks.map((b) => b.fromSeq)).toEqual([3]);
     expect(await storeOn(backing, opts).store.load()).toEqual(trace.finalState);
-    const back = await doEventLogReader<Msg>(
-      fakeDoStorage(backing).storage,
-    ).readTrace();
+    const back = await readTrace<Model, Msg>(
+      doEventLogReader<Msg>(fakeDoStorage(backing).storage),
+    );
     expect(back).toMatchObject({ _tag: "unavailable", reason: "oversized" });
   });
 
@@ -476,7 +476,7 @@ describe("a frame over its row budget", () => {
   });
 
   it.each([
-    0, -1, 2.5,
+    0, -1, 2.5, 1023,
   ])("refuses a maxRowBytes of %s when the store is built", (maxRowBytes) => {
     expect(() =>
       storeOn(new Map(), { recording: { provenance: null, maxRowBytes } }),
@@ -538,7 +538,9 @@ describe("a write the storage rejects", () => {
     expect((breaks[0] as { bytes: number }).bytes).toBeGreaterThan(0);
     expect(await storeOn(backing, {}).store.load()).toEqual(final);
     expect(
-      await doEventLogReader<Msg>(fakeDoStorage(backing).storage).readTrace(),
+      await readTrace<Model, Msg>(
+        doEventLogReader<Msg>(fakeDoStorage(backing).storage),
+      ),
     ).toMatchObject({ _tag: "unavailable", seq: 3, reason: "oversized" });
   });
 
@@ -572,6 +574,301 @@ describe("a write the storage rejects", () => {
 
     await expect(saveRun(es)).rejects.toThrow(/SQLITE_TOOBIG/);
     expect(eventSeqs(backing)).toEqual([1]);
+  });
+});
+
+function rowLimited(backing: Map<string, string>, limit: number) {
+  const { storage } = fakeDoStorage(backing);
+  const rejected: string[] = [];
+  const transaction = storage.transaction.bind(storage);
+  const limited = Object.assign(Object.create(storage), {
+    transaction: <T>(
+      closure: (txn: DurableObjectTransaction) => Promise<T>,
+    ): Promise<T> =>
+      transaction((txn) => {
+        const put = txn.put.bind(txn) as (
+          k: string,
+          v: string,
+        ) => Promise<void>;
+        const guarded = Object.assign(Object.create(txn), {
+          put: async (k: string, v: string) => {
+            if (new TextEncoder().encode(v).byteLength > limit) {
+              rejected.push(k);
+              throw new Error(`string or blob too big: SQLITE_TOOBIG (${k})`);
+            }
+            await put(k, v);
+          },
+          delete: txn.delete.bind(txn),
+        }) as DurableObjectTransaction;
+        return closure(guarded);
+      }),
+  }) as DurableObjectStorage;
+  return { storage: limited, rejected };
+}
+
+describe("a size rejection that persists on every try", () => {
+  const limit = 4_096;
+  const huge: Msg = { _tag: "grow", size: 40_000, seed: 3 };
+
+  function storeLimited(
+    backing: Map<string, string>,
+    breaks: RecordingBreak[],
+  ) {
+    const limited = rowLimited(backing, limit);
+    const es = doEventSourcedStore(limited.storage, counter, ctx, {
+      recording: { provenance: null, maxRowBytes: 1_000_000 },
+      onRecordingBreak: (b) => {
+        breaks.push(b);
+      },
+    });
+    return { es, rejected: limited.rejected };
+  }
+
+  it("keeps every frame after an oversized one, with its marker and the snapshot behind it split into rows that fit", async () => {
+    const backing = new Map<string, string>();
+    const breaks: RecordingBreak[] = [];
+    const { es, rejected } = storeLimited(backing, breaks);
+    const msgs: Msg[] = [inc(1), huge, inc(2), { _tag: "shrink" }, inc(3)];
+    const rt = await run(counter, {
+      store: es.store,
+      onError: () => {},
+      interpret,
+    }).ready;
+    for (const msg of msgs) await rt.dispatch(msg);
+    const final = rt.getState();
+    await rt.stop();
+
+    expect(rejected.length).toBeGreaterThan(0);
+    expect(eventSeqs(backing)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(breaks.map((b) => b.seq)).toEqual([3, 4]);
+    for (const cell of backing.values()) {
+      expect(new TextEncoder().encode(cell).byteLength).toBeLessThanOrEqual(
+        limit,
+      );
+    }
+    expect(JSON.parse(backing.get(key(6)) as string)).toMatchObject({
+      frame: "step",
+      msg: inc(3),
+    });
+    expect(await storeOn(backing, {}).store.load()).toEqual(final);
+  });
+
+  it("writes a windowed trace whose anchor State is too large for any row, and restores it", async () => {
+    const backing = new Map<string, string>();
+    const breaks: RecordingBreak[] = [];
+    const { es } = storeLimited(backing, breaks);
+    const trace = await recordWindowed(
+      [inc(1), huge, inc(2), inc(3), { _tag: "shrink" }, inc(4)],
+      4,
+    );
+    expect(trace.skipped).toBe(2);
+
+    await writeTrace(es.store, trace);
+
+    expect(eventSeqs(backing)).toEqual([3, 4, 5, 6, 7]);
+    expect(breaks.map((b) => b.seq)).toEqual([3, 4, 5]);
+    expect(await storeOn(backing, {}).store.load()).toEqual(trace.finalState);
+    expect(
+      await readTrace<Model, Msg>(
+        doEventLogReader<Msg>(fakeDoStorage(backing).storage),
+      ),
+    ).toMatchObject({ _tag: "unavailable", seq: 3, reason: "oversized" });
+  });
+
+  it("splits a snapshotNow too large for a row, and drops the parts a later whole snapshot no longer needs", async () => {
+    const backing = new Map<string, string>();
+    const { es } = storeLimited(backing, []);
+    const rt = await run(counter, {
+      store: es.store,
+      onError: () => {},
+      interpret,
+    }).ready;
+    await rt.dispatch(inc(1));
+    await rt.dispatch(huge);
+    await rt.dispatch({ _tag: "shrink" });
+    await rt.dispatch(inc(1));
+    const parts = () =>
+      [...backing.keys()].filter((k) => k.startsWith("@@es/snapshot/part/"));
+    expect(parts().length).toBeGreaterThan(1);
+    expect(await es.snapshotNow()).toBe(true);
+    expect(parts()).toEqual([]);
+    expect(JSON.parse(backing.get("@@es/snapshot") as string).seq).toBe(5);
+    const final = rt.getState();
+    await rt.stop();
+    expect(await storeOn(backing, {}).store.load()).toEqual(final);
+  });
+
+  it("propagates the rejection when no row size down to 1024 bytes lands", async () => {
+    const backing = new Map<string, string>();
+    const limited = rowLimited(backing, 200);
+    const es = doEventSourcedStore(limited.storage, counter, ctx, {
+      recording: { provenance: null, maxRowBytes: 4_096 },
+    });
+    await es.store.load();
+
+    await expect(
+      es.store.save(
+        { _tag: "counting", count: 0, blob: noise(2_000, 1) },
+        undefined,
+        {
+          _tag: "init",
+          cmds: [],
+          skipped: 3,
+        },
+      ),
+    ).rejects.toThrow(/SQLITE_TOOBIG/);
+    expect(eventSeqs(backing)).toEqual([]);
+  });
+});
+
+describe("sequence numbers past the safe range", () => {
+  const max = Number.MAX_SAFE_INTEGER;
+
+  it.each([
+    max,
+    max - 5,
+  ])("writeTrace refuses a skipped count of %s whose steps would pass it, before it loads", async (skipped) => {
+    const trace = await recordWindowed(thousand.slice(0, 20), 10);
+    let loaded = false;
+
+    await expect(
+      writeTrace(
+        {
+          load: async () => {
+            loaded = true;
+            return null;
+          },
+          save: async () => {},
+        },
+        { ...trace, skipped },
+      ),
+    ).rejects.toThrow(/safe integer/);
+    expect(loaded).toBe(false);
+  });
+
+  it.each([
+    [recording],
+    [{}],
+  ])("the store refuses a moved anchor of MAX_SAFE_INTEGER on either format (%#)", async (opts) => {
+    const backing = new Map<string, string>();
+    const es = storeOn(backing, opts);
+    await es.store.load();
+
+    await expect(
+      es.store.save({ _tag: "counting", count: 0, blob: "" }, undefined, {
+        _tag: "init",
+        cmds: [],
+        skipped: max,
+      }),
+    ).rejects.toThrow(/safe sequence/);
+    expect(backing.size).toBe(0);
+  });
+
+  it.each([
+    [recording],
+    [{}],
+  ])("the store refuses a step past MAX_SAFE_INTEGER and keeps the log readable (%#)", async (opts) => {
+    const backing = new Map<string, string>();
+    const es = storeOn(backing, opts);
+    await es.store.load();
+    await es.store.save({ _tag: "counting", count: 0, blob: "" }, undefined, {
+      _tag: "init",
+      cmds: [],
+      skipped: max - 1,
+    });
+    const head = await es.getCommittedSeq();
+
+    const steps: Promise<void>[] = [];
+    for (let at = head; at <= max; at += 1) {
+      steps.push(
+        es.store.save({ _tag: "counting", count: at, blob: "" }, inc(1), {
+          _tag: "step",
+          cmds: [],
+        }),
+      );
+    }
+    const settled = await Promise.allSettled(steps);
+
+    expect(settled.at(-1)?.status).toBe("rejected");
+    expect(await es.getCommittedSeq()).toBeLessThanOrEqual(max);
+    expect(eventSeqs(backing).every(Number.isSafeInteger)).toBe(true);
+    await expect(storeOn(backing, opts).store.load()).resolves.toBeDefined();
+  });
+});
+
+describe("a recording missing a committed frame", () => {
+  async function fiveSteps() {
+    const backing = new Map<string, string>();
+    await liveRun(backing, [inc(1), inc(2), inc(3), inc(4), inc(5)], recording);
+    return backing;
+  }
+  const read = (backing: Map<string, string>, range = {}) =>
+    readTrace<Model, Msg>(
+      doEventLogReader<Msg>(fakeDoStorage(backing).storage),
+      range,
+    );
+
+  it("reads the whole recording as a trace that replays", async () => {
+    const back = await read(await fiveSteps());
+
+    expect(back._tag).toBe("trace");
+    if (back._tag === "trace") {
+      expect(back.trace.msgs).toHaveLength(5);
+      expect(replayTrace(counter, back.trace).matches).toBe(true);
+    }
+  });
+
+  it("is unavailable at a gap inside it, not a prefix before the gap", async () => {
+    const backing = await fiveSteps();
+    backing.delete(key(4));
+
+    expect(await read(backing)).toEqual({
+      _tag: "unavailable",
+      seq: 4,
+      reason: "gap",
+    });
+  });
+
+  it("is unavailable when its cells stop before the committed head", async () => {
+    const backing = await fiveSteps();
+    backing.delete(key(6));
+    backing.delete(key(5));
+
+    expect(await read(backing)).toEqual({
+      _tag: "unavailable",
+      seq: 5,
+      reason: "tail",
+    });
+  });
+
+  it("is unavailable when the range starts at a seq with no cell", async () => {
+    const backing = await fiveSteps();
+    backing.delete(key(1));
+
+    expect(await read(backing, { fromSeq: 1 })).toMatchObject({
+      reason: "gap",
+      seq: 1,
+    });
+    expect(await read(backing)).toMatchObject({
+      _tag: "unavailable",
+      seq: 2,
+    });
+  });
+
+  it("reads a range that ends before the head as the trace up to it", async () => {
+    const back = await read(await fiveSteps(), { toSeq: 3 });
+
+    expect(back._tag).toBe("trace");
+    if (back._tag === "trace")
+      expect(back.trace.msgs).toEqual([inc(1), inc(2)]);
+  });
+
+  it("is empty for a log with nothing committed", async () => {
+    expect(await read(new Map())).toEqual({
+      _tag: "unavailable",
+      seq: null,
+      reason: "empty",
+    });
   });
 });
 
