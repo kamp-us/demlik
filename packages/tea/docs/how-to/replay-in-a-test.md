@@ -138,7 +138,7 @@ const es = doEventSourcedStore(
 );
 await writeTrace(es.store, capture.dump());
 
-const back = await doEventLogReader(storage).readTrace<State>();
+const back = await doEventLogReader<Msg>(storage).readTrace<State>();
 if (back._tag !== "trace") throw new Error(`unavailable: ${back.reason}`);
 expect(back.trace.skipped).toBe(2);
 expect(replayTrace(downloader, back.trace).matches).toBe(true);

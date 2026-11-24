@@ -680,11 +680,6 @@ function jsonBytes(value: unknown): number {
   return utf8.encode(JSON.stringify(value)).byteLength;
 }
 
-/**
- * The log's lowest stored cell, wherever its sequence starts: the cell at 1
- * when there is one, else the first one listed, for a log opened at a moved
- * anchor.
- */
 async function firstCell(
   storage: DurableObjectStorage,
   eventPrefix: string,
@@ -708,7 +703,6 @@ async function firstCell(
   return undefined;
 }
 
-/** Whether storage rejected a write because a value was too large for its row. */
 function isTooBig(thrown: unknown): boolean {
   let at: unknown = thrown;
   for (
@@ -848,7 +842,6 @@ function decodeStoredFrame<M>(
   };
 }
 
-/** The oversized marker a cell holds, when it is one written at `seq`. */
 function oversizedAt(seq: number, raw: unknown): OversizedMarker | null {
   const cell = parseCellMsg(raw);
   return cell?.frame === "oversized" && cell.seq === seq ? cell : null;
@@ -1506,8 +1499,7 @@ export function doEventSourcedStore<
       }
       const moved = skipped > 0;
       // The flush at `stop()` has no event to write. The boot save has none
-      // either, unless the log is a recording, which opens each boot with a
-      // frame, or the boot is a moved anchor, which sets where the log starts.
+      // either, unless the log is a recording, which opens each boot with a frame.
       if (
         msg === undefined &&
         (init === null || (opts.recording === undefined && !moved))
@@ -1545,8 +1537,7 @@ export function doEventSourcedStore<
         // transaction as the event, so the snapshot's `seq` and `state` agree
         // and the recovery fold replays only events strictly after `seq`. A
         // snapshot bounds replay length; it never changes the fold's result
-        // (snapshotting.md). An init frame is not an event and is never one,
-        // except a moved anchor, which the fold must start from.
+        // (snapshotting.md). An init frame is not an event and is never one.
         const since = sinceSnapshot ?? seq - 1 - snapshotSeq;
         const snapshotDue = init === null && since + 1 >= snapshotEvery;
         const cell =
@@ -1571,7 +1562,6 @@ export function doEventSourcedStore<
                 },
                 basis,
               );
-        // A row budget applies to a recording's frames only.
         const budgeted = maxRowBytes !== undefined && written === "recording";
         const bytes = budgeted
           ? utf8.encode(eventKey(eventPrefix, seq)).byteLength +

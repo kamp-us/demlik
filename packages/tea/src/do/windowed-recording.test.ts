@@ -1,9 +1,3 @@
-/**
- * A recording store keeps a windowed trace at the sequence numbers the live run
- * gave it, and a frame too large for its row becomes a refusal marker without
- * losing the frames after it.
- */
-
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fakeDoStorage } from "../__fixtures__/do-storage";
 import { defineMachine, foldMsgs, type Transitions } from "../index";
@@ -29,7 +23,6 @@ type Msg =
   | { _tag: "shrink" };
 type Cmd = { _tag: "notify"; count: number };
 
-/** Text deflate cannot shrink, so a frame that holds it stays as large as it is. */
 function noise(size: number, seed: number): string {
   const alphabet =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -74,7 +67,6 @@ const eventSeqs = (backing: Map<string, string>) =>
     .map((k) => Number(k.slice("@@es/evt/".length)))
     .sort((a, b) => a - b);
 
-/** A run of `msgs`, recorded in memory with `window`, never stored. */
 async function recordWindowed(
   msgs: readonly Msg[],
   window: number,
@@ -88,7 +80,6 @@ async function recordWindowed(
   return capture.dump();
 }
 
-/** A live run on a store over `backing`: boot, dispatch each Msg, stop. */
 async function liveRun(
   backing: Map<string, string>,
   msgs: readonly Msg[],
@@ -499,7 +490,6 @@ describe("a write the storage rejects", () => {
       code: "SQLITE_TOOBIG",
     });
 
-  /** A store with a budget too high to catch anything, whose storage rejects the first put of `seq`'s key with `cause`. */
   function rejecting(seq: number, cause: Error) {
     const backing = new Map<string, string>();
     const fake = fakeDoStorage(backing);

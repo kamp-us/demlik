@@ -1,11 +1,3 @@
-/**
- * The cells a set of event-sourced logs end with, written with no moved anchor
- * and no row budget: live runs on a recording and a message log, across a
- * restart and past `snapshotEvery`, and `writeTrace` of an unwindowed trace
- * into each. The committed `recording-bytes.main.json` holds what the release
- * before row budgets wrote, so a test can hold today's bytes to it.
- */
-
 import { fakeDoStorage } from "../../__fixtures__/do-storage";
 import { defineMachine, type Transitions } from "../../index";
 import { recorder, writeTrace } from "../../persistence";
@@ -80,7 +72,13 @@ async function liveRun(
   return capture.dump();
 }
 
-/** Each scenario's cells, sorted by key. */
+/**
+ * The cells a set of event-sourced logs end with, sorted by key, written with
+ * no moved anchor and no row budget: live runs on a recording and a message
+ * log, across a restart and past `snapshotEvery`, and `writeTrace` of an
+ * unwindowed trace into each. `recording-bytes.main.json` holds what the
+ * release before row budgets wrote for the same calls.
+ */
 export async function recordingBytesScenario(): Promise<
   Record<string, [string, string][]>
 > {
