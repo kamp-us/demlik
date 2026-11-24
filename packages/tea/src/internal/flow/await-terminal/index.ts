@@ -38,7 +38,7 @@ import type {
   Runtime,
   Sub,
 } from "../../../index";
-import { run } from "../../../promise";
+import { type PromiseRunOptions, run } from "../../../promise";
 
 /**
  * Raised when `awaitTerminal` / `runToTerminal` is wired with a `timeoutMs` and
@@ -156,9 +156,17 @@ export function awaitTerminal<
  * booted. A `timeoutMs` in `opts` bounds the await identically to
  * `awaitTerminal`.
  *
+ * The seed may also carry `run`'s `cancellation: { signal, cancel }` to stop the
+ * machine from outside. When `signal` aborts, the run folds `cancel`'s Msg as
+ * `run` documents: it starts no further Cmd and stops waiting on the handler in
+ * flight, and a signal already aborted settles the cancel before the seed `msgs`
+ * are dispatched. `cancel` must land a State `isTerminal` accepts, or the await
+ * runs on until `timeoutMs`.
+ *
  * @param machine    the machine to boot.
- * @param seed       `{ ctx?, interpret, subscribe?, msgs }` — the boot context, the
- *                   handlers, and the seed messages.
+ * @param seed       `{ ctx?, interpret, subscribe?, cancellation?, msgs }` — the
+ *                   boot context, the handlers, the optional external stop, and
+ *                   the seed messages.
  * @param isTerminal caller-supplied terminal predicate over the machine's state.
  * @param opts       optional bounded `timeoutMs` deadline (see {@link AwaitTerminalOptions}).
  */
@@ -171,7 +179,10 @@ export async function runToTerminal<
 >(
   machine: Machine<S, M, C, U, Ctx>,
   seed: CtxArg<Ctx> &
-    NoInfer<RunHandlers<M, C, U, Ctx>> & { readonly msgs: readonly M[] },
+    NoInfer<RunHandlers<M, C, U, Ctx>> &
+    NoInfer<Pick<PromiseRunOptions<S, M, C, U, Ctx, never>, "cancellation">> & {
+      readonly msgs: readonly M[];
+    },
   isTerminal: (state: S) => boolean,
   opts: AwaitTerminalOptions = {},
 ): Promise<S> {
