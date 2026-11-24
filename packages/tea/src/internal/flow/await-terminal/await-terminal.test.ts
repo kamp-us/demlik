@@ -207,3 +207,133 @@ describe("runToTerminal", () => {
     });
   });
 });
+
+describe("runToTerminal with cancellation", () => {
+  interface CancelState {
+    readonly phase: "idle" | "working" | "done" | "halted";
+  }
+  type CancelMsg =
+    | { readonly _tag: "start" }
+    | { readonly _tag: "worked" }
+    | { readonly _tag: "halt" }
+    | { readonly _tag: "pause" };
+  type CancelCmd = { readonly _tag: "work" };
+
+  const ended = (s: CancelState): boolean =>
+    s.phase === "done" || s.phase === "halted";
+  const halt = (): CancelMsg => ({ _tag: "halt" });
+
+  const cancellable = defineMachine({
+    types: {
+      model: {} as CancelState,
+      msg: {} as CancelMsg,
+      cmd: {} as CancelCmd,
+      ctx: {} as NoCtx,
+    },
+    init: (loaded) => [loaded ?? { phase: "idle" }, []],
+    update: {
+      start: () => [{ phase: "working" }, [{ _tag: "work" }]],
+      worked: () => [{ phase: "done" }, []],
+      halt: (s) => (s.phase === "done" ? [s, []] : [{ phase: "halted" }, []]),
+      pause: (s) => [s, []],
+    },
+  });
+
+  const hung = () => {
+    const calls: string[] = [];
+    let entered: () => void = () => {};
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const interpret = {
+      work: (): Promise<CancelMsg> => {
+        calls.push("work");
+        entered();
+        return new Promise<CancelMsg>(() => {});
+      },
+    };
+    return { calls, started, interpret };
+  };
+
+  it("three runs aborted while their Cmd handler hangs each resolve halted without waiting on it", async () => {
+    const outcomes = [1, 2, 3].map(async () => {
+      const controller = new AbortController();
+      const { calls, started, interpret } = hung();
+      const t0 = Date.now();
+      const terminal = runToTerminal(
+        cancellable,
+        {
+          interpret,
+          cancellation: { signal: controller.signal, cancel: halt },
+          msgs: [{ _tag: "start" }],
+        },
+        ended,
+      );
+      await started;
+      controller.abort();
+      const state = await terminal;
+      return { state, calls, elapsed: Date.now() - t0 };
+    });
+
+    for (const { state, calls, elapsed } of await Promise.all(outcomes)) {
+      expect(state).toEqual({ phase: "halted" });
+      expect(calls).toEqual(["work"]);
+      expect(elapsed).toBeLessThan(1_000);
+    }
+  });
+
+  it("a signal already aborted before the call resolves halted and starts no Cmd", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const { calls, interpret } = hung();
+
+    const state = await runToTerminal(
+      cancellable,
+      {
+        interpret,
+        cancellation: { signal: controller.signal, cancel: halt },
+        msgs: [{ _tag: "start" }],
+      },
+      ended,
+    );
+
+    expect(state).toEqual({ phase: "halted" });
+    expect(calls).toEqual([]);
+  });
+
+  it("a seed without cancellation runs to the handler's answer as before", async () => {
+    const state = await runToTerminal(
+      cancellable,
+      {
+        interpret: {
+          work: async (): Promise<CancelMsg> => ({ _tag: "worked" }),
+        },
+        msgs: [{ _tag: "start" }],
+      },
+      ended,
+    );
+    expect(state).toEqual({ phase: "done" });
+  });
+
+  it("a cancel that lands a State isTerminal rejects leaves the await to its timeout", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const { interpret } = hung();
+
+    await expect(
+      runToTerminal(
+        cancellable,
+        {
+          interpret,
+          cancellation: {
+            signal: controller.signal,
+            cancel: (): CancelMsg => ({ _tag: "pause" }),
+          },
+          msgs: [],
+        },
+        ended,
+        { timeoutMs: 50 },
+      ),
+    ).rejects.toBeInstanceOf(TerminalTimeoutError);
+  });
+});
