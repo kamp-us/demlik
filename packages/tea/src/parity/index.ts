@@ -55,7 +55,9 @@ export type { RecorderOptions, Trace } from "../internal/persistence/recorder";
 export interface Recording<S, M> {
   /**
    * Snapshot the recording so far as a replayable {@link Trace} — `loaded`
-   * (boot state), the ordered non-null `msgs`, and `finalState`. Sufficient to
+   * (the boot state, or, for a recorder with a `window` that has dropped
+   * transitions, the moved anchor: the State before the oldest kept msg), the
+   * ordered non-null `msgs`, and `finalState`. Sufficient to
    * reproduce the run via {@link goldenReplay}. Fresh object each call.
    */
   trace(): Trace<S, M>;

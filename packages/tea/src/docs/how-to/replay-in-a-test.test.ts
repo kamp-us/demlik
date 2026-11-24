@@ -2,7 +2,7 @@
  * The replay how-to's compile-and-run gate (#542).
  *
  * `docs/how-to/replay-in-a-test.md` shows two ways to assert on a replayed
- * run. Each is a `#region` of this file, verbatim (`../page-mirrors.ts` holds
+ * run, and a windowed recording that still replays. Each is a `#region` of this file, verbatim (`../page-mirrors.ts` holds
  * the row), so the page shows code the test program compiles. The regions sit
  * at module level, so the assertions they make run when this file loads, and
  * the test below checks the claim they rest on: a live run folds to the state
@@ -51,6 +51,21 @@ expectCmdEmitted(
   { _tag: "do_fetch", url: "/x" },
 );
 // #endregion assertions
+
+// #region window
+import { recorder, replayTrace } from "@demlik/tea/persistence";
+
+const live = run(downloader, { terminal: (s) => s.phase === "done" });
+const rec = recorder(live, { window: 2 });
+await live.ready;
+for (const msg of msgs) await live.dispatch(msg);
+
+const trace = rec.dump();
+expect(trace.msgs).toEqual(msgs.slice(2));
+expect(trace.skipped).toBe(2);
+expect(replayTrace(downloader, trace).matches).toBe(true);
+// #endregion window
+await live.stop();
 
 describe("docs/how-to/replay-in-a-test.md — it runs", () => {
   it("a live run folds to the state `replay` reconstructs", async () => {
