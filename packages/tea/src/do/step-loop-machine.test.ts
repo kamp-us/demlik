@@ -5,7 +5,7 @@
  * the replay reproduces the transitions with no second model of the loop.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   parseJSONL,
   type Recorder,
@@ -296,6 +296,47 @@ describe("runStepLoop as a machine", () => {
       { deadlineMs: Number.POSITIVE_INFINITY, now: () => 0 },
     );
     expect(() => kept.log.push("after")).toThrow(TypeError);
+  });
+
+  it("records a deadline that fell due during a step as a Msg, so the replay ends where the drive did", async () => {
+    vi.useFakeTimers();
+    let recording: Recorder<State, Msg> | undefined;
+
+    const drive = runStepLoop<string, Input, Output>(
+      "token",
+      "run-deadline",
+      async () => step,
+      () => new Promise<string>(() => {}),
+      {
+        deadlineMs: Date.now() + 1_000,
+        attach: (runtime) => {
+          recording = recorder(runtime, { captureSteps: true });
+        },
+      },
+    );
+    await vi.advanceTimersByTimeAsync(1_000);
+    vi.useRealTimers();
+
+    await expect(drive).resolves.toEqual({ kind: "deadline_exceeded" });
+    if (recording === undefined) throw new Error("attach was not called");
+    const trace = recording.dump();
+    expect(trace.msgs.map((m) => m._tag)).toEqual([
+      "start",
+      "clock_read",
+      "responded",
+      "deadline_passed",
+    ]);
+    expect(trace.finalState).toEqual({
+      _tag: "finished",
+      outcome: { kind: "deadline_exceeded" },
+    });
+    expect(replayTrace(machine, trace).matches).toBe(true);
+    expect(
+      replayStoredTrace(
+        machine,
+        parseJSONL<unknown, { readonly _tag: string }>(recording.toJSONL()),
+      ).matches,
+    ).toBe(true);
   });
 
   it("stops where a recorded Msg no longer says what the drive saw", async () => {

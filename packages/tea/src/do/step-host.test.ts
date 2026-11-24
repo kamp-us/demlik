@@ -501,8 +501,11 @@ describe("runStepLoop", () => {
   it("stops at the deadline a failed POST runs into, without sleeping", async () => {
     const clock = [0, 150];
     const sleeps: number[] = [];
-    const down = (): Promise<StepResponse<ToolInput, RunOutput>> =>
-      Promise.reject(new Error("down"));
+    let posts = 0;
+    const down = (): Promise<StepResponse<ToolInput, RunOutput>> => {
+      posts += 1;
+      return Promise.reject(new Error("down"));
+    };
 
     const outcome = await runStepLoop<ToolResult, ToolInput, RunOutput>(
       mintRunToken(),
@@ -519,6 +522,7 @@ describe("runStepLoop", () => {
     );
 
     expect(outcome).toEqual({ kind: "deadline_exceeded" });
+    expect(posts).toBe(1);
     expect(sleeps).toEqual([]);
   });
 });
