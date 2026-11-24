@@ -210,4 +210,18 @@ State the run started in, with no Cmds because the recorder's boot observation
 carries none, then a `step` frame per recorded transition. A store that does not
 record keeps the Msgs only. It throws before it saves anything when the trace has
 no starting State, has Msgs but no steps, or has a different number of steps
-than Msgs.
+than Msgs, or a `skipped` count that is not an integer of at least 0.
+
+A long drive can keep only its last transitions with
+`recorder(handle, { captureSteps: true, window })`. Its trace starts at a moved
+anchor and counts the transitions before it in `trace.skipped`. `writeTrace`
+passes that count on, so the store opens an empty log at `skipped + 1` and every
+step keeps the sequence number the live run gave it. The store refuses it, and
+writes nothing, when the log already has frames: write each windowed trace into
+its own empty log.
+
+A failed drive's State can be large. Give the recording a row budget,
+`{ recording: { provenance, maxRowBytes } }`, and a frame too large for one row
+becomes a small marker at its seq instead of failing the write, so the frames
+after it are still kept. A recording with a marker reads back as unavailable
+for replay. See [Make a machine durable](./make-durable.md).

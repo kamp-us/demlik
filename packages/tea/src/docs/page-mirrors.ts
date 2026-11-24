@@ -456,6 +456,7 @@ export const PAGE_MIRRORS: readonly PageRow[] = [
       "replay",
       "assertions",
       "window",
+      "store",
     ),
     only: true,
   },

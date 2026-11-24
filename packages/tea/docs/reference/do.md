@@ -8,7 +8,7 @@ Tier: `stable`
 import { … } from "@demlik/tea/do";
 ```
 
-## Exports (133)
+## Exports (135)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -76,7 +76,7 @@ import { … } from "@demlik/tea/do";
 | [`foldLedger`](#foldLedger) | Function | stable | THE FOLD. |
 | [`FrameEvidence`](#FrameEvidence) | Interface | stable | A frame's evidence: the State after it and the Cmds it started. |
 | [`FrameReadOptions`](#FrameReadOptions) | Interface | stable | Options for EventLogReader.readFrames. |
-| [`FrameRefusal`](#FrameRefusal) | Type | stable | Why a recording cell does not decode as a frame: its text is not a frame of this format (`frame`), a delta's basis is missing (`basis`), or the evidence does not rebuild, or fails its checksum (`checksum`). |
+| [`FrameRefusal`](#FrameRefusal) | Type | stable | Why a recording cell does not decode as a frame: its text is not a frame of this format (`frame`), a delta's basis is missing (`basis`), the evidence does not rebuild, or fails its checksum (`checksum`), or the frame was too large for a storage row and a refusal marker was written in its place (`oversized`). |
 | [`HibernatableCtx`](#HibernatableCtx) | Interface | stable | The slice of `DurableObjectState` the durable carrier needs: the Hibernation API accept + the registry of hibernatable sockets. |
 | [`HostOverlapError`](#HostOverlapError) | Class | stable | Thrown by `createAgentHost` when a call overlaps a lifecycle step that has to finish first: a `reset()` while another `reset()` is still stopping the run, a `reset()` from inside `run()`, or a `runtime()` while a `reset()` is still stopping the run. |
 | [`idempotentEffect`](#idempotentEffect) | Function | stable | Pair a durable `key` with an external effect `fn` — this module's primary surface. |
@@ -106,7 +106,8 @@ import { … } from "@demlik/tea/do";
 | [`ProjectionRunner`](#ProjectionRunner) | Interface | stable | A live, running projection instance: the projection's current `View`, its exclusive stored `offset`, and the `present`/`reset` operations the driver (or a rebuild) calls. |
 | [`ProjectionUpdate`](#ProjectionUpdate) | Interface | stable | One unit the projection driver presents to a projection's `apply`. |
 | [`rebuildProjection`](#rebuildProjection) | Function | stable | Rebuild a projection's view by folding an ordered event stream from the `NoOffset` start. |
-| [`RecordingBreak`](#RecordingBreak) | Interface | stable | A recording whose evidence cannot be rebuilt where the next frame would take its delta from. |
+| [`RecordedTrace`](#RecordedTrace) | Type | stable | What EventLogReader.readTrace reads back: a whole `Trace`, or why the recording cannot be replayed. |
+| [`RecordingBreak`](#RecordingBreak) | Type | stable | Where a recording's evidence is broken. |
 | [`registerHibernatableSocket`](#registerHibernatableSocket) | Function | stable | Register an already-created `server` socket on the DO via the Cloudflare **Hibernation API**: `ctx.acceptWebSocket(server, tags)` hands the socket to the runtime (it survives eviction and re-delivers inbound frames to the DO's `webSocketMessage` lifecycle method), and — when an `attachment` is supplied — persists it via `server.serializeAttachment` so it survives the wake. |
 | [`RegisterOptions`](#RegisterOptions) | Interface | stable | Optional settings for registerHibernatableSocket / acceptPresenceSocket. |
 | [`reissueSurvivingEffects`](#reissueSurvivingEffects) | Function | stable | Re-fire every round-trip a rehydrated actor still owes, on wake. |
@@ -144,6 +145,7 @@ import { … } from "@demlik/tea/do";
 | [`StoredEventRefusal`](#StoredEventRefusal) | Type | stable | Why a stored event cell did not decode: its value is not text (`not-text`), its key carries no integer sequence (`key`), its text is not JSON (`json`), `parseEvent` returned `null` (`event`), or it is a recording cell that does not decode as a frame, lacks the frame its delta needs, or fails its checksum (FrameRefusal). |
 | [`StoredFrame`](#StoredFrame) | Type | stable | One stored cell read as a frame of the log. |
 | [`survivingEffects`](#survivingEffects) | Function | stable | RE-EMIT ON ACTIVATION. |
+| [`TraceUnavailableReason`](#TraceUnavailableReason) | Type | stable | Why EventLogReader.readTrace has no trace to give: the log or range is empty (`empty`), it is written as bare messages (`messages`), its first frame is not an `init` frame (`anchor`), a second `init` frame opens another boot (`boot`), or a frame is refused, with the refusal `readFrames` gives it, `oversized` among them. |
 | [`WS_READY_STATE_OPEN`](#WS_READY_STATE_OPEN) | Variable | stable | The OPEN `readyState` value (`WebSocket.READY_STATE_OPEN` in the Cloudflare runtime). |
 
 ## Declarations
@@ -963,6 +965,19 @@ interface EventLogReader<M> {
    * instead of thrown. Read in pages of at most 128 rows.
    */
   readStoredEvents(range?: StoredEventRange): AsyncIterable<StoredEvent<M>>;
+  /**
+   * Read a recording back as the `Trace` it was written from, for
+   * `replayTrace`. The range's first frame is the anchor and must be an `init`
+   * frame: its State is `loaded` and its `skipped` the trace's `skipped`, so a
+   * trace written with `writeTrace` reads back as it was dumped. Each `step`
+   * frame after it gives a Msg and a step with its State and Cmds, and
+   * `finalState` is the last State. A range that holds a second boot, a frame
+   * written as a bare message, or any refused frame (an `oversized` marker, a
+   * delta that does not rebuild) is `unavailable` at that frame's seq; no
+   * prefix of it is returned. To read the boot after a restart, start the
+   * range at its `init` frame.
+   */
+  readTrace<S = unknown>(range?: EventLogRange): Promise<RecordedTrace<S, M>>;
 }
 ```
 
@@ -1013,12 +1028,14 @@ interface EventSourcedOptions<S, M> extends EventLogReaderOptions<M> {
    */
   readonly onReady?: (state: S) => void;
   /**
-   * Hears a recording whose last frames cannot be rebuilt, once per `load()`.
+   * Hears a recording whose last frames cannot be rebuilt, once per `load()`,
+   * and each frame a save replaced with an oversized marker (`maxRowBytes`).
    * Evidence is not State: the Msgs and the snapshot rebuild the State exactly,
    * so restore still succeeds and the next frame is written whole, as a new
    * basis for the frames after it. This reports which frames are broken; a read
    * of them with `readFrames` still refuses them. Default: a `console.warn`.
-   * A hook that throws is warned about and does not fail the restore.
+   * A hook that throws or rejects is warned about and fails neither the restore
+   * nor the save, and the frames after it are still written.
    */
   readonly onRecordingBreak?: (broken: RecordingBreak) => void;
   /**
@@ -1037,8 +1054,35 @@ interface EventSourcedOptions<S, M> extends EventLogReaderOptions<M> {
    * keeps being written that way; its missing evidence is never invented.
    * A recording log is written as one whatever this option says, and gets no
    * `init` frame without it.
+   *
+   * An `init` boundary that carries `skipped` (a windowed trace written with
+   * `writeTrace`) is a moved anchor, not a restored boot. It opens an empty log
+   * at sequence `skipped + 1`, with a snapshot of its State at that sequence so
+   * a restore folds only the steps after it, and each later step keeps the
+   * number the live run gave it. A log written as bare messages takes the same
+   * offset with no frame: its committed sequence and snapshot start at
+   * `skipped`. A `skipped` that is negative or not an integer, or that is given
+   * to a log which already has frames, rejects the save and writes nothing.
    */
   readonly recording?: {
+    /**
+     * The most bytes one frame's row may take: the UTF-8 bytes of its key plus
+     * those of its encoded cell. A frame over it is not written. A small
+     * refusal marker is written at the same seq instead, naming the frame and
+     * the bytes measured, the next frame is written whole, and the write goes
+     * on. A storage write rejected with `SQLITE_TOOBIG` takes the same path,
+     * since text bytes do not prove the size the storage serializes; any other
+     * storage failure still rejects the save. A marker in place of a step frame
+     * keeps neither its evidence nor its Msg, so the State after it is
+     * snapshotted at its seq in the same write, and restore folds from there.
+     * Each marker is reported to `onRecordingBreak` with `reason: "oversized"`.
+     * A recording that holds a marker is not replayable: `readFrames` refuses
+     * it as `oversized` and `readTrace` reports the recording unavailable.
+     * Applies to a log written as a recording only. Must be a positive safe
+     * integer. A Durable Object row holds at most 8 MB. Default: no budget,
+     * and every frame is written as it encodes.
+     */
+    readonly maxRowBytes?: number;
     /** JSON written into every `init` frame, unread by the store. */
     readonly provenance: unknown;
   };
@@ -1238,7 +1282,7 @@ interface FrameReadOptions {
 ### `FrameRefusal`
 
 ```ts
-type FrameRefusal = "basis" | "checksum" | "frame"
+type FrameRefusal = "basis" | "checksum" | "frame" | "oversized"
 ```
 
 <a id="HibernatableCtx"></a>
@@ -1617,16 +1661,42 @@ function rebuildProjection<Model, Msg extends { _tag: string }, View>(
 ): ProjectionRunner<Model, Msg, View>
 ```
 
+<a id="RecordedTrace"></a>
+
+### `RecordedTrace`
+
+```ts
+type RecordedTrace<S, M> =
+  | {
+    readonly _tag: "trace";
+    readonly trace: Trace<S, M>;
+  }
+  | {
+    readonly _tag: "unavailable";
+    readonly bytes?: number;
+    readonly reason: TraceUnavailableReason;
+    readonly seq: number | null;
+  }
+```
+
 <a id="RecordingBreak"></a>
 
 ### `RecordingBreak`
 
 ```ts
-interface RecordingBreak {
-  readonly fromSeq: number;
-  readonly reason: FrameRefusal;
-  readonly toSeq: number;
-}
+type RecordingBreak =
+  | {
+    readonly fromSeq: number;
+    readonly reason: Exclude<FrameRefusal, "oversized">;
+    readonly toSeq: number;
+  }
+  | {
+    readonly bytes: number;
+    readonly fromSeq: number;
+    readonly reason: "oversized";
+    readonly seq: number;
+    readonly toSeq: number;
+  }
 ```
 
 <a id="registerHibernatableSocket"></a>
@@ -2294,6 +2364,7 @@ type StoredEvent<M> =
   }
   | {
     readonly _tag: "refused";
+    readonly bytes?: number;
     readonly cause?: unknown;
     readonly key: string;
     readonly reason: StoredEventRefusal;
@@ -2353,6 +2424,7 @@ type StoredFrame<M> =
     readonly restored: boolean;
     readonly seq: number;
     readonly serializedBytes: number;
+    readonly skipped: number;
   }
   | Extract<StoredEvent<M>, { _tag: "refused" }>
 ```
@@ -2365,6 +2437,14 @@ type StoredFrame<M> =
 function survivingEffects<E>(
   ledger: PendingEffectsLedger<E>,
 ): readonly OwedEffect<E>[]
+```
+
+<a id="TraceUnavailableReason"></a>
+
+### `TraceUnavailableReason`
+
+```ts
+type TraceUnavailableReason = StoredEventRefusal | "empty" | "messages" | "anchor" | "boot"
 ```
 
 <a id="WS_READY_STATE_OPEN"></a>

@@ -100,6 +100,29 @@ again. Give a run one or the other, not both.
 without effects. They support tests and debugging; normal snapshot restore does
 not call them.
 
+### What a recording promises
+
+With `recording`, the same log keeps a frame per boundary: the State after it and
+the Cmds it started. Restore reads only the Msgs and the snapshot, so a frame
+whose evidence is lost never costs the State. What the evidence promises is
+narrower:
+
+- **Numbering.** Every frame sits at the sequence the live run gave it. A
+  windowed trace written with `writeTrace` opens an empty log at its moved
+  anchor, `skipped + 1`, with a snapshot of the anchor's State there, so its
+  steps keep their live numbers and a restore folds only the steps after the
+  anchor. The store refuses an offset into a log that already has frames.
+- **Size.** With `maxRowBytes`, a frame too large for its row, or one storage
+  rejects with `SQLITE_TOOBIG`, is not written. A small marker naming its seq
+  and measured bytes stands in its place, and every frame after it is still
+  kept. A step's marker keeps neither its evidence nor its Msg, so the store
+  snapshots the State after it in the same write. Any other storage failure
+  still fails the save.
+- **Replay.** A recording reads back as a whole `Trace` or not at all.
+  `readTrace` reports a recording with a marker, or any frame it cannot
+  rebuild, as unavailable at that seq, and never hands back the frames before
+  it as if they were the run.
+
 ## Effects are at-least-once
 
 An external action and the store write of its result are separate operations.
