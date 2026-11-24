@@ -368,22 +368,20 @@ logged store in steps 5–6.
    `{ fromSeq, toSeq, reason }`; `readFrames` still refuses them.
 6. To keep one large frame from failing the write, give the recording a row
    budget: `recording: { provenance, maxRowBytes }`. A frame whose key and cell
-   measure more UTF-8 bytes than that, or one storage rejects with
+   measure more UTF-8 bytes than that, or whose put storage rejects with
    `SQLITE_TOOBIG`, is replaced by a small marker at the same seq. The next
-   frame is written whole and the run goes on; any other storage failure still
-   rejects the save. A marker in place of a step keeps neither its evidence nor
-   its Msg, so the store snapshots the State after it in the same write. The
-   budget holds snapshots too: a snapshot over it is written as a small head
-   cell with the State's JSON split across part rows, so the marker and the
-   snapshot behind it fit whatever the State's size. When storage still rejects
-   a write as too big, the store writes the marker, then halves the row size it
-   splits to, down to 1024 bytes, before the rejection propagates.
-   `onRecordingBreak` hears each marker as
-   `{ reason: "oversized", seq, bytes, fromSeq, toSeq }`, and a hook that throws
-   stops no later frame. `maxRowBytes` must be at least 1024. A Durable Object
-   row holds at most 8 MB, so a budget at or below that keeps every frame
-   writable. Without `maxRowBytes` the store writes every frame and snapshot as
-   it encodes.
+   frame is written whole and the run goes on; a rejection of any other cell,
+   and any other storage failure, still rejects the save. `onRecordingBreak`
+   hears each marker as `{ reason: "oversized", seq, bytes, fromSeq, toSeq }`,
+   and a hook that throws stops no later frame. A log with a marker is kept to
+   be read, not resumed: the marker keeps neither the frame's evidence nor its
+   Msg, no snapshot is written beside it, and a later `load()` refuses with
+   [`RecordingUnavailableError`](../reference/do.md#RecordingUnavailableError)
+   naming the marker's seq (a run's `ready` rejects with it as the
+   `StoreRefusedError`'s cause). The log still takes appends, reads and
+   deletion. A Durable Object row holds at most 8 MB, so a budget at or below
+   that keeps every frame writable. Without `maxRowBytes` the store writes
+   every frame as it encodes. Snapshots are written as they encode either way.
 
 A host that reads an agent's log without loading it — its head, committed
 sequence or events in a range — uses

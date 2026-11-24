@@ -8,7 +8,7 @@ Tier: `stable`
 import { … } from "@demlik/tea/do";
 ```
 
-## Exports (136)
+## Exports (137)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -109,6 +109,7 @@ import { … } from "@demlik/tea/do";
 | [`rebuildProjection`](#rebuildProjection) | Function | stable | Rebuild a projection's view by folding an ordered event stream from the `NoOffset` start. |
 | [`RecordedTrace`](#RecordedTrace) | Type | stable | What readTrace reads back: a whole `Trace`, or why the recording cannot be replayed. |
 | [`RecordingBreak`](#RecordingBreak) | Interface | stable | Where a recording's evidence is broken. |
+| [`RecordingUnavailableError`](#RecordingUnavailableError) | Class | stable | `load()` rejects with this when the log holds an oversized marker (`recording.maxRowBytes`): the frame at `seq` was not kept, so no State can be rebuilt past it. |
 | [`registerHibernatableSocket`](#registerHibernatableSocket) | Function | stable | Register an already-created `server` socket on the DO via the Cloudflare **Hibernation API**: `ctx.acceptWebSocket(server, tags)` hands the socket to the runtime (it survives eviction and re-delivers inbound frames to the DO's `webSocketMessage` lifecycle method), and — when an `attachment` is supplied — persists it via `server.serializeAttachment` so it survives the wake. |
 | [`RegisterOptions`](#RegisterOptions) | Interface | stable | Optional settings for registerHibernatableSocket / acceptPresenceSocket. |
 | [`reissueSurvivingEffects`](#reissueSurvivingEffects) | Function | stable | Re-fire every round-trip a rehydrated actor still owes, on wake. |
@@ -1058,26 +1059,22 @@ interface EventSourcedOptions<S, M> extends EventLogReaderOptions<M> {
      * those of its encoded cell. A frame over it is not written. A small
      * refusal marker is written at the same seq instead, naming the frame and
      * the bytes measured, the next frame is written whole, and the write goes
-     * on. A storage write rejected with `SQLITE_TOOBIG` takes the same path,
-     * since text bytes do not prove the size the storage serializes; any other
-     * storage failure still rejects the save. A marker in place of a step frame
-     * keeps neither its evidence nor its Msg, so the State after it is
-     * snapshotted at its seq in the same write, and restore folds from there.
-     * Each marker is reported to `onRecordingBreak` with `reason: "oversized"`.
-     * A recording that holds a marker is not replayable: `readFrames` refuses
-     * it as `oversized` and `readTrace` reports the recording unavailable.
-     * Markers apply to a log written as a recording only.
+     * on. A put of the frame's cell that storage rejects with `SQLITE_TOOBIG`
+     * takes the same path, since text bytes do not prove the size the storage
+     * serializes; a rejection of any other cell, and any other storage
+     * failure, still rejects the save. Each marker is reported to
+     * `onRecordingBreak` with `reason: "oversized"`.
      *
-     * The budget also holds every snapshot this store writes, so the marker
-     * and the snapshot that recovers past it always fit, whatever the State's
-     * size. A snapshot over the budget is written as a small head cell and its
-     * State's JSON split across part rows (`<snapshot key>/part/<n>`), in the
-     * same transaction, and restore joins them. When storage still rejects a
-     * write with `SQLITE_TOOBIG`, the store first writes the frame as a marker,
-     * then halves the row size it splits to, until a write lands or the size
-     * would fall below 1024 bytes, when the rejection propagates. Must be a
-     * safe integer of at least 1024. A Durable Object row holds at most 8 MB.
-     * Default: no budget; every frame and snapshot is written as it encodes.
+     * A log with a marker is kept to be read, not resumed. The marker keeps
+     * neither its frame's evidence nor its Msg, and no snapshot is written
+     * beside it, so no State is rebuilt past it: the meta cell names the first
+     * marker's seq, and `load()` refuses with RecordingUnavailableError
+     * naming it. The log still takes appends, reads and deletion, `readFrames`
+     * refuses the marker as `oversized`, and `readTrace` reports the recording
+     * unavailable. Markers apply to a log written as a recording only, and
+     * snapshots are written as they encode, with no budget. Must be a positive
+     * safe integer. A Durable Object row holds at most 8 MB. Default: no
+     * budget; every frame is written as it encodes.
      */
     readonly maxRowBytes?: number;
     /** JSON written into every `init` frame, unread by the store. */
@@ -1132,6 +1129,9 @@ interface EventSourcedStore<S, M> {
    * RestoreAttempt. Success clears it; failure leaves it. Once
    * `restoreRetryLimit` is spent, load throws RestoreInterruptedError
    * before expensive reads. The engine preserves it as StoreRefusedError.cause.
+   * A log that holds an oversized marker (`recording.maxRowBytes`) is refused
+   * the same way, with RecordingUnavailableError naming the marker's
+   * seq, before the snapshot or journal is read.
    */
   readonly store: Store<S>;
   /**
@@ -1698,6 +1698,20 @@ interface RecordingBreak {
   readonly reason: FrameRefusal;
   readonly seq?: number;
   readonly toSeq: number;
+}
+```
+
+<a id="RecordingUnavailableError"></a>
+
+### `RecordingUnavailableError`
+
+```ts
+class RecordingUnavailableError extends Error {
+  constructor(seq: number);
+  readonly _tag: "recording_unavailable";
+  readonly name: "RecordingUnavailableError";
+  readonly reason: "oversized";
+  readonly seq: number;
 }
 ```
 

@@ -118,17 +118,28 @@ interface SnapshotCell<S> {
   readonly state: S;
 }
 
-interface SnapshotPartsCell {
-  readonly seq: number;
-  readonly parts: number;
-}
-
-const MIN_ROW_BYTES = 1024;
-const PART_WIDTH = 8;
-
 /** Persisted meta cell: the highest sequence number ever appended. */
 interface MetaCell {
   readonly lastSeq: number;
+  readonly marked?: number;
+}
+
+/**
+ * `load()` rejects with this when the log holds an oversized marker
+ * (`recording.maxRowBytes`): the frame at `seq` was not kept, so no State can
+ * be rebuilt past it. A log with a marker is kept to be read, not resumed. It
+ * still takes appends, reads (`doEventLogReader`, `readTrace`) and deletion.
+ * The engine preserves it as `StoreRefusedError.cause`.
+ */
+export class RecordingUnavailableError extends Error {
+  override readonly name = "RecordingUnavailableError";
+  readonly _tag = "recording_unavailable" as const;
+  readonly reason = "oversized" as const;
+  constructor(readonly seq: number) {
+    super(
+      `@demlik/tea/do: the recording's frame ${seq} was not kept (oversized), so no State loads from this log`,
+    );
+  }
 }
 
 /** JSON restore evidence retained until a load succeeds. Counts started attempts. */
@@ -259,26 +270,22 @@ export interface EventSourcedOptions<S, M> extends EventLogReaderOptions<M> {
      * those of its encoded cell. A frame over it is not written. A small
      * refusal marker is written at the same seq instead, naming the frame and
      * the bytes measured, the next frame is written whole, and the write goes
-     * on. A storage write rejected with `SQLITE_TOOBIG` takes the same path,
-     * since text bytes do not prove the size the storage serializes; any other
-     * storage failure still rejects the save. A marker in place of a step frame
-     * keeps neither its evidence nor its Msg, so the State after it is
-     * snapshotted at its seq in the same write, and restore folds from there.
-     * Each marker is reported to `onRecordingBreak` with `reason: "oversized"`.
-     * A recording that holds a marker is not replayable: `readFrames` refuses
-     * it as `oversized` and `readTrace` reports the recording unavailable.
-     * Markers apply to a log written as a recording only.
+     * on. A put of the frame's cell that storage rejects with `SQLITE_TOOBIG`
+     * takes the same path, since text bytes do not prove the size the storage
+     * serializes; a rejection of any other cell, and any other storage
+     * failure, still rejects the save. Each marker is reported to
+     * `onRecordingBreak` with `reason: "oversized"`.
      *
-     * The budget also holds every snapshot this store writes, so the marker
-     * and the snapshot that recovers past it always fit, whatever the State's
-     * size. A snapshot over the budget is written as a small head cell and its
-     * State's JSON split across part rows (`<snapshot key>/part/<n>`), in the
-     * same transaction, and restore joins them. When storage still rejects a
-     * write with `SQLITE_TOOBIG`, the store first writes the frame as a marker,
-     * then halves the row size it splits to, until a write lands or the size
-     * would fall below 1024 bytes, when the rejection propagates. Must be a
-     * safe integer of at least 1024. A Durable Object row holds at most 8 MB.
-     * Default: no budget; every frame and snapshot is written as it encodes.
+     * A log with a marker is kept to be read, not resumed. The marker keeps
+     * neither its frame's evidence nor its Msg, and no snapshot is written
+     * beside it, so no State is rebuilt past it: the meta cell names the first
+     * marker's seq, and `load()` refuses with {@link RecordingUnavailableError}
+     * naming it. The log still takes appends, reads and deletion, `readFrames`
+     * refuses the marker as `oversized`, and `readTrace` reports the recording
+     * unavailable. Markers apply to a log written as a recording only, and
+     * snapshots are written as they encode, with no budget. Must be a positive
+     * safe integer. A Durable Object row holds at most 8 MB. Default: no
+     * budget; every frame is written as it encodes.
      */
     readonly maxRowBytes?: number;
   };
@@ -356,6 +363,9 @@ export interface EventSourcedStore<S, M> {
    * {@link RestoreAttempt}. Success clears it; failure leaves it. Once
    * `restoreRetryLimit` is spent, load throws {@link RestoreInterruptedError}
    * before expensive reads. The engine preserves it as StoreRefusedError.cause.
+   * A log that holds an oversized marker (`recording.maxRowBytes`) is refused
+   * the same way, with {@link RecordingUnavailableError} naming the marker's
+   * seq, before the snapshot or journal is read.
    */
   readonly store: Store<S>;
   /**
@@ -624,11 +634,24 @@ export interface EventLogReader<M> {
 const utf8 = new TextEncoder();
 
 function parseMeta(raw: string): number {
+  return parseMetaCell(raw).lastSeq;
+}
+
+function parseMetaCell(raw: string): {
+  readonly lastSeq: number;
+  readonly marked: number | null;
+} {
   const meta = JSON.parse(raw) as MetaCell;
   if (!Number.isSafeInteger(meta.lastSeq) || meta.lastSeq < 0) {
     throw new Error("@demlik/tea/do: invalid committed sequence");
   }
-  return meta.lastSeq;
+  if (
+    meta.marked !== undefined &&
+    (!Number.isSafeInteger(meta.marked) || meta.marked < 1)
+  ) {
+    throw new Error("@demlik/tea/do: invalid marked sequence");
+  }
+  return { lastSeq: meta.lastSeq, marked: meta.marked ?? null };
 }
 
 function decodeStoredEvent<M>(
@@ -1317,10 +1340,10 @@ export function doEventSourcedStore<
   const maxRowBytes = opts.recording?.maxRowBytes;
   if (
     maxRowBytes !== undefined &&
-    (!Number.isSafeInteger(maxRowBytes) || maxRowBytes < MIN_ROW_BYTES)
+    (!Number.isSafeInteger(maxRowBytes) || maxRowBytes < 1)
   ) {
     throw new Error(
-      `@demlik/tea/do: recording.maxRowBytes must be a safe integer >= ${MIN_ROW_BYTES}, got ${maxRowBytes}`,
+      `@demlik/tea/do: recording.maxRowBytes must be a positive safe integer, got ${maxRowBytes}`,
     );
   }
   const parse = opts.parse ?? defaultParse;
@@ -1344,7 +1367,7 @@ export function doEventSourcedStore<
   // boundary. A save without a Msg, and a transition whose write failed, never
   // replace it.
   let latestState: S | null = null;
-  let snapshotParts: number | null = null;
+  let markedSeq: number | null = null;
   // The log's generation in this isolate: a `load()` takes it, and a write that
   // was called under an older one is refused at its write point (./save-fence).
   const fence = saveFence(storage, metaKey);
@@ -1370,8 +1393,13 @@ export function doEventSourcedStore<
 
   async function readMeta(): Promise<number> {
     const raw = await storage.get<string>(metaKey);
-    if (raw === undefined || raw === null) return 0;
-    return parseMeta(raw);
+    if (raw === undefined || raw === null) {
+      markedSeq = null;
+      return 0;
+    }
+    const meta = parseMetaCell(raw);
+    markedSeq = meta.marked;
+    return meta.lastSeq;
   }
 
   /**
@@ -1392,49 +1420,17 @@ export function doEventSourcedStore<
    */
   async function readSnapshot(): Promise<{ state: S | null; seq: number }> {
     const raw = await storage.get<string>(snapshotKey);
-    if (raw === undefined || raw === null) {
-      snapshotParts = 0;
-      return { state: null, seq: 0 };
-    }
+    if (raw === undefined || raw === null) return { state: null, seq: 0 };
     // Structural JSON malformation throws here, as in doStore — infra error,
     // not a schema mismatch.
-    const cell = JSON.parse(raw) as SnapshotCell<unknown> &
-      Partial<SnapshotPartsCell>;
-    let state: unknown = cell.state;
-    snapshotParts = 0;
-    if (cell.parts !== undefined) {
-      if (!Number.isSafeInteger(cell.parts) || cell.parts < 1) {
-        throw new Error("@demlik/tea/do: invalid snapshot part count");
-      }
-      state = JSON.parse(await readParts(cell.parts));
-      snapshotParts = cell.parts;
-    }
-    const parsed = parse(state);
+    const cell = JSON.parse(raw) as SnapshotCell<unknown>;
+    const parsed = parse(cell.state);
     if (parsed === null)
       throw new Error("@demlik/tea/do: persisted snapshot was refused");
     if (!Number.isSafeInteger(cell.seq) || cell.seq < 0) {
       throw new Error("@demlik/tea/do: invalid snapshot sequence");
     }
     return { state: parsed, seq: cell.seq };
-  }
-
-  async function readParts(count: number): Promise<string> {
-    let text = "";
-    for (let from = 0; from < count; from += EVENT_PAGE_SIZE) {
-      const keys = Array.from(
-        { length: Math.min(EVENT_PAGE_SIZE, count - from) },
-        (_, at) => partKey(from + at),
-      );
-      const found = await storage.get<string>(keys);
-      for (const key of keys) {
-        const part = found.get(key);
-        if (typeof part !== "string") {
-          throw new Error("@demlik/tea/do: a snapshot part is missing");
-        }
-        text += part;
-      }
-    }
-    return text;
   }
 
   /**
@@ -1469,9 +1465,7 @@ export function doEventSourcedStore<
           throw new Error("@demlik/tea/do: recording frame was refused");
         }
         if (cell.reason === "oversized") {
-          throw new Error(
-            `@demlik/tea/do: the step at ${cell.seq} was not kept (oversized) and no snapshot covers it`,
-          );
+          throw new RecordingUnavailableError(cell.seq ?? 0);
         }
         continue;
       }
@@ -1530,8 +1524,9 @@ export function doEventSourcedStore<
     const attempt = nextRestoreAttempt(previous.attempts, restoreRetryLimit);
     await storage.put(restoreAttemptKey, JSON.stringify(attempt));
 
-    const { state: snapshot, seq: snapSeq } = await readSnapshot();
     const committedSeq = await readMeta();
+    if (markedSeq !== null) throw new RecordingUnavailableError(markedSeq);
+    const { state: snapshot, seq: snapSeq } = await readSnapshot();
     const initialState = snapshot ?? machine.init(null, ctx)[0];
     const { state, inits } = await readLog(initialState, snapSeq);
     if (parse(state) === null) {
@@ -1612,10 +1607,9 @@ export function doEventSourcedStore<
         if (init !== null && written !== "recording") {
           // A log written as messages never gets a frame: its evidence is not invented.
           if (!moved) return;
-          await persistFitting(
-            () => ({ committed: skipped, snapshot: { seq: skipped, state } }),
+          await persist(
+            { committed: skipped, snapshot: { seq: skipped, state } },
             admit,
-            false,
           );
           lastSeq = skipped;
           latestState = state;
@@ -1655,43 +1649,47 @@ export function doEventSourcedStore<
                 basis,
               );
         const budgeted = maxRowBytes !== undefined && written === "recording";
-        const bytes = budgeted
-          ? rowSize(eventKey(eventPrefix, seq), cell.json)
-          : 0;
+        const cellKey = eventKey(eventPrefix, seq);
         const over: OversizedMarker = {
           of: init === null ? "step" : "init",
           seq,
-          bytes,
+          bytes: budgeted ? rowSize(cellKey, cell.json) : 0,
         };
-        const measured = budgeted && bytes > maxRowBytes;
-        const marked = await persistFitting(
-          (retried) => {
-            const marker = measured || retried ? over : null;
-            return {
-              event: {
-                seq,
-                json: marker === null ? cell.json : encodeOversized(marker),
-              },
-              snapshot:
-                moved || snapshotDue || marker?.of === "step"
-                  ? { seq, state }
-                  : null,
-            };
+        const writeOf = (marker: OversizedMarker | null) => ({
+          event: {
+            seq,
+            json: marker === null ? cell.json : encodeOversized(marker),
           },
-          admit,
-          budgeted && !measured,
-        );
-        const marker = measured || marked ? over : null;
+          snapshot:
+            marker === null && (moved || snapshotDue) ? { seq, state } : null,
+          marked: marker === null ? markedSeq : (markedSeq ?? seq),
+        });
+        let marker: OversizedMarker | null =
+          budgeted && over.bytes > maxRowBytes ? over : null;
+        const rejected: { key: string | null } = { key: null };
+        try {
+          await persist(writeOf(marker), admit, rejected);
+        } catch (thrown) {
+          if (
+            !budgeted ||
+            marker !== null ||
+            rejected.key !== cellKey ||
+            !isTooBig(thrown)
+          ) {
+            throw thrown;
+          }
+          marker = over;
+          await persist(writeOf(marker), admit);
+        }
+        if (marker !== null) markedSeq = markedSeq ?? seq;
         lastSeq = seq;
         basis = marker === null ? cell.basis : null;
+        const snapped = marker === null && (moved || snapshotDue);
         if (init !== null) {
-          if (moved) {
-            latestState = state;
-            snapshotSeq = seq;
-          }
-          sinceSnapshot = moved ? 0 : since;
+          if (moved) latestState = state;
+          if (snapped) snapshotSeq = seq;
+          sinceSnapshot = snapped ? 0 : since;
         } else {
-          const snapped = snapshotDue || marker !== null;
           latestState = state;
           sinceSnapshot = snapped ? 0 : since + 1;
           if (snapped) snapshotSeq = seq;
@@ -1735,120 +1733,40 @@ export function doEventSourcedStore<
     write: {
       readonly event?: { readonly seq: number; readonly json: string };
       readonly committed?: number;
+      readonly marked?: number | null;
       readonly snapshot: { readonly seq: number; readonly state: S } | null;
     },
     admit: () => void,
-    rowBytes: number | null = null,
+    rejected?: { key: string | null },
   ): Promise<void> {
     const cells: [string, string][] = [];
-    let stale: string[] = [];
-    let parts = snapshotParts;
     if (write.event !== undefined) {
       cells.push([eventKey(eventPrefix, write.event.seq), write.event.json]);
     }
     const committed = write.event?.seq ?? write.committed;
     if (committed !== undefined) {
+      const marked = write.marked ?? null;
       cells.push([
         metaKey,
-        JSON.stringify({ lastSeq: committed } satisfies MetaCell),
+        JSON.stringify(
+          (marked === null
+            ? { lastSeq: committed }
+            : { lastSeq: committed, marked }) satisfies MetaCell,
+        ),
       ]);
     }
     if (write.snapshot !== null) {
       const cell: SnapshotCell<S> = write.snapshot;
-      const json = JSON.stringify(cell);
-      const split =
-        rowBytes === null || rowBytes >= rowSize(snapshotKey, json)
-          ? null
-          : splitRows(JSON.stringify(cell.state), rowBytes);
-      const before = snapshotParts ?? (await storedSnapshotParts());
-      if (split === null) {
-        cells.push([snapshotKey, json]);
-        parts = 0;
-      } else {
-        cells.push([
-          snapshotKey,
-          JSON.stringify({
-            seq: cell.seq,
-            parts: split.length,
-          } satisfies SnapshotPartsCell),
-        ]);
-        for (const [at, part] of split.entries()) {
-          cells.push([partKey(at), part]);
-        }
-        parts = split.length;
-      }
-      const kept = parts;
-      stale = Array.from({ length: Math.max(0, before - kept) }, (_, at) =>
-        partKey(kept + at),
-      );
+      cells.push([snapshotKey, JSON.stringify(cell)]);
     }
     await storage.transaction(async (txn) => {
       admit();
-      for (const [key, value] of cells) await txn.put(key, value);
-      for (const key of stale) await txn.delete(key);
+      for (const [key, value] of cells) {
+        if (rejected !== undefined) rejected.key = key;
+        await txn.put(key, value);
+      }
+      if (rejected !== undefined) rejected.key = null;
     });
-    snapshotParts = parts;
-  }
-
-  function partKey(at: number): string {
-    return `${snapshotKey}/part/${String(at).padStart(PART_WIDTH, "0")}`;
-  }
-
-  function splitRows(text: string, rowBytes: number): string[] {
-    const room = rowBytes - utf8.encode(partKey(0)).byteLength;
-    if (room < 4) {
-      throw new Error("@demlik/tea/do: a snapshot part has no room in its row");
-    }
-    const rows: string[] = [];
-    let start = 0;
-    let used = 0;
-    let at = 0;
-    while (at < text.length) {
-      const code = text.codePointAt(at) as number;
-      const width = code < 0x80 ? 1 : code < 0x800 ? 2 : code < 0x10000 ? 3 : 4;
-      const step = code >= 0x10000 ? 2 : 1;
-      if (used + width > room) {
-        rows.push(text.slice(start, at));
-        start = at;
-        used = 0;
-      }
-      used += width;
-      at += step;
-    }
-    rows.push(text.slice(start));
-    return rows;
-  }
-
-  async function storedSnapshotParts(): Promise<number> {
-    const raw = await storage.get<string>(snapshotKey);
-    if (raw === undefined || raw === null) return 0;
-    const cell = JSON.parse(raw) as Partial<SnapshotPartsCell>;
-    return typeof cell.parts === "number" && Number.isSafeInteger(cell.parts)
-      ? cell.parts
-      : 0;
-  }
-
-  async function persistFitting(
-    build: (mark: boolean) => Parameters<typeof persist>[0],
-    admit: () => void,
-    canMark: boolean,
-  ): Promise<boolean> {
-    let rowBytes = maxRowBytes ?? null;
-    let mark = false;
-    for (;;) {
-      try {
-        await persist(build(mark), admit, rowBytes);
-        return mark;
-      } catch (thrown) {
-        if (rowBytes === null || !isTooBig(thrown)) throw thrown;
-        if (canMark && !mark) {
-          mark = true;
-          continue;
-        }
-        rowBytes = Math.floor(rowBytes / 2);
-        if (rowBytes < MIN_ROW_BYTES) throw thrown;
-      }
-    }
   }
 
   /**
@@ -1864,8 +1782,7 @@ export function doEventSourcedStore<
       // the last snapshot (`seq <= snapshotSeq`). Both keep the snapshot's `seq`
       // and `state` paired on the same boundary the count-based path guarantees.
       if (latestState === null || seq <= snapshotSeq) return false;
-      const state = latestState;
-      await persistFitting(() => ({ snapshot: { seq, state } }), admit, false);
+      await persist({ snapshot: { seq, state: latestState } }, admit);
       snapshotSeq = seq;
       sinceSnapshot = 0;
       return true;

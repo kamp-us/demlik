@@ -151,7 +151,7 @@ expect(replayTrace(downloader, back.trace).matches).toBe(true);
 `readTrace` answers `unavailable`, with the seq and the reason, for a recording
 it cannot read whole. A frame over `maxRowBytes` is one: the store writes a
 small marker in its place and keeps the frames after it, but the recording no
-longer replays.
+longer replays, and loading a State from it is refused with the marker's seq.
 
 `window` must be an integer of at least 1, and it cannot be combined with a
 `sampleRate` between 0 and 1: a sampled trace is not replay-faithful, so it has no

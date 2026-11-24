@@ -224,4 +224,5 @@ A failed drive's State can be large. Give the recording a row budget,
 `{ recording: { provenance, maxRowBytes } }`, and a frame too large for one row
 becomes a small marker at its seq instead of failing the write, so the frames
 after it are still kept. A recording with a marker reads back as unavailable
-for replay. See [Make a machine durable](./make-durable.md).
+for replay, and is kept to be read: loading a State from it is refused. See
+[Make a machine durable](./make-durable.md).

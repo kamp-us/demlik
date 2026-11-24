@@ -89,6 +89,7 @@ export {
   type PersistedEvent,
   type RecordedTrace,
   type RecordingBreak,
+  RecordingUnavailableError,
   type RestoreAttempt,
   RestoreInterruptedError,
   readTrace,
