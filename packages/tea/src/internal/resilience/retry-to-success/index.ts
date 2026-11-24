@@ -18,7 +18,7 @@
  * decision is `./retry-backoff` exactly as `resilient-call`'s `backoff` verb
  * wires it:
  *   - `initRetry()` seeds the per-call attempt counter.
- *   - `recordFailure(retry, error)` folds each thrown failure (attempt++).
+ *   - `recordFailure(retry, error)` folds each failure (attempt++).
  *   - `shouldRetry(retry, policy)` is the terminal-at-`maxAttempts` bound — the
  *     `maxAttempts`-th recorded failure refuses another attempt (attempts
  *     `0 .. maxAttempts-1` run; the port is invoked at most `maxAttempts` times).
@@ -69,7 +69,7 @@ export class RetryExhaustedError extends Error {
   constructor(
     /** How many times the port was invoked before giving up (= `policy.maxAttempts`). */
     public readonly attempts: number,
-    /** The failure the final attempt threw — carried, never interpreted. */
+    /** The failure the final attempt ended in: the error it threw, or the value `accept` refused — carried, never interpreted. */
     public readonly lastError: unknown,
   ) {
     super(
@@ -120,10 +120,10 @@ export interface RetryToSuccessOptions<R = unknown> {
 }
 
 /**
- * Fire-and-await bounded retry: invoke the fallible `port`, and on each thrown
- * failure fold it through `./retry-backoff` — record it, and if the policy
- * still permits an attempt, back off `nextDelayMs` and retry; otherwise REJECT
- * with {@link RetryExhaustedError}. Resolves with the port's value on the first
+ * Fire-and-await bounded retry: invoke the fallible `port`, and on each failure
+ * (a throw, or a value `accept` refuses) fold it through `./retry-backoff` —
+ * record it, and if the policy still permits an attempt, back off `nextDelayMs`
+ * and retry; otherwise REJECT with {@link RetryExhaustedError}. Resolves with the port's value on the first
  * success.
  *
  * The port is invoked at most `policy.maxAttempts` times (attempts
@@ -154,13 +154,8 @@ export async function retryToSuccess<R>(
   // `backoff` verb does — no local attempt bookkeeping, no local backoff math.
   let retry = initRetry();
   const backOff = async (failure: unknown): Promise<void> => {
-    // Fold the failure first (attempt++), then consult the bound on the
-    // incremented state — same order as resilient-call so the semantics of
-    // `maxAttempts` are identical across both surfaces.
     retry = recordFailure(retry, failure);
     if (!shouldRetry(retry, policy)) {
-      // Terminal give-up at the bound: reject, never swallow. `retry.attempt`
-      // is the number of failures = the number of port invocations made.
       throw new RetryExhaustedError(retry.attempt, failure);
     }
     await sleep(nextDelayMs(retry, policy, rng));

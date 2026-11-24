@@ -80,7 +80,7 @@ import { … } from "@demlik/tea/resilience";
 | [`ResilientState`](#ResilientState) | Interface | battery | The slice. |
 | [`ResilientTimerMsg`](#ResilientTimerMsg) | Type | battery | The retry / deadline timer Msg — a `DeadlineExceeded` whose tag is this knob's (ResilientDeadlineType), keyed by the call `key` through the Sub `id`. |
 | [`RetryExhaustedError`](#RetryExhaustedError) | Class | battery | Raised when `retryToSuccess` exhausts the retry bound without a success — the `maxAttempts`-th recorded failure refuses another attempt. |
-| [`retryToSuccess`](#retryToSuccess) | Function | battery | Fire-and-await bounded retry: invoke the fallible `port`, and on each thrown failure fold it through `./retry-backoff` — record it, and if the policy still permits an attempt, back off `nextDelayMs` and retry; otherwise REJECT with RetryExhaustedError. |
+| [`retryToSuccess`](#retryToSuccess) | Function | battery | Fire-and-await bounded retry: invoke the fallible `port`, and on each failure (a throw, or a value `accept` refuses) fold it through `./retry-backoff` — record it, and if the policy still permits an attempt, back off `nextDelayMs` and retry; otherwise REJECT with RetryExhaustedError. |
 | [`RetryToSuccessOptions`](#RetryToSuccessOptions) | Interface | battery | Options for retryToSuccess. |
 | [`RunCmd`](#RunCmd) | Type | battery | The run Cmd value. |
 | [`runCmdDef`](#runCmdDef) | Function | battery | The one effect this knob emits: "run the work for `key` with `input`". |
@@ -1288,7 +1288,7 @@ class RetryExhaustedError extends Error {
   readonly _tag: "RetryExhaustedError";
   /** How many times the port was invoked before giving up (= `policy.maxAttempts`). */
   readonly attempts: number;
-  /** The failure the final attempt threw — carried, never interpreted. */
+  /** The failure the final attempt ended in: the error it threw, or the value `accept` refused — carried, never interpreted. */
   readonly lastError: unknown;
   readonly name: "RetryExhaustedError";
 }
