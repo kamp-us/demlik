@@ -87,7 +87,8 @@ export interface SseHubOptions<E> {
    * hub owns one interval per open stream and clears it when that stream is
    * cancelled or the hub is closed. While a stream's client is not reading,
    * no further comment is queued for it. Off when left out; anything but a
-   * finite number above 0 makes `sseHub` throw a `RangeError`.
+   * number above 0 and at most 2147483647 (the longest timer delay) makes
+   * `sseHub` throw a `RangeError`.
    */
   readonly keepaliveMs?: number;
   /**
@@ -111,7 +112,9 @@ export interface SseStreamHub<E> extends SseHub<E> {
    * End every open stream and drop every registered sink. After `close`,
    * `emit` reaches no one, `open` returns a stream that carries the snapshot
    * and then ends, and `register` hands the sink the snapshot and subscribes
-   * nothing. Calling it again does nothing.
+   * nothing. Called from a registered sink while an event is being delivered,
+   * it lets that event reach every stream and sink first, then ends them.
+   * Calling it again does nothing.
    */
   close(): void;
   /** Whether {@link SseStreamHub.close} has been called. */
@@ -151,10 +154,12 @@ function writeFrame(frame: SseFrame): string {
   return `${text}\n`;
 }
 
-type Stream = {
-  readonly write: (chunk: Uint8Array) => void;
+type Target<E> = {
+  readonly deliver: (event: E, bytes: Uint8Array | null) => void;
   readonly end: () => void;
 };
+
+const MAX_TIMER_MS = 2_147_483_647;
 
 type Delivery<E> = { readonly event: E; readonly bytes: Uint8Array | null };
 
@@ -196,17 +201,23 @@ export function sseHub<E>(options: SseHubOptions<E> = {}): SseStreamHub<E> {
   const { frame, keepaliveMs, snapshot } = options;
   if (
     keepaliveMs !== undefined &&
-    !(Number.isFinite(keepaliveMs) && keepaliveMs > 0)
+    !(
+      Number.isFinite(keepaliveMs) &&
+      keepaliveMs > 0 &&
+      keepaliveMs <= MAX_TIMER_MS
+    )
   ) {
     throw new RangeError(
-      `sseHub keepaliveMs must be a finite number above 0, got ${keepaliveMs}`,
+      `sseHub keepaliveMs must be a number above 0 and at most ${MAX_TIMER_MS}, got ${keepaliveMs}`,
     );
   }
-  const sinks = new Set<(event: E) => void>();
-  const streams = new Set<Stream>();
+  const targets = new Set<Target<E>>();
+  const streams = new Set<Target<E>>();
+  const sinks = new Map<(event: E) => void, Target<E>>();
   const openings = new Set<Opening<E>>();
   const encoder = new TextEncoder();
   let closed = false;
+  let delivering = 0;
 
   const encode = (event: E): Uint8Array | null => {
     if (frame !== undefined) return encoder.encode(writeFrame(frame(event)));
@@ -246,13 +257,23 @@ export function sseHub<E>(options: SseHubOptions<E> = {}): SseStreamHub<E> {
         ? encode(event)
         : null;
     for (const opening of openings) opening.pending.push({ event, bytes });
-    for (const sink of sinks) {
-      try {
-        sink(event);
-      } catch {}
+    const list = snapshot === undefined ? targets : [...targets];
+    delivering += 1;
+    try {
+      for (const target of list) {
+        if (targets.has(target)) target.deliver(event, bytes);
+      }
+    } finally {
+      delivering -= 1;
+      if (closed && delivering === 0) endAll();
     }
-    if (bytes === null) return;
-    for (const stream of [...streams]) stream.write(bytes);
+  };
+
+  const endAll = (): void => {
+    for (const target of [...targets]) target.end();
+    targets.clear();
+    streams.clear();
+    sinks.clear();
   };
 
   return {
@@ -264,13 +285,16 @@ export function sseHub<E>(options: SseHubOptions<E> = {}): SseStreamHub<E> {
       fanOut(event);
     },
     open() {
-      let live: Stream | undefined;
+      let live: Target<E> | undefined;
       let timer: ReturnType<typeof setInterval> | undefined;
       let unread = false;
       const stop = (): void => {
         if (timer !== undefined) clearInterval(timer);
         timer = undefined;
-        if (live !== undefined) streams.delete(live);
+        if (live !== undefined) {
+          targets.delete(live);
+          streams.delete(live);
+        }
       };
       const body = new ReadableStream<Uint8Array>({
         start: (controller) => {
@@ -282,7 +306,8 @@ export function sseHub<E>(options: SseHubOptions<E> = {}): SseStreamHub<E> {
             (delivery) => put(delivery.bytes),
             () => {
               live = {
-                write: (chunk) => {
+                deliver: (_event, chunk) => {
+                  if (chunk === null) return;
                   try {
                     controller.enqueue(chunk);
                   } catch {
@@ -296,6 +321,7 @@ export function sseHub<E>(options: SseHubOptions<E> = {}): SseStreamHub<E> {
                   } catch {}
                 },
               };
+              targets.add(live);
               streams.add(live);
               if (keepaliveMs === undefined) return;
               const comment = encoder.encode(KEEPALIVE_FRAME);
@@ -328,18 +354,31 @@ export function sseHub<E>(options: SseHubOptions<E> = {}): SseStreamHub<E> {
       join(
         sink,
         (delivery) => sink(delivery.event),
-        () => sinks.add(sink),
+        () => {
+          if (sinks.has(sink)) return;
+          const target: Target<E> = {
+            deliver: (event) => {
+              try {
+                sink(event);
+              } catch {}
+            },
+            end: () => {},
+          };
+          sinks.set(sink, target);
+          targets.add(target);
+        },
       );
       return () => {
+        const target = sinks.get(sink);
+        if (target === undefined) return;
         sinks.delete(sink);
+        targets.delete(target);
       };
     },
     close() {
       if (closed) return;
       closed = true;
-      sinks.clear();
-      for (const stream of [...streams]) stream.end();
-      streams.clear();
+      if (delivering === 0) endAll();
     },
   };
 }

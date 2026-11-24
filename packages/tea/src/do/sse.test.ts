@@ -243,6 +243,7 @@ describe("sseHub keepalive", () => {
     -1,
     Number.NaN,
     Number.POSITIVE_INFINITY,
+    2 ** 31,
   ])("refuses keepaliveMs %s with a RangeError", (keepaliveMs) => {
     expect(() => sseHub<number>({ keepaliveMs })).toThrow(RangeError);
     expect(vi.getTimerCount()).toBe(0);
@@ -481,6 +482,138 @@ describe("sseHub frame throws and emits during open", () => {
     await flush();
     expect(client.text()).toBe("data: 1\n\ndata: 20\n\n");
     await client.cancel();
+  });
+});
+
+function mainHub<E>() {
+  const sinks = new Set<(event: E) => void>();
+  const encoder = new TextEncoder();
+  return {
+    emit(event: E) {
+      for (const sink of sinks) {
+        try {
+          sink(event);
+        } catch {}
+      }
+    },
+    open() {
+      let sink!: (event: E) => void;
+      const stream = new ReadableStream<Uint8Array>({
+        start: (controller) => {
+          sink = (event) => {
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify(event)}\n\n`),
+            );
+          };
+          sinks.add(sink);
+        },
+        cancel: () => {
+          sinks.delete(sink);
+        },
+      });
+      return new Response(stream);
+    },
+    register(sink: (event: E) => void) {
+      sinks.add(sink);
+      return () => {
+        sinks.delete(sink);
+      };
+    },
+  };
+}
+
+describe("sseHub delivery order", () => {
+  type Hub = {
+    emit(event: number): void;
+    open(): Response;
+    register(sink: (event: number) => void): () => void;
+  };
+
+  async function reentrant(
+    hub: Hub,
+    order: "register-then-open" | "open-then-register",
+  ): Promise<{ stream: string; sink: number[] }> {
+    const sink: number[] = [];
+    const subscribe = () =>
+      hub.register((n) => {
+        sink.push(n);
+        if (n === 1) hub.emit(2);
+      });
+    let response: Response;
+    if (order === "register-then-open") {
+      subscribe();
+      response = hub.open();
+    } else {
+      response = hub.open();
+      subscribe();
+    }
+    const client = tap(response);
+    hub.emit(1);
+    hub.emit(3);
+    await flush();
+    await client.cancel();
+    return { stream: client.text(), sink };
+  }
+
+  it.each([
+    "register-then-open",
+    "open-then-register",
+  ] as const)("delivers a re-entrant emit in the same order as main when %s", async (order) => {
+    const ours = await reentrant(sseHub<number>(), order);
+    const main = await reentrant(mainHub<number>(), order);
+    expect(ours).toEqual(main);
+    expect(ours.sink).toEqual([1, 2, 3]);
+    expect(ours.stream).toBe(
+      order === "register-then-open"
+        ? "data: 2\n\ndata: 1\n\ndata: 3\n\n"
+        : "data: 1\n\ndata: 2\n\ndata: 3\n\n",
+    );
+  });
+
+  it("keeps main's order across many sinks and streams interleaved", async () => {
+    const run = async (hub: Hub) => {
+      const log: string[] = [];
+      const clients: Tap[] = [];
+      for (let i = 0; i < 4; i++) {
+        hub.register((n) => {
+          log.push(`sink${i}:${n}`);
+          if (n === i * 10) hub.emit(n + 1);
+        });
+        clients.push(tap(hub.open()));
+      }
+      for (const n of [0, 10, 20, 30]) hub.emit(n);
+      await flush();
+      for (const client of clients) await client.cancel();
+      return { log, streams: clients.map((c) => c.text()) };
+    };
+    expect(await run(sseHub<number>())).toEqual(await run(mainHub<number>()));
+  });
+
+  it("lets a terminal event reach every stream when a sink closes the hub on it", async () => {
+    type Ev = { readonly kind: "turn" | "end"; readonly n: number };
+    const hub = sseHub<Ev>({
+      frame: (e) => ({ event: e.kind, data: String(e.n) }),
+    });
+    const before = tap(hub.open());
+    const seen: Ev[] = [];
+    hub.register((e) => {
+      seen.push(e);
+      if (e.kind === "end") hub.close();
+    });
+    const after = tap(hub.open());
+    const lateSink: Ev[] = [];
+    hub.register((e) => lateSink.push(e));
+    hub.emit({ kind: "turn", n: 1 });
+    hub.emit({ kind: "end", n: 2 });
+    hub.emit({ kind: "turn", n: 3 });
+    await flush();
+    const expected = "event: turn\ndata: 1\n\nevent: end\ndata: 2\n\n";
+    expect(before.text()).toBe(expected);
+    expect(after.text()).toBe(expected);
+    expect(before.done() && after.done()).toBe(true);
+    expect(seen.map((e) => e.n)).toEqual([1, 2]);
+    expect(lateSink.map((e) => e.n)).toEqual([1, 2]);
+    expect(hub.closed).toBe(true);
   });
 });
 

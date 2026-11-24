@@ -1896,7 +1896,8 @@ interface SseHubOptions<E> {
    * hub owns one interval per open stream and clears it when that stream is
    * cancelled or the hub is closed. While a stream's client is not reading,
    * no further comment is queued for it. Off when left out; anything but a
-   * finite number above 0 makes `sseHub` throw a `RangeError`.
+   * number above 0 and at most 2147483647 (the longest timer delay) makes
+   * `sseHub` throw a `RangeError`.
    */
   readonly keepaliveMs?: number;
   /**
@@ -1936,7 +1937,9 @@ interface SseStreamHub<E> extends SseHub<E> {
    * End every open stream and drop every registered sink. After `close`,
    * `emit` reaches no one, `open` returns a stream that carries the snapshot
    * and then ends, and `register` hands the sink the snapshot and subscribes
-   * nothing. Calling it again does nothing.
+   * nothing. Called from a registered sink while an event is being delivered,
+   * it lets that event reach every stream and sink first, then ends them.
+   * Calling it again does nothing.
    */
   close(): void;
 }
