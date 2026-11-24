@@ -67,7 +67,11 @@ export {
   reissueSurvivingEffects,
 } from "./resume";
 export {
+  type SseFrame,
+  SseFrameError,
   type SseHub,
+  type SseHubOptions,
+  type SseStreamHub,
   sseFromAgentEvents,
   sseHub,
   sseProjection,
