@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Cmd, defineMachine, replay } from "../../../index";
 import { run } from "../../../promise";
+import { replayTrace } from "../trace-replay";
 import {
   breadcrumbsFromTrace,
   parseJSONL,
@@ -362,5 +363,143 @@ describe("Sentry adapters", () => {
   it("breadcrumbsFromTrace with limit 0 yields no breadcrumbs", async () => {
     const trace = await recordedTrace([{ _tag: "inc", by: 1 }]);
     expect(breadcrumbsFromTrace(trace, { limit: 0 })).toEqual([]);
+  });
+});
+
+describe("recorder window", () => {
+  async function recordRun(
+    count: number,
+    opts?: Parameters<typeof recorder>[1],
+  ) {
+    const runtime = run(counter(), { ctx: {} });
+    const rec = recorder(runtime, opts);
+    await runtime.ready;
+    for (let i = 0; i < count; i++) {
+      await runtime.dispatch(
+        i % 3 === 2
+          ? { _tag: "note", text: `n${i}` }
+          : { _tag: i % 3 === 0 ? "inc" : "dec", by: i },
+      );
+    }
+    await runtime.stop();
+    return rec;
+  }
+
+  it("a 1000-transition run with window 10 dumps 10 msgs, skipped 990, and replays to finalState", async () => {
+    const full = (await recordRun(1000)).dump();
+    const rec = await recordRun(1000, { window: 10 });
+    const trace = rec.dump();
+
+    expect(trace.msgs).toHaveLength(10);
+    expect(trace.skipped).toBe(990);
+    expect(trace.msgs).toEqual(full.msgs.slice(990));
+    expect(trace.finalState).toEqual(full.finalState);
+    expect(trace.loaded).not.toEqual(full.loaded);
+
+    const result = replayTrace(counter(), trace);
+    expect(result.matches).toBe(true);
+    expect(result.actual).toEqual(trace.finalState);
+  });
+
+  it("the windowed trace round-trips through toJSONL and parseJSONL and still replays", async () => {
+    const rec = await recordRun(1000, { window: 10 });
+    const jsonl = rec.toJSONL();
+    expect(JSON.parse(jsonl.split("\n")[0] as string).skipped).toBe(990);
+
+    const rehydrated = parseJSONL<State, Msg>(jsonl);
+    expect(rehydrated.skipped).toBe(990);
+    expect(rehydrated.msgs).toEqual(rec.dump().msgs);
+    expect(rehydrated.loaded).toEqual(rec.dump().loaded);
+
+    const result = replayTrace(counter(), rehydrated);
+    expect(result.matches).toBe(true);
+    expect(result.actual).toEqual(rec.dump().finalState);
+  });
+
+  it("a run shorter than the window equals the unbounded trace with skipped 0", async () => {
+    const unbounded = await recordRun(7);
+    const windowed = await recordRun(7, { window: 10 });
+    expect(windowed.dump()).toEqual(unbounded.dump());
+    expect(windowed.dump().skipped ?? 0).toBe(0);
+    expect(windowed.toJSONL()).toBe(unbounded.toJSONL());
+
+    const exact = await recordRun(10, { window: 10 });
+    expect(exact.dump().skipped ?? 0).toBe(0);
+    expect(exact.dump()).toEqual((await recordRun(10)).dump());
+  });
+
+  it("captureSteps with a window keeps exactly the window's steps", async () => {
+    const full = (await recordRun(50, { captureSteps: true })).dump();
+    const rec = await recordRun(50, { window: 5, captureSteps: true });
+    const trace = rec.dump();
+
+    expect(trace.steps).toHaveLength(5);
+    expect(trace.steps).toEqual(full.steps?.slice(45));
+    expect(trace.steps?.map((s) => s.msg)).toEqual(trace.msgs);
+    expect(trace.steps?.at(-1)?.state).toEqual(trace.finalState);
+    expect(trace.loaded).toEqual(full.steps?.[44]?.state);
+
+    const rehydrated = parseJSONL<State, Msg>(rec.toJSONL());
+    expect(rehydrated).toEqual(trace);
+    expect(replayTrace(counter(), rehydrated).matches).toBe(true);
+  });
+
+  it("numbers the first kept step as the live run's step skipped + 1", async () => {
+    const full = (await recordRun(25, { captureSteps: true })).dump();
+    const trace = (
+      await recordRun(25, { window: 4, captureSteps: true })
+    ).dump();
+    const skipped = trace.skipped ?? 0;
+    for (const [i, step] of (trace.steps ?? []).entries()) {
+      expect(step).toEqual(full.steps?.[skipped + i]);
+    }
+  });
+
+  it.each([
+    0,
+    -1,
+    1.5,
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+  ])("window %s throws a RangeError", (window) => {
+    const runtime = run(counter(), { ctx: {} });
+    expect(() => recorder(runtime, { window })).toThrow(RangeError);
+  });
+
+  it("window with a sampleRate below 1 throws a RangeError", () => {
+    const runtime = run(counter(), { ctx: {} });
+    expect(() => recorder(runtime, { window: 10, sampleRate: 0.5 })).toThrow(
+      RangeError,
+    );
+    expect(() =>
+      recorder(runtime, { window: 10, sampleRate: 1 }),
+    ).not.toThrow();
+  });
+
+  it("without options the JSONL is unchanged: the boot line carries no skipped", async () => {
+    const rec = await recordRun(4);
+    const lines = rec.toJSONL().split("\n");
+    expect(lines[0]).toBe(
+      JSON.stringify({
+        kind: "boot",
+        state: { _tag: "counting", count: 0, log: [] },
+      }),
+    );
+    expect(lines).toHaveLength(5);
+    expect(rec.dump()).not.toHaveProperty("skipped");
+    expect(parseJSONL<State, Msg>(rec.toJSONL())).not.toHaveProperty("skipped");
+  });
+
+  it("parseJSONL rejects a boot line with an invalid skipped count", () => {
+    const boot = (skipped: unknown) =>
+      JSON.stringify({
+        kind: "boot",
+        state: { _tag: "counting", count: 0, log: [] },
+        skipped,
+      });
+    expect(() => parseJSONL(boot(-1))).toThrow(/skipped/);
+    expect(() => parseJSONL(boot(1.5))).toThrow(/skipped/);
+    expect(() => parseJSONL(boot("3"))).toThrow(/skipped/);
+    expect(parseJSONL(boot(0))).not.toHaveProperty("skipped");
   });
 });

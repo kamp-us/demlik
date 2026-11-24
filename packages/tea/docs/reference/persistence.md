@@ -293,7 +293,8 @@ interface Recorder<S, M> {
    * Serialize the recording as JSONL (one JSON object per line) — a streamable
    * format that appends cleanly and survives truncation (a partial tail line
    * is the only loss). The first line is the boot header
-   * `{ kind: "boot", state }`; each subsequent line is
+   * `{ kind: "boot", state }`, plus `skipped` when a
+   * RecorderOptions.window has dropped transitions; each subsequent line is
    * `{ kind: "step", msg, state }` for one recorded transition.
    *
    * Re-hydrate with parseJSONL.
@@ -367,6 +368,27 @@ interface RecorderOptions {
    * `sampleRate` — `loaded` and `finalState` are anchors, not samples.
    */
   readonly sampleRate?: number;
+  /**
+   * Keep only the last `window` recorded transitions. Default: keep every
+   * transition since boot.
+   *
+   * When a transition falls out of the window, the trace's `loaded` anchor
+   * moves to the State after it, which is the State before the oldest kept
+   * msg, and Trace.skipped counts it. So a windowed `dump()` still
+   * replays: `replayTrace` folds the kept msgs from the moved anchor and
+   * reproduces `finalState` exactly as it does for an unbounded trace, and
+   * the same holds after a `toJSONL` / `parseJSONL` round-trip. With
+   * `captureSteps: true`, `steps` holds one entry per kept msg.
+   *
+   * Memory is O(window) msgs and State refs whatever the run length: the
+   * recorder keeps each kept transition's post-State by reference to move
+   * the anchor, with or without `captureSteps`.
+   *
+   * Must be an integer `>= 1`, and cannot be combined with a `sampleRate`
+   * below `1` (a sampled trace is not replay-faithful, so it has no anchor to
+   * move); `recorder` throws a `RangeError` otherwise.
+   */
+  readonly window?: number;
 }
 ```
 
@@ -746,10 +768,22 @@ interface Trace<S, M> {
    * The post-init State captured by `onBoot`, used directly as the recorded
    * replay's starting State. No init call is repeated. `null` marks a missing
    * anchor in an older or incomplete trace; `replayTrace` refuses it.
+   *
+   * In a trace recorded with RecorderOptions.window that has dropped
+   * transitions, it is the State after the last dropped transition, which is
+   * the State before the oldest kept msg, so the kept msgs fold from it.
    */
   readonly loaded: S | null;
   /** The ordered, non-null msgs as observed. The replay input sequence. */
   readonly msgs: readonly M[];
+  /**
+   * How many transitions the live run applied before `loaded`: the trace's
+   * first msg is the run's step `skipped + 1`. Absent or `0` for a trace that
+   * kept every transition since boot; a reader takes `trace.skipped ?? 0`.
+   * Set by a recorder with a RecorderOptions.window once a
+   * transition has fallen out of it, and carried on the JSONL boot line.
+   */
+  readonly skipped?: number;
   /**
    * Per-transition `(msg, post-state)` pairs, in dispatch order, for human
    * inspection (e.g. "show me the state after step 3"). When present, there

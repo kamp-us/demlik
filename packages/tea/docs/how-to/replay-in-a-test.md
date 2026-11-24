@@ -77,3 +77,35 @@ and returns `unknown` states. It trusts the recording to be the machine's own, w
 `replayTrace` checks at compile time and `replayStoredTrace` cannot. A `runStepLoop` drive records the same way: its `attach` option hands you the drive's runtime for `recorder`, and `stepLoopMachine` from `@demlik/tea/do` is the machine to replay it against. That is how a stuck run becomes a diff at one field instead of a re-run;
 [Gate a refactor on a parity check](./gate-a-refactor-on-parity.md) walks the full
 record-then-replay loop.
+
+## 4. Keep only the last N transitions of a long run
+
+A flight recorder on a long-running machine, one that saves the trace only when
+the run fails, should not hold every msg since boot. Give `recorder` a
+`window`:
+
+```ts
+import { recorder, replayTrace } from "@demlik/tea/persistence";
+
+const rec = recorder(runtime, { window: 500 });
+// ... thousands of transitions later, the run fails ...
+const trace = rec.dump(); // the last 500 msgs
+replayTrace(machine, trace).matches; // true
+```
+
+The recorder holds at most `window` msgs and State refs, whatever the run
+length. When a transition falls out of the window, the trace's `loaded` anchor
+moves to the State after it, which is the State before the oldest kept msg. So
+the windowed trace replays exactly as an unbounded one does: `replayTrace` folds
+the kept msgs from that anchor and reproduces `finalState`, and the same holds
+after `toJSONL` and `parseJSONL`. With `captureSteps: true`, `steps` holds one
+entry per kept msg.
+
+`trace.skipped` counts the transitions before the anchor, so the first kept msg
+is the live run's step `skipped + 1`. It is absent, read as 0, on a trace that
+kept everything, and the JSONL boot line carries it. A recording without a
+`window` writes the same JSONL it always did.
+
+`window` must be an integer of at least 1, and it cannot be combined with a
+`sampleRate` below 1: a sampled trace is not replay-faithful, so it has no
+anchor to move. `recorder` throws a `RangeError` for either.
