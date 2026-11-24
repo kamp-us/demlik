@@ -82,15 +82,21 @@ record-then-replay loop.
 
 A flight recorder on a long-running machine, one that saves the trace only when
 the run fails, should not hold every msg since boot. Give `recorder` a
-`window`:
+`window`. Recording the four-message download above with `window: 2` keeps the
+last two messages, and the trace still replays:
 
 ```ts
 import { recorder, replayTrace } from "@demlik/tea/persistence";
 
-const rec = recorder(runtime, { window: 500 });
-// ... thousands of transitions later, the run fails ...
-const trace = rec.dump(); // the last 500 msgs
-replayTrace(machine, trace).matches; // true
+const live = run(downloader, { terminal: (s) => s.phase === "done" });
+const rec = recorder(live, { window: 2 });
+await live.ready;
+for (const msg of msgs) await live.dispatch(msg);
+
+const trace = rec.dump();
+expect(trace.msgs).toEqual(msgs.slice(2));
+expect(trace.skipped).toBe(2);
+expect(replayTrace(downloader, trace).matches).toBe(true);
 ```
 
 The recorder holds at most `window` msgs and State refs, whatever the run

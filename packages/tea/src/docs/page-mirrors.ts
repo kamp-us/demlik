@@ -455,6 +455,7 @@ export const PAGE_MIRRORS: readonly PageRow[] = [
       "src/docs/how-to/replay-in-a-test.test.ts",
       "replay",
       "assertions",
+      "window",
     ),
     only: true,
   },
