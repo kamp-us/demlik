@@ -18,3 +18,4 @@
 
 export * from "../internal/paginate/paginated-walk";
 export * from "../internal/paginate/paginator";
+export { type IteratePagesConfig, iteratePages } from "../internal/paginate/iterate-pages";
