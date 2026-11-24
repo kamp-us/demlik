@@ -498,7 +498,7 @@ describe("runStepLoop", () => {
     expect(reads).toBe(2);
   });
 
-  it("stops at the deadline a failed POST runs into, without sleeping", async () => {
+  it("stops at the deadline a failed POST runs into, with no backoff sleep", async () => {
     const clock = [0, 150];
     const sleeps: number[] = [];
     const down = (): Promise<StepResponse<ToolInput, RunOutput>> =>
@@ -519,7 +519,7 @@ describe("runStepLoop", () => {
     );
 
     expect(outcome).toEqual({ kind: "deadline_exceeded" });
-    expect(sleeps).toEqual([]);
+    expect(sleeps).toEqual([100]);
   });
 });
 
