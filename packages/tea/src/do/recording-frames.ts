@@ -51,10 +51,23 @@ export interface FrameEvidence {
 
 /**
  * Why a recording cell does not decode as a frame: its text is not a frame of
- * this format (`frame`), a delta's basis is missing (`basis`), or the evidence
- * does not rebuild, or fails its checksum (`checksum`).
+ * this format (`frame`), a delta's basis is missing (`basis`), the evidence
+ * does not rebuild, or fails its checksum (`checksum`), or the frame was too
+ * large for a storage row and a refusal marker was written in its place
+ * (`oversized`).
  */
-export type FrameRefusal = "frame" | "basis" | "checksum";
+export type FrameRefusal = "frame" | "basis" | "checksum" | "oversized";
+
+/**
+ * The refusal marker written in place of a frame too large for a storage row:
+ * which frame it replaces, the seq it is stored at, and the UTF-8 bytes of the
+ * key and cell that were not written. It keeps no evidence and no Msg.
+ */
+export interface OversizedMarker {
+  readonly of: "init" | "step";
+  readonly seq: number;
+  readonly bytes: number;
+}
 
 /** The evidence bytes of one frame, which the next frame's delta is taken from. */
 export interface Basis {
@@ -79,6 +92,7 @@ export type EncodedFrame =
       readonly frame: "init";
       readonly restored: boolean;
       readonly provenance: unknown;
+      readonly skipped: number;
       readonly evidence: StoredEvidence;
     }
   | {
@@ -93,6 +107,7 @@ export type FrameHead =
       readonly frame: "init";
       readonly restored: boolean;
       readonly provenance: unknown;
+      readonly skipped?: number;
     }
   | { readonly frame: "step"; readonly msgJson: string };
 
@@ -106,27 +121,55 @@ function isObject(raw: unknown): raw is Record<string, unknown> {
 /**
  * What a recording cell holds apart from its evidence, which is all a fold of
  * its Msgs needs: an init frame (which a fold skips) or a step frame and its
- * Msg. `null` when the JSON is not a frame of this format. The evidence is not
- * read, so a cell whose evidence is unreadable still gives its Msg.
+ * Msg, or the marker written in place of an oversized frame. `null` when the
+ * JSON is not a frame of this format. The evidence is not read, so a cell whose
+ * evidence is unreadable still gives its Msg.
  */
 export function parseCellMsg(
   raw: unknown,
 ):
   | { readonly frame: "init" }
   | { readonly frame: "step"; readonly msg: unknown }
+  | ({ readonly frame: "oversized" } & OversizedMarker)
   | null {
   if (!isObject(raw) || raw.tea !== RECORDING_FORMAT) return null;
   if (raw.frame === "init") return { frame: "init" };
+  if (raw.frame === "refused") {
+    const marker = parseOversized(raw);
+    return marker === null ? null : { frame: "oversized", ...marker };
+  }
   if (raw.frame === "step" && "msg" in raw) {
     return { frame: "step", msg: raw.msg };
   }
   return null;
 }
 
+function parseOversized(raw: Record<string, unknown>): OversizedMarker | null {
+  const { reason, of, seq, bytes } = raw;
+  if (reason !== "oversized" || (of !== "init" && of !== "step")) return null;
+  if (typeof seq !== "number" || !Number.isSafeInteger(seq) || seq < 1) {
+    return null;
+  }
+  if (typeof bytes !== "number" || !Number.isSafeInteger(bytes) || bytes < 0) {
+    return null;
+  }
+  return { of, seq, bytes };
+}
+
+/**
+ * The cell written in place of a frame too large for a storage row. It names
+ * the frame it replaces, its seq and the measured bytes, and nothing else.
+ */
+export function encodeOversized(marker: OversizedMarker): string {
+  return `{"tea":"${RECORDING_FORMAT}","frame":"refused","reason":"oversized","of":"${marker.of}","seq":${marker.seq},"bytes":${marker.bytes}}`;
+}
+
 /** Parse a recording cell's JSON, or `null` when it is not a frame of this format. */
 export function parseFrame(raw: unknown): EncodedFrame | null {
   const cell = parseCellMsg(raw);
-  if (cell === null || !isObject(raw)) return null;
+  if (cell === null || cell.frame === "oversized" || !isObject(raw)) {
+    return null;
+  }
   const stored = raw.evidence;
   if (!isObject(stored)) return null;
   if (stored.cmds !== undefined && typeof stored.cmds !== "string") return null;
@@ -147,10 +190,19 @@ export function parseFrame(raw: unknown): EncodedFrame | null {
   }
   if (cell.frame === "step") return { frame: "step", msg: cell.msg, evidence };
   if (typeof raw.restored !== "boolean") return null;
+  const skipped = raw.skipped ?? 0;
+  if (
+    typeof skipped !== "number" ||
+    !Number.isSafeInteger(skipped) ||
+    skipped < 0
+  ) {
+    return null;
+  }
   return {
     frame: "init",
     restored: raw.restored,
     provenance: raw.provenance ?? null,
+    skipped,
     evidence,
   };
 }
@@ -226,7 +278,7 @@ export async function encodeFrame(
   }
   const json =
     head.frame === "init"
-      ? `{"tea":"${RECORDING_FORMAT}","frame":"init","restored":${head.restored},"provenance":${JSON.stringify(head.provenance) ?? "null"},"evidence":${stored}}`
+      ? `{"tea":"${RECORDING_FORMAT}","frame":"init","restored":${head.restored},${(head.skipped ?? 0) > 0 ? `"skipped":${head.skipped},` : ""}"provenance":${JSON.stringify(head.provenance) ?? "null"},"evidence":${stored}}`
       : `{"tea":"${RECORDING_FORMAT}","frame":"step","msg":${head.msgJson},"evidence":${stored}}`;
   return { json, basis: { seq, bytes: target, chain } };
 }
@@ -239,7 +291,7 @@ export async function rebuildEvidence(
   seq: number,
   stored: StoredEvidence,
   basis: Basis | null,
-): Promise<Basis | Exclude<FrameRefusal, "frame">> {
+): Promise<Basis | "basis" | "checksum"> {
   if (stored.encoding === "full") {
     try {
       const stateBytes = await through(
