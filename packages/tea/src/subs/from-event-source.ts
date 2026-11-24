@@ -11,9 +11,6 @@ type EventSourceSubData = { readonly url: string };
 
 declare const EventSource: MinimalEventSourceCtor;
 
-const CONNECTING = 0;
-const CLOSED = 2;
-
 /**
  * The connection state of an `EventSource` when its `error` event fired.
  *
@@ -25,6 +22,24 @@ const CLOSED = 2;
  * - `"open"` — the source was open; reported as-is for completeness.
  */
 export type EventSourceReadyState = "connecting" | "open" | "closed";
+
+/**
+ * The `EventSource` lifecycle event names. They are not server-sent events and
+ * carry no `data`, so `EventSourceNamedEvents.types` refuses them: `onOpen` and
+ * `onError` receive them instead.
+ */
+export type EventSourceLifecycleType = "open" | "error";
+
+const READY_STATES = {
+  0: "connecting",
+  1: "open",
+  2: "closed",
+} as const satisfies Record<0 | 1 | 2, EventSourceReadyState>;
+
+const LIFECYCLE_TYPES: ReadonlySet<string> = new Set<EventSourceLifecycleType>([
+  "open",
+  "error",
+]);
 
 /**
  * One named server-sent event as a host receives it: the event's `type` (the
@@ -46,13 +61,18 @@ export interface EventSourceNamedEvents<S, M, T extends string = string> {
   /**
    * The SSE `event:` names to listen for. A type the host does not name here
    * never reaches `onEvent`. Naming `"message"` here as well as passing
-   * `onMessage` delivers an unnamed event to both.
+   * `onMessage` delivers an unnamed event to both. The lifecycle names
+   * `"open"` and `"error"` are refused: in the type when `T` names them, and
+   * by `fromEventSource` throwing when they arrive as a plain `string`.
    */
-  readonly types: readonly T[];
+  readonly types: readonly Exclude<T, EventSourceLifecycleType>[];
   /**
    * Map one named event to a Msg, or to `null` to drop it.
    */
-  readonly onEvent: (event: ServerSentEvent<T>, sub: S) => M | null;
+  readonly onEvent: (
+    event: ServerSentEvent<Exclude<T, EventSourceLifecycleType>>,
+    sub: S,
+  ) => M | null;
 }
 
 /**
@@ -91,12 +111,6 @@ export interface EventSourceFactoryOpts<S, M, T extends string = string> {
   onOpen?: (sub: S) => M | null;
 }
 
-function readyStateOf(state: number): EventSourceReadyState {
-  if (state === CLOSED) return "closed";
-  if (state === CONNECTING) return "connecting";
-  return "open";
-}
-
 /**
  * Build a Sub runner that opens an `EventSource` on `sub.deps.url` and
  * dispatches a Msg for each server-sent event.
@@ -110,6 +124,9 @@ function readyStateOf(state: number): EventSourceReadyState {
  * The url lives in the Sub's `deps`, so a changed url is a new Sub id: the
  * engine closes the old source and opens one on the new url. Cleanup removes
  * every listener the runner added and closes the source.
+ *
+ * @throws TypeError when `events.types` names `"open"` or `"error"`, the
+ * lifecycle events `onOpen` and `onError` receive.
  *
  * @example
  * ```ts
@@ -141,28 +158,40 @@ export function fromEventSource<
   M,
   T extends string = string,
 >(opts: EventSourceFactoryOpts<S, M, T>): SubscribeHandler<S, M, unknown> {
+  const events = opts.events;
+  const namedTypes = new Set<string>(events?.types);
+  for (const type of namedTypes) {
+    if (LIFECYCLE_TYPES.has(type)) {
+      throw new TypeError(
+        `fromEventSource: events.types names "${type}", a lifecycle event; receive it through ${type === "open" ? "onOpen" : "onError"} instead`,
+      );
+    }
+  }
   return (sub, _ctx, dispatch) => {
     const source = new EventSource(sub.deps.url);
     const detach: Array<() => void> = [];
 
-    const onMessage = opts.onMessage;
-    if (onMessage) {
+    if (opts.onMessage) {
       const messageListener = (event: MinimalMessageEvent): void => {
-        dispatchIfPresent(dispatch, onMessage(event.data as string, sub));
+        if (opts.onMessage) {
+          dispatchIfPresent(
+            dispatch,
+            opts.onMessage(event.data as string, sub),
+          );
+        }
       };
       source.addEventListener("message", messageListener);
       detach.push(() => source.removeEventListener("message", messageListener));
     }
 
-    const events = opts.events;
     if (events) {
-      for (const type of new Set(events.types)) {
+      for (const type of namedTypes) {
         const namedListener = (event: MinimalServerSentMessageEvent): void => {
           dispatchIfPresent(
             dispatch,
             events.onEvent(
               {
-                type,
+                type: type as Exclude<T, EventSourceLifecycleType>,
                 data: event.data as string,
                 lastEventId: event.lastEventId,
               },
@@ -175,22 +204,22 @@ export function fromEventSource<
       }
     }
 
-    const onError = opts.onError;
-    if (onError) {
+    if (opts.onError) {
       const errorListener = (event: MinimalEvent): void => {
-        dispatchIfPresent(
-          dispatch,
-          onError(event, sub, readyStateOf(source.readyState)),
-        );
+        if (opts.onError) {
+          dispatchIfPresent(
+            dispatch,
+            opts.onError(event, sub, READY_STATES[source.readyState]),
+          );
+        }
       };
       source.addEventListener("error", errorListener);
       detach.push(() => source.removeEventListener("error", errorListener));
     }
 
-    const onOpen = opts.onOpen;
-    if (onOpen) {
+    if (opts.onOpen) {
       const openListener = (): void => {
-        dispatchIfPresent(dispatch, onOpen(sub));
+        if (opts.onOpen) dispatchIfPresent(dispatch, opts.onOpen(sub));
       };
       source.addEventListener("open", openListener);
       detach.push(() => source.removeEventListener("open", openListener));

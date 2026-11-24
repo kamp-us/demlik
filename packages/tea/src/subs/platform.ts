@@ -53,7 +53,7 @@ export interface MinimalServerSentMessageEvent extends MinimalMessageEvent {
 }
 
 export interface MinimalEventSource {
-  readonly readyState: number;
+  readonly readyState: 0 | 1 | 2;
   addEventListener(
     type: "message",
     listener: (event: MinimalMessageEvent) => void,

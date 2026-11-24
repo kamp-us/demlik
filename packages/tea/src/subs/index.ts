@@ -54,6 +54,7 @@ export { defineListener, type ListenerTarget } from "./define-listener";
 export { fromBroadcastChannel } from "./from-broadcast-channel";
 export {
   type EventSourceFactoryOpts,
+  type EventSourceLifecycleType,
   type EventSourceNamedEvents,
   type EventSourceReadyState,
   fromEventSource,

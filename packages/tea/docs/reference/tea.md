@@ -8,7 +8,7 @@ Tier: `stable`
 import { … } from "@demlik/tea";
 ```
 
-## Exports (217)
+## Exports (218)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -76,6 +76,7 @@ import { … } from "@demlik/tea";
 | [`ErrorsOf`](#ErrorsOf) | Type | stable | The `E` union one Cmd can settle with; `unknown` for an untyped Cmd. |
 | [`EventSourcedOptions`](#EventSourcedOptions) | Interface | stable | Schemas and namespace for a durable log store. |
 | [`EventSourceFactoryOpts`](#EventSourceFactoryOpts) | Interface | stable | Options for `fromEventSource`: map each server-sent event, error and open event to a Msg, or to `null` to drop it. |
+| [`EventSourceLifecycleType`](#EventSourceLifecycleType) | Type | stable | The `EventSource` lifecycle event names. |
 | [`EventSourceNamedEvents`](#EventSourceNamedEvents) | Interface | stable | The named server-sent event types a `fromEventSource` Sub listens to, and the one callback that maps each of them to a Msg. |
 | [`EventSourceReadyState`](#EventSourceReadyState) | Type | stable | The connection state of an `EventSource` when its `error` event fired. |
 | [`ExhaustiveTransitions`](#ExhaustiveTransitions) | Type | stable | `Transitions<S, M, C>` with every cell REQUIRED — the opt-in floor for a machine that wants the compiler to force a decision on every (state, message) pair. |
@@ -1239,6 +1240,14 @@ interface EventSourceFactoryOpts<S, M, T extends string = string> {
 }
 ```
 
+<a id="EventSourceLifecycleType"></a>
+
+### `EventSourceLifecycleType`
+
+```ts
+type EventSourceLifecycleType = "error" | "open"
+```
+
 <a id="EventSourceNamedEvents"></a>
 
 ### `EventSourceNamedEvents`
@@ -1246,13 +1255,18 @@ interface EventSourceFactoryOpts<S, M, T extends string = string> {
 ```ts
 interface EventSourceNamedEvents<S, M, T extends string = string> {
   /** Map one named event to a Msg, or to `null` to drop it. */
-  readonly onEvent: (event: ServerSentEvent<T>, sub: S) => M | null;
+  readonly onEvent: (
+    event: ServerSentEvent<Exclude<T, EventSourceLifecycleType>>,
+    sub: S,
+  ) => M | null;
   /**
    * The SSE `event:` names to listen for. A type the host does not name here
    * never reaches `onEvent`. Naming `"message"` here as well as passing
-   * `onMessage` delivers an unnamed event to both.
+   * `onMessage` delivers an unnamed event to both. The lifecycle names
+   * `"open"` and `"error"` are refused: in the type when `T` names them, and
+   * by `fromEventSource` throwing when they arrive as a plain `string`.
    */
-  readonly types: readonly T[];
+  readonly types: readonly Exclude<T, EventSourceLifecycleType>[];
 }
 ```
 

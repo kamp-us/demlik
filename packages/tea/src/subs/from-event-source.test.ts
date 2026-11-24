@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { defineMachine, type NoCtx, type Reducer, type Sub } from "../index";
 import { run } from "../promise";
-import { fromEventSource } from "./from-event-source";
+import { fromEventSource, type ServerSentEvent } from "./from-event-source";
 import type {
   MinimalEvent,
   MinimalEventSource,
@@ -20,7 +20,7 @@ import type {
 class FakeEventSource implements MinimalEventSource {
   static instances: FakeEventSource[] = [];
   closed = false;
-  readyState = 0;
+  readyState: 0 | 1 | 2 = 0;
   private readonly listeners = new Map<
     string,
     Set<(e: MinimalEvent) => void>
@@ -49,7 +49,7 @@ class FakeEventSource implements MinimalEventSource {
     const event: MinimalServerSentMessageEvent = { type, data, lastEventId };
     for (const l of this.listeners.get(type) ?? []) l(event);
   }
-  fireError(readyState = 0): void {
+  fireError(readyState: 0 | 1 | 2 = 0): void {
     this.readyState = readyState;
     for (const l of this.listeners.get("error") ?? []) l({ type: "error" });
   }
@@ -200,20 +200,15 @@ describe("fromEventSource — subscribe → deliver → cleanup against a real r
 });
 
 type FeedSub = Sub<"feed", { readonly url: string }>;
-type FeedEvent = {
-  readonly type: string;
-  readonly data: string;
-  readonly lastEventId: string;
-};
 type FeedState = {
   readonly url: string | null;
-  readonly events: readonly FeedEvent[];
+  readonly events: readonly ServerSentEvent[];
   readonly frames: readonly string[];
   readonly lost: number;
   readonly retrying: number;
 };
 type FeedMsg =
-  | { readonly _tag: "named"; readonly event: FeedEvent }
+  | { readonly _tag: "named"; readonly event: ServerSentEvent }
   | { readonly _tag: "frame"; readonly data: string }
   | { readonly _tag: "feed_lost" }
   | { readonly _tag: "feed_retrying" }
@@ -273,7 +268,7 @@ describe("fromEventSource — named server-sent events", () => {
     const rt = await run(feedMachine(), { subscribe: feedSubscribe }).ready;
     const source = FakeEventSource.instances[0];
 
-    const expected: FeedEvent[] = [];
+    const expected: ServerSentEvent[] = [];
     for (let i = 0; i < 60; i++) {
       const type = NAMED[i % NAMED.length];
       const event = { type, data: `{"n":${i}}`, lastEventId: String(i) };
@@ -402,6 +397,68 @@ describe("fromEventSource — named server-sent events", () => {
     await rt.idle();
     expect(rt.getState().events).toEqual([
       { type: "reset", data: "new", lastEventId: "2" },
+    ]);
+
+    await rt.stop();
+  });
+
+  it("refuses the lifecycle names open and error in events.types, in the type and when the factory is built", () => {
+    expect(() =>
+      fromEventSource<FeedSub, FeedMsg, "entry" | "open">({
+        events: {
+          // @ts-expect-error
+          types: ["entry", "open"],
+          onEvent: () => null,
+        },
+      }),
+    ).toThrow(TypeError);
+    expect(() =>
+      fromEventSource<FeedSub, FeedMsg, "error">({
+        // @ts-expect-error
+        events: { types: ["error"], onEvent: () => null },
+      }),
+    ).toThrow(TypeError);
+
+    const wide = (types: readonly string[]) =>
+      fromEventSource<FeedSub, FeedMsg>({
+        events: { types, onEvent: () => null },
+      });
+    expect(() => wide(["entry", "open"])).toThrow(
+      /names "open", a lifecycle event; receive it through onOpen/,
+    );
+    expect(() => wide(["error"])).toThrow(
+      /names "error", a lifecycle event; receive it through onError/,
+    );
+    expect(() => wide(["entry", "message"])).not.toThrow();
+  });
+
+  it("calls onMessage, onError and onOpen on the options object, so a method keeps its receiver", async () => {
+    vi.stubGlobal("EventSource", FakeEventSource);
+    const opts = {
+      prefix: "via-this:",
+      onMessage(this: { prefix: string }, data: string): FeedMsg {
+        return { _tag: "frame", data: this.prefix + data };
+      },
+      onError(this: { prefix: string }): FeedMsg {
+        return { _tag: "frame", data: `${this.prefix}error` };
+      },
+      onOpen(this: { prefix: string }): FeedMsg {
+        return { _tag: "frame", data: `${this.prefix}open` };
+      },
+    };
+    const rt = await run(feedMachine(), {
+      subscribe: { feed: fromEventSource<FeedSub, FeedMsg>(opts) },
+    }).ready;
+    const source = FakeEventSource.instances[0];
+
+    source.fireOpen();
+    source.fireMessage("a");
+    source.fireError(0);
+    await rt.idle();
+    expect(rt.getState().frames).toEqual([
+      "via-this:open",
+      "via-this:a",
+      "via-this:error",
     ]);
 
     await rt.stop();
