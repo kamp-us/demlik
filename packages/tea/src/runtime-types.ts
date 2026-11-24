@@ -675,9 +675,23 @@ export interface Store<S> {
  * produced at boot, with the Cmds the engine starts for it (`[]` when it
  * starts none). `step` is an applied Msg's transition, with the Cmds it
  * starts. `stop` is the final flush.
+ *
+ * An `init` boundary may carry `skipped`: how many transitions the run applied
+ * before this State, when the State is a moved anchor rather than the State a
+ * boot produced. `writeTrace` passes a windowed trace's `Trace.skipped` here.
+ * The engine never sets it. A store that numbers its frames stores a moved
+ * anchor at sequence `skipped + 1` of an empty log, so each later step keeps
+ * the number the live run gave it, and refuses a `skipped` that is negative,
+ * not an integer, or given to a log that already has frames. Absent and `0`
+ * both mean the State is the run's own boot. A store that does not number its
+ * frames ignores it.
  */
 export type SaveBoundary =
-  | { readonly _tag: "init"; readonly cmds: readonly unknown[] }
+  | {
+      readonly _tag: "init";
+      readonly cmds: readonly unknown[];
+      readonly skipped?: number;
+    }
   | { readonly _tag: "step"; readonly cmds: readonly unknown[] }
   | { readonly _tag: "stop" };
 

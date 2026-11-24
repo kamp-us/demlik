@@ -17,10 +17,17 @@ import type { Trace } from "../recorder";
  * The recorder's boot observe carries no Cmds, so the `init` frame is written
  * with `cmds: []`; it equals a live run's `init` frame only when `init` starts
  * no Cmds. A step recorded without Cmds is written without Cmd evidence.
+ * A windowed trace (`recorder(..., { window })`) carries `Trace.skipped`, the
+ * transitions before its moved anchor. It is passed on the `init` boundary as
+ * `skipped`, so a store that numbers its frames stores the anchor at
+ * `skipped + 1` and every step at the number the live run gave it, and refuses
+ * the write when its log already has frames. A trace without `skipped` is
+ * written exactly as before.
+ *
  * Throws, before it loads or saves anything, when the trace has no `loaded`
  * State, when it holds messages but no steps (record with
- * `captureSteps: true`), or when it has a different number of steps than
- * messages.
+ * `captureSteps: true`), when it has a different number of steps than
+ * messages, or when its `skipped` is not a non-negative integer.
  */
 export async function writeTrace<S, M extends { readonly _tag: string }>(
   store: Pick<Store<S>, "load" | "save">,
@@ -39,8 +46,23 @@ export async function writeTrace<S, M extends { readonly _tag: string }>(
       `tea writeTrace: the trace has ${trace.steps.length} steps for ${trace.msgs.length} messages`,
     );
   }
+  const { skipped } = trace;
+  if (
+    skipped !== undefined &&
+    (!Number.isSafeInteger(skipped) || skipped < 0)
+  ) {
+    throw new Error(
+      `tea writeTrace: the trace's skipped count must be an integer >= 0, got ${skipped}`,
+    );
+  }
   await store.load();
-  await store.save(trace.loaded, undefined, { _tag: "init", cmds: [] });
+  await store.save(
+    trace.loaded,
+    undefined,
+    skipped === undefined
+      ? { _tag: "init", cmds: [] }
+      : { _tag: "init", cmds: [], skipped },
+  );
   for (const step of trace.steps ?? []) {
     await store.save(
       step.state,
