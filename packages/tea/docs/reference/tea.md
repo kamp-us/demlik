@@ -2730,6 +2730,7 @@ type SaveBoundary =
   | {
     readonly _tag: "init";
     readonly cmds: readonly unknown[];
+    readonly skipped?: number;
   }
   | {
     readonly _tag: "step";

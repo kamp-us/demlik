@@ -112,6 +112,47 @@ is the live run's step `skipped + 1`. It is absent, read as 0, on a trace that
 kept everything, and the JSONL boot line carries it. A recording without a
 `window` writes the same JSONL it always did.
 
+To keep a windowed trace in a Durable Object, record it with
+`captureSteps: true` and write it into an empty
+[`doEventSourcedStore`](../reference/do.md#doEventSourcedStore) recording with
+`writeTrace`. `storage` is the object's `ctx.storage`. The frames are stored at
+the sequence numbers the live run gave them, the anchor at `skipped + 1`, and
+`readTrace` reads them back to replay:
+
+```ts
+import {
+  doEventLogReader,
+  doEventSourcedStore,
+  readTrace,
+} from "@demlik/tea/do";
+import { writeTrace } from "@demlik/tea/persistence";
+
+const kept = run(downloader, { terminal: (s) => s.phase === "done" });
+const capture = recorder(kept, { captureSteps: true, window: 2 });
+await kept.ready;
+for (const msg of msgs) await kept.dispatch(msg);
+
+const es = doEventSourcedStore(
+  storage,
+  downloader,
+  {},
+  {
+    recording: { provenance: { test: "download" }, maxRowBytes: 1_000_000 },
+  },
+);
+await writeTrace(es.store, capture.dump());
+
+const back = await readTrace<State, Msg>(doEventLogReader<Msg>(storage));
+if (back._tag !== "trace") throw new Error(`unavailable: ${back.reason}`);
+expect(back.trace.skipped).toBe(2);
+expect(replayTrace(downloader, back.trace).matches).toBe(true);
+```
+
+`readTrace` answers `unavailable`, with the seq and the reason, for a recording
+it cannot read whole. A frame over `maxRowBytes` is one: the store writes a
+small marker in its place and keeps the frames after it, but the recording no
+longer replays, and loading a State from it is refused with the marker's seq.
+
 `window` must be an integer of at least 1, and it cannot be combined with a
 `sampleRate` between 0 and 1: a sampled trace is not replay-faithful, so it has no
 anchor to move. `recorder` throws a `RangeError` for either.

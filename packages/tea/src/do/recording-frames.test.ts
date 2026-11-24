@@ -9,8 +9,10 @@ import {
   type Basis,
   type EncodedFrame,
   encodeFrame,
+  encodeOversized,
   type FrameEvidence,
   type FrameHead,
+  parseCellMsg,
   parseFrame,
   RECORDING_PREFIX,
   readEvidence,
@@ -382,5 +384,78 @@ describe("a cell that is not a frame", () => {
     expect(readEvidence(text("not json"))).toBeNull();
     expect(readEvidence(text('{"cmds":[]}'))).toBeNull();
     expect(readEvidence(text('{"state":1,"cmds":"go"}'))).toBeNull();
+  });
+});
+
+describe("an init frame at a moved anchor", () => {
+  const evidence: FrameEvidence = { state: stateAt(1), cmds: [] };
+
+  it("carries its skipped count through the cell and back", async () => {
+    const written = await encodeFrame(
+      991,
+      { ...init, skipped: 990 },
+      evidence,
+      null,
+    );
+
+    expect(JSON.parse(written.json).skipped).toBe(990);
+    expect(await frameOf(written.json)).toMatchObject({
+      frame: "init",
+      restored: false,
+      skipped: 990,
+    });
+  });
+
+  it("writes no skipped field for a boot, and reads it back as 0", async () => {
+    const boot = await encodeFrame(1, init, evidence, null);
+    const zero = await encodeFrame(1, { ...init, skipped: 0 }, evidence, null);
+
+    expect(zero.json).toBe(boot.json);
+    expect(boot.json).not.toContain("skipped");
+    expect(await frameOf(boot.json)).toMatchObject({ skipped: 0 });
+  });
+
+  it.each([
+    -1,
+    1.5,
+    "3",
+  ])("is not parsed with a skipped count of %s", async (skipped) => {
+    const raw = JSON.parse((await encodeFrame(1, init, evidence, null)).json);
+
+    expect(parseFrame({ ...raw, skipped })).toBeNull();
+  });
+});
+
+describe("the marker in place of an oversized frame", () => {
+  it("names the frame, its seq and the bytes measured, and is a recording cell", () => {
+    const json = encodeOversized({ of: "step", seq: 7, bytes: 9_000_123 });
+
+    expect(json.startsWith(RECORDING_PREFIX)).toBe(true);
+    expect(parseCellMsg(JSON.parse(json))).toEqual({
+      frame: "oversized",
+      of: "step",
+      seq: 7,
+      bytes: 9_000_123,
+    });
+    expect(json.length).toBeLessThan(120);
+  });
+
+  it("is not parsed as a frame with evidence", () => {
+    const json = encodeOversized({ of: "init", seq: 1, bytes: 10 });
+
+    expect(parseFrame(JSON.parse(json))).toBeNull();
+  });
+
+  it.each([
+    ["another reason", { reason: "checksum" }],
+    ["no frame it replaces", { of: "snapshot" }],
+    ["a seq below 1", { seq: 0 }],
+    ["a fractional seq", { seq: 1.5 }],
+    ["negative bytes", { bytes: -1 }],
+    ["bytes that are not a number", { bytes: "10" }],
+  ])("is not parsed with %s", (_name, change) => {
+    const raw = JSON.parse(encodeOversized({ of: "step", seq: 2, bytes: 10 }));
+
+    expect(parseCellMsg({ ...raw, ...change })).toBeNull();
   });
 });

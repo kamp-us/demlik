@@ -100,6 +100,36 @@ again. Give a run one or the other, not both.
 without effects. They support tests and debugging; normal snapshot restore does
 not call them.
 
+### What a recording promises
+
+With `recording`, the same log keeps a frame per boundary: the State after it and
+the Cmds it started. Restore reads only the Msgs and the snapshot, so a frame
+whose evidence is lost never costs the State. What the evidence promises is
+narrower:
+
+- **Numbering.** Every frame sits at the sequence the live run gave it. A
+  windowed trace written with `writeTrace` opens an empty log at its moved
+  anchor, `skipped + 1`, with a snapshot of the anchor's State there, so its
+  steps keep their live numbers and a restore folds only the steps after the
+  anchor. The store refuses an offset into a log that already has frames.
+- **Size.** With `maxRowBytes`, a frame too large for its row, or one whose put
+  storage rejects with `SQLITE_TOOBIG`, is not written. A small marker naming
+  its seq and measured bytes stands in its place, and every frame after it is
+  still kept. Any other storage failure still fails the save.
+- **Read, not resumed.** A marker keeps neither its frame's evidence nor its
+  Msg, and nothing is written beside it to stand in for them. So a log with a
+  marker is a record to read: loading a State from it is refused with a typed
+  `RecordingUnavailableError` naming the marker's seq, while the log still
+  takes appends, reads and deletion. Keeping the recording and resuming the
+  run are separate promises, and a row budget trades the second for the first.
+- **Numbers stay safe.** A seq past `Number.MAX_SAFE_INTEGER` is refused before
+  it is written, so two frames never share a key.
+- **Replay.** A recording reads back as a whole `Trace` or not at all.
+  `readTrace` checks every seq up to the committed head. It reports a missing
+  cell, a missing tail, a marker, or any frame it cannot rebuild as unavailable
+  at that seq, and never hands back the frames before it as if they were the
+  run.
+
 ## Effects are at-least-once
 
 An external action and the store write of its result are separate operations.

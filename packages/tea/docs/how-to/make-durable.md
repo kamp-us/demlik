@@ -366,6 +366,24 @@ logged store in steps 5–6.
    State, and the next frame is written whole as a new basis. The store tells
    `onRecordingBreak` (default: a `console.warn`) which frames are broken, as
    `{ fromSeq, toSeq, reason }`; `readFrames` still refuses them.
+6. To keep one large frame from failing the write, give the recording a row
+   budget: `recording: { provenance, maxRowBytes }`. A frame whose key and cell
+   measure more UTF-8 bytes than that, or whose put storage rejects with
+   `SQLITE_TOOBIG`, is replaced by a small marker at the same seq. The next
+   frame is written whole and the run goes on; a rejection of any other cell,
+   and any other storage failure, still rejects the save. `onRecordingBreak`
+   hears each marker as `{ reason: "oversized", seq, bytes, fromSeq, toSeq }`,
+   and a hook that throws stops no later frame. A log with a marker is kept to
+   be read, not resumed: the marker keeps neither the frame's evidence nor its
+   Msg, no snapshot is written beside it, and a later `load()` refuses with
+   [`RecordingUnavailableError`](../reference/do.md#RecordingUnavailableError)
+   naming the marker's seq (a run's `ready` rejects with it as the
+   `StoreRefusedError`'s cause). The marker is read before a restore attempt
+   is recorded, so every load gives that same refusal and none spends the
+   `restoreRetryLimit` budget. The log still takes appends, reads and
+   deletion. A Durable Object row holds at most 8 MB, so a budget at or below
+   that keeps every frame writable. Without `maxRowBytes` the store writes
+   every frame as it encodes. Snapshots are written as they encode either way.
 
 A host that reads an agent's log without loading it — its head, committed
 sequence or events in a range — uses
@@ -382,8 +400,21 @@ returning them, and `{ reverse: true }` to read from the highest `seq` down. A
 range that starts in the middle of a run of deltas reads one bounded page of
 earlier frames to find its basis. A frame that cannot be rebuilt comes back
 `refused` with its reason (`frame`, `basis` or `checksum`), and a delta after it
-is refused `basis`. `readStoredEvents` and `readEvents` still yield Msgs only,
-whichever format the log has.
+is refused `basis`. A marker written in place of an oversized frame is refused
+`oversized`, with the `bytes` measured. `readStoredEvents` and `readEvents`
+still yield Msgs only, whichever format the log has.
+
+[`readTrace(reader, range)`](../reference/do.md#readTrace) reads a recording
+back as the `Trace` it was written from, for `replayTrace`: the range's first
+frame, an `init` frame, is `loaded`, and its `skipped` count comes back as
+`trace.skipped`. It reads the committed head first and answers
+`{ _tag: "trace", trace }` only when every seq from the anchor to the head (or
+the range's end) holds a frame that reads. Otherwise it answers
+`{ _tag: "unavailable", seq, reason }`: a missing cell inside the range is a
+`gap`, cells that stop before the head are a `tail`, and a marker, a frame that
+does not rebuild, a second boot or bare messages are unavailable at their seq.
+It never returns the frames before the first one it cannot read. To read the
+boot after a restart, start the range at that boot's `init` frame.
 
 See [`EventSourcedOptions`](../reference/do.md#EventSourcedOptions) for the
 restore-attempt key override and parsing options, and

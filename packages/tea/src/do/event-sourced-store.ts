@@ -73,16 +73,19 @@
 
 import type { Cmd, Machine, SaveBoundary, Store, Sub } from "../index";
 import { foldMsgs } from "../index";
+import type { Trace, TraceStep } from "../internal/persistence/recorder";
 import {
   type Basis,
   cellFormatOf,
   type EncodedFrame,
   type EvidenceEncoding,
   encodeFrame,
+  encodeOversized,
   type FrameEvidence,
   type FrameRefusal,
   FULL_FRAME_EVERY,
   type LogFormat,
+  type OversizedMarker,
   parseCellMsg,
   parseFrame,
   RECORDING_PREFIX,
@@ -118,6 +121,25 @@ interface SnapshotCell<S> {
 /** Persisted meta cell: the highest sequence number ever appended. */
 interface MetaCell {
   readonly lastSeq: number;
+  readonly marked?: number;
+}
+
+/**
+ * `load()` rejects with this when the log holds an oversized marker
+ * (`recording.maxRowBytes`): the frame at `seq` was not kept, so no State can
+ * be rebuilt past it. A log with a marker is kept to be read, not resumed. It
+ * still takes appends, reads (`doEventLogReader`, `readTrace`) and deletion.
+ * The engine preserves it as `StoreRefusedError.cause`.
+ */
+export class RecordingUnavailableError extends Error {
+  override readonly name = "RecordingUnavailableError";
+  readonly _tag = "recording_unavailable" as const;
+  readonly reason = "oversized" as const;
+  constructor(readonly seq: number) {
+    super(
+      `@demlik/tea/do: the recording's frame ${seq} was not kept (oversized), so no State loads from this log`,
+    );
+  }
 }
 
 /** JSON restore evidence retained until a load succeeds. Counts started attempts. */
@@ -230,18 +252,52 @@ export interface EventSourcedOptions<S, M> extends EventLogReaderOptions<M> {
    * keeps being written that way; its missing evidence is never invented.
    * A recording log is written as one whatever this option says, and gets no
    * `init` frame without it.
+   *
+   * An `init` boundary that carries `skipped` (a windowed trace written with
+   * `writeTrace`) is a moved anchor, not a restored boot. It opens an empty log
+   * at sequence `skipped + 1`, with a snapshot of its State at that sequence so
+   * a restore folds only the steps after it, and each later step keeps the
+   * number the live run gave it. A log written as bare messages takes the same
+   * offset with no frame: its committed sequence and snapshot start at
+   * `skipped`. A `skipped` that is negative or not an integer, or that is given
+   * to a log which already has frames, rejects the save and writes nothing.
    */
   readonly recording?: {
     /** JSON written into every `init` frame, unread by the store. */
     readonly provenance: unknown;
+    /**
+     * The most bytes one frame's row may take: the UTF-8 bytes of its key plus
+     * those of its encoded cell. A frame over it is not written. A small
+     * refusal marker is written at the same seq instead, naming the frame and
+     * the bytes measured, the next frame is written whole, and the write goes
+     * on. A put of the frame's cell that storage rejects with `SQLITE_TOOBIG`
+     * takes the same path, since text bytes do not prove the size the storage
+     * serializes; a rejection of any other cell, and any other storage
+     * failure, still rejects the save. Each marker is reported to
+     * `onRecordingBreak` with `reason: "oversized"`.
+     *
+     * A log with a marker is kept to be read, not resumed. The marker keeps
+     * neither its frame's evidence nor its Msg, and no snapshot is written
+     * beside it, so no State is rebuilt past it: the meta cell names the first
+     * marker's seq, and `load()` refuses with {@link RecordingUnavailableError}
+     * naming it. The log still takes appends, reads and deletion, `readFrames`
+     * refuses the marker as `oversized`, and `readTrace` reports the recording
+     * unavailable. Markers apply to a log written as a recording only, and
+     * snapshots are written as they encode, with no budget. Must be a positive
+     * safe integer. A Durable Object row holds at most 8 MB. Default: no
+     * budget; every frame is written as it encodes.
+     */
+    readonly maxRowBytes?: number;
   };
   /**
-   * Hears a recording whose last frames cannot be rebuilt, once per `load()`.
+   * Hears a recording whose last frames cannot be rebuilt, once per `load()`,
+   * and each frame a save replaced with an oversized marker (`maxRowBytes`).
    * Evidence is not State: the Msgs and the snapshot rebuild the State exactly,
    * so restore still succeeds and the next frame is written whole, as a new
    * basis for the frames after it. This reports which frames are broken; a read
    * of them with `readFrames` still refuses them. Default: a `console.warn`.
-   * A hook that throws is warned about and does not fail the restore.
+   * A hook that throws or rejects is warned about and fails neither the restore
+   * nor the save, and the frames after it are still written.
    */
   readonly onRecordingBreak?: (broken: RecordingBreak) => void;
   readonly keys?: EventLogReaderOptions<M>["keys"] & {
@@ -307,6 +363,10 @@ export interface EventSourcedStore<S, M> {
    * {@link RestoreAttempt}. Success clears it; failure leaves it. Once
    * `restoreRetryLimit` is spent, load throws {@link RestoreInterruptedError}
    * before expensive reads. The engine preserves it as StoreRefusedError.cause.
+   * A log that holds an oversized marker (`recording.maxRowBytes`) is refused
+   * with {@link RecordingUnavailableError} naming the marker's seq, read from
+   * the meta cell before any restore attempt is recorded, so every load of it
+   * gives the same refusal and none spends the `restoreRetryLimit` budget.
    */
   readonly store: Store<S>;
   /**
@@ -409,7 +469,9 @@ export type StoredEventRefusal =
 /**
  * One stored event cell as read, decoded or refused. `serializedBytes` is the
  * UTF-8 size of the stored text (0 when the value is not text); for a step
- * frame of a recording it is the size of the Msg JSON inside it.
+ * frame of a recording it is the size of the Msg JSON inside it. A cell refused
+ * as `oversized` is the marker written in place of a frame too large for its
+ * row; its `bytes` is the size measured for the frame that was not written.
  */
 export type StoredEvent<M> =
   | {
@@ -426,6 +488,7 @@ export type StoredEvent<M> =
       readonly serializedBytes: number;
       readonly reason: StoredEventRefusal;
       readonly cause?: unknown;
+      readonly bytes?: number;
     };
 
 /**
@@ -433,7 +496,8 @@ export type StoredEvent<M> =
  * written as bare messages, with no evidence. An `init` or `step` frame is a
  * recording frame; its `evidence` is rebuilt only when the read asked for it.
  * `serializedBytes` is the UTF-8 size of the whole stored text and
- * `messageBytes` the size of the Msg JSON inside it.
+ * `messageBytes` the size of the Msg JSON inside it. An `init` frame at a
+ * moved anchor carries `skipped`, the transitions before it; a boot has none.
  */
 export type StoredFrame<M> =
   | {
@@ -461,22 +525,60 @@ export type StoredFrame<M> =
       readonly serializedBytes: number;
       readonly restored: boolean;
       readonly provenance: unknown;
+      readonly skipped?: number;
       readonly encoding: EvidenceEncoding;
       readonly evidence?: FrameEvidence;
     }
   | Extract<StoredEvent<M>, { _tag: "refused" }>;
 
 /**
- * A recording whose evidence cannot be rebuilt where the next frame would take
- * its delta from. Frames `fromSeq` to `toSeq` (the log's last) are the ones that
- * depend on the first frame that does not rebuild, and `reason` is the refusal
- * {@link EventLogReader.readFrames} gives that frame.
+ * Where a recording's evidence is broken. With `frame`, `basis` or `checksum`,
+ * the evidence cannot be rebuilt where the next frame would take its delta
+ * from: frames `fromSeq` to `toSeq` (the log's last) are the ones that depend
+ * on the first frame that does not rebuild, and `reason` is the refusal
+ * {@link EventLogReader.readFrames} gives that frame. With `oversized`, a save
+ * wrote a refusal marker at `seq` in place of a frame of `bytes` bytes (its
+ * key plus its encoded cell); `fromSeq` and `toSeq` are both `seq`, and `seq`
+ * and `bytes` are present only then.
  */
 export interface RecordingBreak {
   readonly fromSeq: number;
   readonly toSeq: number;
   readonly reason: FrameRefusal;
+  readonly seq?: number;
+  readonly bytes?: number;
 }
+
+/**
+ * Why {@link readTrace} has no trace to give: the log or range is empty
+ * (`empty`), it is written as bare messages (`messages`), its first frame is
+ * not an `init` frame (`anchor`), a second `init` frame opens another boot
+ * (`boot`), a seq inside the range has no cell (`gap`), the cells stop before
+ * the committed head (`tail`), or a frame is refused, with the refusal
+ * `readFrames` gives it, `oversized` among them.
+ */
+export type TraceUnavailableReason =
+  | StoredEventRefusal
+  | "empty"
+  | "messages"
+  | "anchor"
+  | "boot"
+  | "gap"
+  | "tail";
+
+/**
+ * What {@link readTrace} reads back: a whole `Trace`, or why
+ * the recording cannot be replayed. A recording with any frame missing is
+ * `unavailable`, never a trace of the frames before it.
+ */
+export type RecordedTrace<S, M> =
+  | { readonly _tag: "trace"; readonly trace: Trace<S, M> }
+  | {
+      readonly _tag: "unavailable";
+      readonly seq: number | null;
+      readonly reason: TraceUnavailableReason;
+      readonly bytes?: number;
+    };
 
 /** The evidence bytes a delta is taken from, or why there are none. */
 interface BasisRead {
@@ -533,11 +635,24 @@ export interface EventLogReader<M> {
 const utf8 = new TextEncoder();
 
 function parseMeta(raw: string): number {
+  return parseMetaCell(raw).lastSeq;
+}
+
+function parseMetaCell(raw: string): {
+  readonly lastSeq: number;
+  readonly marked: number | null;
+} {
   const meta = JSON.parse(raw) as MetaCell;
   if (!Number.isSafeInteger(meta.lastSeq) || meta.lastSeq < 0) {
     throw new Error("@demlik/tea/do: invalid committed sequence");
   }
-  return meta.lastSeq;
+  if (
+    meta.marked !== undefined &&
+    (!Number.isSafeInteger(meta.marked) || meta.marked < 1)
+  ) {
+    throw new Error("@demlik/tea/do: invalid marked sequence");
+  }
+  return { lastSeq: meta.lastSeq, marked: meta.marked ?? null };
 }
 
 function decodeStoredEvent<M>(
@@ -589,6 +704,48 @@ function decodeStoredEvent<M>(
 
 function jsonBytes(value: unknown): number {
   return utf8.encode(JSON.stringify(value)).byteLength;
+}
+
+async function firstCell(
+  storage: DurableObjectStorage,
+  eventPrefix: string,
+  noCache: boolean,
+  atOne?: unknown,
+): Promise<unknown> {
+  const one =
+    atOne !== undefined
+      ? atOne
+      : await storage.get<unknown>(
+          eventKey(eventPrefix, 1),
+          noCache ? { noCache } : {},
+        );
+  if (one !== undefined && one !== null) return one;
+  const rows = await storage.list<unknown>({
+    prefix: eventPrefix,
+    limit: 1,
+    ...(noCache ? { noCache } : {}),
+  });
+  for (const [, value] of rows) return value;
+  return undefined;
+}
+
+function rowSize(key: string, value: string): number {
+  return utf8.encode(key).byteLength + utf8.encode(value).byteLength;
+}
+
+function isTooBig(thrown: unknown): boolean {
+  let at: unknown = thrown;
+  for (
+    let depth = 0;
+    depth < 4 && at !== null && at !== undefined;
+    depth += 1
+  ) {
+    const message =
+      at instanceof Error ? at.message : typeof at === "string" ? at : "";
+    if (message.includes("SQLITE_TOOBIG")) return true;
+    at = at instanceof Error ? at.cause : undefined;
+  }
+  return false;
 }
 
 type Refused = Extract<StoredFrame<never>, { _tag: "refused" }>;
@@ -666,11 +823,25 @@ function decodeStoredFrame<M>(
     } satisfies Refused,
     encoded: null,
   });
+  const marker = oversizedAt(seq, opened.raw);
+  if (marker !== null) {
+    return {
+      frame: {
+        _tag: "refused",
+        key,
+        seq,
+        serializedBytes,
+        reason: "oversized",
+        bytes: marker.bytes,
+      },
+      encoded: null,
+    };
+  }
   const encoded = parseFrame(opened.raw);
   if (encoded === null) return refused("frame");
   const { encoding } = encoded.evidence;
   if (encoded.frame === "init") {
-    const { restored, provenance } = encoded;
+    const { restored, provenance, skipped } = encoded;
     return {
       frame: {
         _tag: "init",
@@ -679,6 +850,7 @@ function decodeStoredFrame<M>(
         serializedBytes,
         restored,
         provenance,
+        ...(skipped > 0 ? { skipped } : {}),
         encoding,
       },
       encoded,
@@ -698,6 +870,11 @@ function decodeStoredFrame<M>(
     },
     encoded,
   };
+}
+
+function oversizedAt(seq: number, raw: unknown): OversizedMarker | null {
+  const cell = parseCellMsg(raw);
+  return cell?.frame === "oversized" && cell.seq === seq ? cell : null;
 }
 
 /** What a fold of a log's Msgs takes from one cell: nothing (an init frame), a Msg, or why it cannot. */
@@ -734,6 +911,10 @@ function decodeFoldCell<M>(
   });
   const cell = parseCellMsg(opened.raw);
   if (cell === null) return refused("frame");
+  if (cell.frame === "oversized") {
+    if (cell.seq !== opened.seq) return refused("frame");
+    return cell.of === "init" ? { _tag: "init" } : refused("oversized");
+  }
   if (cell.frame === "init") return { _tag: "init" };
   const event = parseEvent(cell.msg);
   return event === null ? refused("event") : { _tag: "decoded", event };
@@ -791,7 +972,15 @@ function openLogReader<M extends { _tag: string }>(
     });
     const meta = cells.get(metaKey);
     const snapshot = cells.get(snapshotKey);
-    const first = cells.get(firstKey);
+    const first =
+      meta === undefined || meta === null
+        ? cells.get(firstKey)
+        : await firstCell(
+            storage,
+            eventPrefix,
+            true,
+            cells.get(firstKey) ?? null,
+          );
     const absent = (
       cell: string | undefined | null,
     ): cell is undefined | null => cell === undefined || cell === null;
@@ -799,7 +988,8 @@ function openLogReader<M extends { _tag: string }>(
     return {
       lastSeq: absent(meta) ? 0 : parseMeta(meta),
       snapshot: !absent(snapshot),
-      format: absent(first) ? null : cellFormatOf(first),
+      format:
+        first === undefined || first === null ? null : cellFormatOf(first),
     };
   }
 
@@ -847,7 +1037,10 @@ function openLogReader<M extends { _tag: string }>(
   async function basisBefore(seq: number): Promise<BasisRead> {
     if (seq <= 1) return { basis: null, broken: null };
     const toSeq = seq - 1;
-    const broke = (fromSeq: number, reason: FrameRefusal): BasisRead => ({
+    const broke = (
+      fromSeq: number,
+      reason: Exclude<FrameRefusal, "oversized">,
+    ): BasisRead => ({
       basis: null,
       broken: { fromSeq, toSeq, reason },
     });
@@ -869,6 +1062,11 @@ function openLogReader<M extends { _tag: string }>(
         value,
       );
       if (frame.seq !== expected) return broke(expected, "basis");
+      if (frame._tag === "refused" && frame.reason === "oversized") {
+        return chain.length === 0
+          ? { basis: null, broken: null }
+          : broke(expected, "basis");
+      }
       if (encoded === null) return broke(expected, "frame");
       chain.push([expected, encoded]);
       if (encoded.evidence.encoding === "full") break;
@@ -995,6 +1193,101 @@ function openLogReader<M extends { _tag: string }>(
 }
 
 /**
+ * Read a recording back as the `Trace` it was written from, for `replayTrace`.
+ *
+ * The committed head is read first and bounds the read. The range's first
+ * frame is the anchor and must be an `init` frame: its State is `loaded` and
+ * its `skipped` the trace's `skipped`, so a trace written with `writeTrace`
+ * reads back as it was dumped. Each `step` frame after it gives a Msg and a
+ * step with its State and Cmds, and `finalState` is the last State.
+ *
+ * The answer is a whole trace or `unavailable` at a seq, never a prefix: every
+ * seq from the anchor (or `range.fromSeq`) to the committed head (or
+ * `range.toSeq`, when lower) must hold a frame that reads. A missing cell inside
+ * the range is a `gap`, cells that stop before the head are a `tail`, and a
+ * second boot, a bare message or any refused frame (an `oversized` marker, a
+ * delta that does not rebuild) is unavailable at its seq. To read the boot
+ * after a restart, start the range at its `init` frame.
+ *
+ * ```ts
+ * const back = await readTrace<State, Msg>(doEventLogReader<Msg>(storage));
+ * if (back._tag === "trace") replayTrace(machine, back.trace);
+ * ```
+ */
+export async function readTrace<S, M extends { _tag: string }>(
+  reader: Pick<EventLogReader<M>, "readCommittedSeq" | "readFrames">,
+  range: EventLogRange = {},
+): Promise<RecordedTrace<S, M>> {
+  const unavailable = (
+    seq: number | null,
+    reason: TraceUnavailableReason,
+    bytes?: number,
+  ): RecordedTrace<S, M> => ({
+    _tag: "unavailable",
+    seq,
+    reason,
+    ...(bytes === undefined ? {} : { bytes }),
+  });
+  const head = await reader.readCommittedSeq();
+  const toSeq = Math.min(
+    Math.floor(range.toSeq ?? Number.POSITIVE_INFINITY),
+    head,
+  );
+  const fromSeq =
+    range.fromSeq === undefined ? null : Math.max(1, Math.ceil(range.fromSeq));
+  if (toSeq < 1 || (fromSeq !== null && fromSeq > toSeq)) {
+    return unavailable(null, "empty");
+  }
+  let expected = fromSeq;
+  let anchor: { readonly state: S; readonly skipped: number } | null = null;
+  const steps: TraceStep<S, M>[] = [];
+  for await (const frame of reader.readFrames(
+    { fromSeq: fromSeq ?? 1, toSeq },
+    { evidence: true },
+  )) {
+    const seq = frame.seq;
+    if (seq === null) {
+      return unavailable(null, frame._tag === "refused" ? frame.reason : "key");
+    }
+    if (expected !== null && seq !== expected) {
+      return unavailable(expected, "gap");
+    }
+    expected = seq + 1;
+    if (frame._tag === "refused") {
+      return unavailable(frame.seq, frame.reason, frame.bytes);
+    }
+    if (frame._tag === "message") return unavailable(frame.seq, "messages");
+    if (frame.evidence === undefined) return unavailable(frame.seq, "frame");
+    const state = frame.evidence.state as S;
+    if (frame._tag === "init") {
+      if (anchor !== null) return unavailable(frame.seq, "boot");
+      anchor = { state, skipped: frame.skipped ?? 0 };
+      continue;
+    }
+    if (anchor === null) return unavailable(frame.seq, "anchor");
+    const { cmds } = frame.evidence;
+    steps.push(
+      cmds === null
+        ? { msg: frame.event, state }
+        : { msg: frame.event, state, cmds: cmds as readonly Cmd[] },
+    );
+  }
+  if (expected === null) return unavailable(null, "empty");
+  if (expected <= toSeq) return unavailable(expected, "tail");
+  if (anchor === null) return unavailable(null, "empty");
+  return {
+    _tag: "trace",
+    trace: {
+      loaded: anchor.state,
+      ...(anchor.skipped > 0 ? { skipped: anchor.skipped } : {}),
+      msgs: steps.map((step) => step.msg),
+      finalState: steps.at(-1)?.state ?? anchor.state,
+      steps,
+    },
+  };
+}
+
+/**
  * Build an event-sourced `Store<S>` over `DurableObjectStorage`.
  *
  * The substrate calls `store.load()` once at boot — that is where the fold
@@ -1045,6 +1338,15 @@ export function doEventSourcedStore<
       "@demlik/tea/do: restoreRetryLimit must be a non-negative safe integer",
     );
   }
+  const maxRowBytes = opts.recording?.maxRowBytes;
+  if (
+    maxRowBytes !== undefined &&
+    (!Number.isSafeInteger(maxRowBytes) || maxRowBytes < 1)
+  ) {
+    throw new Error(
+      `@demlik/tea/do: recording.maxRowBytes must be a positive safe integer, got ${maxRowBytes}`,
+    );
+  }
   const parse = opts.parse ?? defaultParse;
   const {
     snapshot: snapshotKey,
@@ -1066,6 +1368,7 @@ export function doEventSourcedStore<
   // boundary. A save without a Msg, and a transition whose write failed, never
   // replace it.
   let latestState: S | null = null;
+  let markedSeq: number | null = null;
   // The log's generation in this isolate: a `load()` takes it, and a write that
   // was called under an older one is refused at its write point (./save-fence).
   const fence = saveFence(storage, metaKey);
@@ -1091,8 +1394,13 @@ export function doEventSourcedStore<
 
   async function readMeta(): Promise<number> {
     const raw = await storage.get<string>(metaKey);
-    if (raw === undefined || raw === null) return 0;
-    return parseMeta(raw);
+    if (raw === undefined || raw === null) {
+      markedSeq = null;
+      return 0;
+    }
+    const meta = parseMetaCell(raw);
+    markedSeq = meta.marked;
+    return meta.lastSeq;
   }
 
   /**
@@ -1157,6 +1465,9 @@ export function doEventSourcedStore<
         if (cell.reason === "frame") {
           throw new Error("@demlik/tea/do: recording frame was refused");
         }
+        if (cell.reason === "oversized") {
+          throw new RecordingUnavailableError(cell.seq ?? 0);
+        }
         continue;
       }
       state = foldMsgs(machine, state, [cell.event]);
@@ -1167,7 +1478,7 @@ export function doEventSourcedStore<
   /** The format this log is written in: its first cell's, or `recording`'s when it has none. */
   async function ensureFormat(): Promise<LogFormat> {
     if (format !== null) return format;
-    const first = await storage.get<unknown>(eventKey(eventPrefix, 1));
+    const first = await firstCell(storage, eventPrefix, false);
     format =
       first === undefined || first === null
         ? opts.recording === undefined
@@ -1183,7 +1494,9 @@ export function doEventSourcedStore<
       opts.onRecordingBreak ??
       ((b: RecordingBreak) =>
         console.warn(
-          `@demlik/tea/do: the recording's evidence cannot be rebuilt for frames ${b.fromSeq} to ${b.toSeq} (${b.reason}); the next frame is written whole`,
+          b.reason === "oversized"
+            ? `@demlik/tea/do: the recording's frame ${b.seq} measured ${b.bytes} bytes, over its row budget; a refusal marker was written in its place and the next frame is written whole`
+            : `@demlik/tea/do: the recording's evidence cannot be rebuilt for frames ${b.fromSeq} to ${b.toSeq} (${b.reason}); the next frame is written whole`,
         ));
     try {
       void Promise.resolve(hear(broken)).catch((thrown: unknown) => {
@@ -1196,6 +1509,8 @@ export function doEventSourcedStore<
 
   async function load(): Promise<S> {
     fence.takeOver();
+    const committedSeq = await readMeta();
+    if (markedSeq !== null) throw new RecordingUnavailableError(markedSeq);
     const raw = await storage.get<string>(restoreAttemptKey);
     const previous: unknown =
       raw === undefined ? { attempts: 0 } : JSON.parse(raw);
@@ -1213,7 +1528,6 @@ export function doEventSourcedStore<
     await storage.put(restoreAttemptKey, JSON.stringify(attempt));
 
     const { state: snapshot, seq: snapSeq } = await readSnapshot();
-    const committedSeq = await readMeta();
     const initialState = snapshot ?? machine.init(null, ctx)[0];
     const { state, inits } = await readLog(initialState, snapSeq);
     if (parse(state) === null) {
@@ -1258,16 +1572,52 @@ export function doEventSourcedStore<
       boundary?: SaveBoundary,
     ): Promise<void> {
       const init = boundary?._tag === "init" ? boundary : null;
+      const skipped = init?.skipped ?? 0;
+      if (
+        !Number.isSafeInteger(skipped) ||
+        skipped < 0 ||
+        !Number.isSafeInteger(skipped + 1)
+      ) {
+        throw new Error(
+          `@demlik/tea/do: an init boundary's skipped count must be an integer >= 0 that leaves a safe sequence after it, got ${skipped}`,
+        );
+      }
+      const moved = skipped > 0;
       // The flush at `stop()` has no event to write. The boot save has none
       // either, unless the log is a recording, which opens each boot with a frame.
-      if (msg === undefined && (init === null || opts.recording === undefined))
+      if (
+        msg === undefined &&
+        (init === null || (opts.recording === undefined && !moved))
+      )
         return;
       const admit = fence.issue();
       await exclusive(async () => {
-        const seq = (await ensureLastSeq()) + 1;
+        const prior = await ensureLastSeq();
+        if (moved && prior > 0) {
+          throw new Error(
+            `@demlik/tea/do: a moved anchor (skipped ${skipped}) opens an empty log only; this log has frames up to ${prior}`,
+          );
+        }
+        const seq = moved ? skipped + 1 : prior + 1;
+        if (!Number.isSafeInteger(seq)) {
+          throw new Error(
+            `@demlik/tea/do: the log's next sequence ${seq} is not a safe integer`,
+          );
+        }
         const written = await ensureFormat();
-        // A log written as messages never gets a frame: its evidence is not invented.
-        if (init !== null && written !== "recording") return;
+        if (init !== null && written !== "recording") {
+          // A log written as messages never gets a frame: its evidence is not invented.
+          if (!moved) return;
+          await persist(
+            { committed: skipped, snapshot: { seq: skipped, state } },
+            admit,
+          );
+          lastSeq = skipped;
+          latestState = state;
+          snapshotSeq = skipped;
+          sinceSnapshot = 0;
+          return;
+        }
         // Count-based retention (Akka `RetentionCriteria.snapshotEvery`). When
         // the Msg events since the last snapshot reach `snapshotEvery`,
         // checkpoint the post-this-event State under THIS seq, in the same
@@ -1286,8 +1636,9 @@ export function doEventSourcedStore<
                   ? { frame: "step", msgJson: JSON.stringify(msg) }
                   : {
                       frame: "init",
-                      restored: seq > 1,
+                      restored: prior > 0,
                       provenance: opts.recording?.provenance ?? null,
+                      ...(moved ? { skipped } : {}),
                     },
                 {
                   state,
@@ -1298,22 +1649,61 @@ export function doEventSourcedStore<
                 },
                 basis,
               );
-        await persist(
-          {
-            event: { seq, json: cell.json },
-            snapshot: snapshotDue ? { seq, state } : null,
+        const budgeted = maxRowBytes !== undefined && written === "recording";
+        const cellKey = eventKey(eventPrefix, seq);
+        const over: OversizedMarker = {
+          of: init === null ? "step" : "init",
+          seq,
+          bytes: budgeted ? rowSize(cellKey, cell.json) : 0,
+        };
+        const writeOf = (marker: OversizedMarker | null) => ({
+          event: {
+            seq,
+            json: marker === null ? cell.json : encodeOversized(marker),
           },
-          admit,
-        );
-        lastSeq = seq;
-        basis = cell.basis;
-        if (init !== null) {
-          sinceSnapshot = since;
-          return;
+          snapshot:
+            marker === null && (moved || snapshotDue) ? { seq, state } : null,
+          marked: marker === null ? markedSeq : (markedSeq ?? seq),
+        });
+        let marker: OversizedMarker | null =
+          budgeted && over.bytes > maxRowBytes ? over : null;
+        const rejected: { key: string | null } = { key: null };
+        try {
+          await persist(writeOf(marker), admit, rejected);
+        } catch (thrown) {
+          if (
+            !budgeted ||
+            marker !== null ||
+            rejected.key !== cellKey ||
+            !isTooBig(thrown)
+          ) {
+            throw thrown;
+          }
+          marker = over;
+          await persist(writeOf(marker), admit);
         }
-        latestState = state;
-        sinceSnapshot = snapshotDue ? 0 : since + 1;
-        if (snapshotDue) snapshotSeq = seq;
+        if (marker !== null) markedSeq = markedSeq ?? seq;
+        lastSeq = seq;
+        basis = marker === null ? cell.basis : null;
+        const snapped = marker === null && (moved || snapshotDue);
+        if (init !== null) {
+          if (moved) latestState = state;
+          if (snapped) snapshotSeq = seq;
+          sinceSnapshot = snapped ? 0 : since;
+        } else {
+          latestState = state;
+          sinceSnapshot = snapped ? 0 : since + 1;
+          if (snapped) snapshotSeq = seq;
+        }
+        if (marker !== null) {
+          hearBreak({
+            fromSeq: seq,
+            toSeq: seq,
+            reason: "oversized",
+            seq,
+            bytes: marker.bytes,
+          });
+        }
       });
     },
 
@@ -1343,19 +1733,28 @@ export function doEventSourcedStore<
   async function persist(
     write: {
       readonly event?: { readonly seq: number; readonly json: string };
+      readonly committed?: number;
+      readonly marked?: number | null;
       readonly snapshot: { readonly seq: number; readonly state: S } | null;
     },
     admit: () => void,
+    rejected?: { key: string | null },
   ): Promise<void> {
     const cells: [string, string][] = [];
     if (write.event !== undefined) {
-      cells.push(
-        [eventKey(eventPrefix, write.event.seq), write.event.json],
-        [
-          metaKey,
-          JSON.stringify({ lastSeq: write.event.seq } satisfies MetaCell),
-        ],
-      );
+      cells.push([eventKey(eventPrefix, write.event.seq), write.event.json]);
+    }
+    const committed = write.event?.seq ?? write.committed;
+    if (committed !== undefined) {
+      const marked = write.marked ?? null;
+      cells.push([
+        metaKey,
+        JSON.stringify(
+          (marked === null
+            ? { lastSeq: committed }
+            : { lastSeq: committed, marked }) satisfies MetaCell,
+        ),
+      ]);
     }
     if (write.snapshot !== null) {
       const cell: SnapshotCell<S> = write.snapshot;
@@ -1363,7 +1762,11 @@ export function doEventSourcedStore<
     }
     await storage.transaction(async (txn) => {
       admit();
-      for (const [key, value] of cells) await txn.put(key, value);
+      for (const [key, value] of cells) {
+        if (rejected !== undefined) rejected.key = key;
+        await txn.put(key, value);
+      }
+      if (rejected !== undefined) rejected.key = null;
     });
   }
 

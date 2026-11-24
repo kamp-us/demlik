@@ -87,13 +87,17 @@ export {
   type EventSourcedStore,
   type FrameReadOptions,
   type PersistedEvent,
+  type RecordedTrace,
   type RecordingBreak,
+  RecordingUnavailableError,
   type RestoreAttempt,
   RestoreInterruptedError,
+  readTrace,
   type StoredEvent,
   type StoredEventRange,
   type StoredEventRefusal,
   type StoredFrame,
+  type TraceUnavailableReason,
 } from "./event-sourced-store";
 // The minimum-viable DO HOST for a `createAgent` runtime — the deferred-tool
 // gateway, auto-boot, WS accept + inbound bridge, runtime→SSE plumbing, the
