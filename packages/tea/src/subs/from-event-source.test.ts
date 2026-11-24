@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { defineMachine, type NoCtx, type Reducer, type Sub } from "../index";
 import { run } from "../promise";
-import { fromEventSource } from "./from-event-source";
+import { fromEventSource, type ServerSentEvent } from "./from-event-source";
 import type {
   MinimalEvent,
   MinimalEventSource,
   MinimalMessageEvent,
+  MinimalServerSentMessageEvent,
 } from "./platform";
 
 // Lifecycle contract under a real runtime (issue #286): the SSE connection
@@ -19,6 +20,7 @@ import type {
 class FakeEventSource implements MinimalEventSource {
   static instances: FakeEventSource[] = [];
   closed = false;
+  readyState: MinimalEventSource["readyState"] = 0;
   private readonly listeners = new Map<
     string,
     Set<(e: MinimalEvent) => void>
@@ -37,13 +39,24 @@ class FakeEventSource implements MinimalEventSource {
   }
   close(): void {
     this.closed = true;
+    this.readyState = 2;
   }
   fireMessage(data: string): void {
     const event: MinimalMessageEvent = { type: "message", data };
     for (const l of this.listeners.get("message") ?? []) l(event);
   }
-  fireError(): void {
+  fireNamed(type: string, data: string, lastEventId: string): void {
+    const event: MinimalServerSentMessageEvent = { type, data, lastEventId };
+    for (const l of this.listeners.get(type) ?? []) l(event);
+  }
+  fireError(readyState: MinimalEventSource["readyState"] = 0): void {
+    this.readyState = readyState;
     for (const l of this.listeners.get("error") ?? []) l({ type: "error" });
+  }
+  totalListeners(): number {
+    let n = 0;
+    for (const set of this.listeners.values()) n += set.size;
+    return n;
   }
   fireOpen(): void {
     for (const l of this.listeners.get("open") ?? []) l({ type: "open" });
@@ -181,6 +194,272 @@ describe("fromEventSource — subscribe → deliver → cleanup against a real r
     source.fireMessage("too-late");
     await rt.idle();
     expect(rt.getState().frames).toEqual([]);
+
+    await rt.stop();
+  });
+});
+
+type FeedSub = Sub<"feed", { readonly url: string }>;
+type FeedState = {
+  readonly url: string | null;
+  readonly events: readonly ServerSentEvent[];
+  readonly frames: readonly string[];
+  readonly lost: number;
+  readonly retrying: number;
+};
+type FeedMsg =
+  | { readonly _tag: "named"; readonly event: ServerSentEvent }
+  | { readonly _tag: "frame"; readonly data: string }
+  | { readonly _tag: "feed_lost" }
+  | { readonly _tag: "feed_retrying" }
+  | { readonly _tag: "point"; readonly url: string | null };
+
+const feedUpdate: Reducer<FeedState, FeedMsg, never> = {
+  named: (s, m) => [{ ...s, events: [...s.events, m.event] }, []],
+  frame: (s, m) => [{ ...s, frames: [...s.frames, m.data] }, []],
+  feed_lost: (s) => [{ ...s, lost: s.lost + 1 }, []],
+  feed_retrying: (s) => [{ ...s, retrying: s.retrying + 1 }, []],
+  point: (s, m) => [{ ...s, url: m.url }, []],
+};
+
+function feedMachine() {
+  return defineMachine({
+    types: {
+      model: {} as FeedState,
+      msg: {} as FeedMsg,
+      sub: {} as FeedSub,
+      ctx: {} as NoCtx,
+    },
+    init: () => [
+      { url: "https://x/feed", events: [], frames: [], lost: 0, retrying: 0 },
+      [],
+    ],
+    update: feedUpdate,
+    subs: [{ _tag: "feed", deps: (s) => (s.url ? { url: s.url } : null) }],
+  });
+}
+
+const NAMED = ["entry", "reset", "progress"] as const;
+
+const feedSubscribe = {
+  feed: fromEventSource<FeedSub, FeedMsg, (typeof NAMED)[number]>({
+    events: {
+      types: NAMED,
+      onEvent: (event) =>
+        event.data === "drop-me" ? null : { _tag: "named", event },
+    },
+    onError: (_event, _sub, readyState) =>
+      readyState === "closed"
+        ? { _tag: "feed_lost" }
+        : readyState === "connecting"
+          ? { _tag: "feed_retrying" }
+          : null,
+  }),
+};
+
+describe("fromEventSource — named server-sent events", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    FakeEventSource.instances = [];
+  });
+
+  it("dispatches every named type with its type, data and lastEventId, across a long interleaved stream", async () => {
+    vi.stubGlobal("EventSource", FakeEventSource);
+    const rt = await run(feedMachine(), { subscribe: feedSubscribe }).ready;
+    const source = FakeEventSource.instances[0];
+
+    const expected: ServerSentEvent[] = [];
+    for (let i = 0; i < 60; i++) {
+      const type = NAMED[i % NAMED.length];
+      const event = { type, data: `{"n":${i}}`, lastEventId: String(i) };
+      source.fireNamed(type, event.data, event.lastEventId);
+      expected.push(event);
+    }
+    await rt.idle();
+    expect(rt.getState().events).toEqual(expected);
+
+    await rt.stop();
+  });
+
+  it("dispatches nothing for a type the host did not name, nor for an unnamed message", async () => {
+    vi.stubGlobal("EventSource", FakeEventSource);
+    const rt = await run(feedMachine(), { subscribe: feedSubscribe }).ready;
+    const source = FakeEventSource.instances[0];
+
+    source.fireNamed("heartbeat", "x", "1");
+    source.fireNamed("Entry", "x", "2");
+    source.fireMessage("unnamed");
+    source.fireNamed("entry", "drop-me", "3");
+    await rt.idle();
+    expect(rt.getState().events).toEqual([]);
+    expect(rt.getState().frames).toEqual([]);
+    expect(source.listenerCount("heartbeat")).toBe(0);
+    expect(source.listenerCount("message")).toBe(0);
+
+    source.fireNamed("entry", "kept", "4");
+    await rt.idle();
+    expect(rt.getState().events).toEqual([
+      { type: "entry", data: "kept", lastEventId: "4" },
+    ]);
+
+    await rt.stop();
+  });
+
+  it("delivers unnamed messages through onMessage alongside named events", async () => {
+    vi.stubGlobal("EventSource", FakeEventSource);
+    const rt = await run(feedMachine(), {
+      subscribe: {
+        feed: fromEventSource<FeedSub, FeedMsg>({
+          onMessage: (data) => ({ _tag: "frame", data }),
+          events: {
+            types: ["entry"],
+            onEvent: (event) => ({ _tag: "named", event }),
+          },
+        }),
+      },
+    }).ready;
+    const source = FakeEventSource.instances[0];
+
+    source.fireMessage("plain");
+    source.fireNamed("entry", "named", "7");
+    await rt.idle();
+    expect(rt.getState().frames).toEqual(["plain"]);
+    expect(rt.getState().events).toEqual([
+      { type: "entry", data: "named", lastEventId: "7" },
+    ]);
+
+    await rt.stop();
+  });
+
+  it("tells an error on a CLOSED source from one on a CONNECTING source", async () => {
+    vi.stubGlobal("EventSource", FakeEventSource);
+    const rt = await run(feedMachine(), { subscribe: feedSubscribe }).ready;
+    const source = FakeEventSource.instances[0];
+
+    source.fireError(0);
+    source.fireError(0);
+    source.fireNamed("entry", "after-retry", "9");
+    source.fireError(2);
+    await rt.idle();
+    expect(rt.getState()).toMatchObject({ retrying: 2, lost: 1 });
+    expect(rt.getState().events).toHaveLength(1);
+
+    await rt.stop();
+  });
+
+  it("unsubscribe removes every listener it added and closes the source", async () => {
+    vi.stubGlobal("EventSource", FakeEventSource);
+    const rt = await run(feedMachine(), {
+      subscribe: {
+        feed: fromEventSource<FeedSub, FeedMsg>({
+          onMessage: (data) => ({ _tag: "frame", data }),
+          events: {
+            types: ["entry", "reset", "entry"],
+            onEvent: (event) => ({ _tag: "named", event }),
+          },
+          onError: () => ({ _tag: "feed_lost" }),
+          onOpen: () => null,
+        }),
+      },
+    }).ready;
+    const source = FakeEventSource.instances[0];
+    expect(source.totalListeners()).toBe(5);
+    expect(source.listenerCount("entry")).toBe(1);
+
+    await rt.dispatch({ _tag: "point", url: null });
+    expect(source.totalListeners()).toBe(0);
+    expect(source.closed).toBe(true);
+
+    source.fireNamed("entry", "too-late", "1");
+    source.fireMessage("too-late");
+    await rt.idle();
+    expect(rt.getState().events).toEqual([]);
+    expect(rt.getState().frames).toEqual([]);
+
+    await rt.stop();
+  });
+
+  it("a changed url closes the old source and opens a new one that keeps the named listeners", async () => {
+    vi.stubGlobal("EventSource", FakeEventSource);
+    const rt = await run(feedMachine(), { subscribe: feedSubscribe }).ready;
+    const first = FakeEventSource.instances[0];
+
+    await rt.dispatch({ _tag: "point", url: "https://y/feed" });
+    expect(FakeEventSource.instances).toHaveLength(2);
+    const second = FakeEventSource.instances[1];
+    expect(first.closed).toBe(true);
+    expect(first.totalListeners()).toBe(0);
+    expect(second.url).toBe("https://y/feed");
+    expect(second.closed).toBe(false);
+
+    first.fireNamed("entry", "old", "1");
+    second.fireNamed("reset", "new", "2");
+    await rt.idle();
+    expect(rt.getState().events).toEqual([
+      { type: "reset", data: "new", lastEventId: "2" },
+    ]);
+
+    await rt.stop();
+  });
+
+  it("refuses the lifecycle names open and error in events.types, in the type and when the factory is built", () => {
+    expect(() =>
+      fromEventSource<FeedSub, FeedMsg, "entry" | "open">({
+        events: {
+          // @ts-expect-error
+          types: ["entry", "open"],
+          onEvent: () => null,
+        },
+      }),
+    ).toThrow(TypeError);
+    expect(() =>
+      fromEventSource<FeedSub, FeedMsg, "error">({
+        // @ts-expect-error
+        events: { types: ["error"], onEvent: () => null },
+      }),
+    ).toThrow(TypeError);
+
+    const wide = (types: readonly string[]) =>
+      fromEventSource<FeedSub, FeedMsg>({
+        events: { types, onEvent: () => null },
+      });
+    expect(() => wide(["entry", "open"])).toThrow(
+      /names "open", a lifecycle event; receive it through onOpen/,
+    );
+    expect(() => wide(["error"])).toThrow(
+      /names "error", a lifecycle event; receive it through onError/,
+    );
+    expect(() => wide(["entry", "message"])).not.toThrow();
+  });
+
+  it("calls onMessage, onError and onOpen on the options object, so a method keeps its receiver", async () => {
+    vi.stubGlobal("EventSource", FakeEventSource);
+    const opts = {
+      prefix: "via-this:",
+      onMessage(this: { prefix: string }, data: string): FeedMsg {
+        return { _tag: "frame", data: this.prefix + data };
+      },
+      onError(this: { prefix: string }): FeedMsg {
+        return { _tag: "frame", data: `${this.prefix}error` };
+      },
+      onOpen(this: { prefix: string }): FeedMsg {
+        return { _tag: "frame", data: `${this.prefix}open` };
+      },
+    };
+    const rt = await run(feedMachine(), {
+      subscribe: { feed: fromEventSource<FeedSub, FeedMsg>(opts) },
+    }).ready;
+    const source = FakeEventSource.instances[0];
+
+    source.fireOpen();
+    source.fireMessage("a");
+    source.fireError(0);
+    await rt.idle();
+    expect(rt.getState().frames).toEqual([
+      "via-this:open",
+      "via-this:a",
+      "via-this:error",
+    ]);
 
     await rt.stop();
   });

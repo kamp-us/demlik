@@ -54,7 +54,11 @@ export { defineListener, type ListenerTarget } from "./define-listener";
 export { fromBroadcastChannel } from "./from-broadcast-channel";
 export {
   type EventSourceFactoryOpts,
+  type EventSourceLifecycleType,
+  type EventSourceNamedEvents,
+  type EventSourceReadyState,
   fromEventSource,
+  type ServerSentEvent,
 } from "./from-event-source";
 export { fromEventTarget } from "./from-event-target";
 export { fromInterval } from "./from-interval";
