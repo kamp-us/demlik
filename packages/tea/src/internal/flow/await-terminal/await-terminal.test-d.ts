@@ -25,10 +25,10 @@ void runToTerminal(
 
 void runToTerminal(
   machine,
-  // @ts-expect-error an unknown seed field does not compile
   {
     cancellation: { signal, cancel: () => ({ _tag: "halt" }) },
     msgs: [],
+    // @ts-expect-error an unknown seed field does not compile
     label: "x",
   },
   halted,

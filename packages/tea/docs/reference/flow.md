@@ -1861,7 +1861,7 @@ function runToTerminal<
   Ctx,
 >(
   machine: Machine<S, M, C, U, Ctx>,
-  seed: CtxArg<Ctx> & NoInfer<RunHandlers<M, C, U, Ctx>> & { readonly msgs: readonly M[] },
+  seed: CtxArg<Ctx> & NoInfer<RunHandlers<M, C, U, Ctx>> & NoInfer<Pick<PromiseRunOptions<S, M, C, U, Ctx, never>, "cancellation">> & { readonly msgs: readonly M[] },
   isTerminal: (state: S) => boolean,
   opts?: AwaitTerminalOptions,
 ): Promise<S>
