@@ -8,7 +8,7 @@ Tier: `stable`
 import { … } from "@demlik/tea";
 ```
 
-## Exports (214)
+## Exports (217)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -75,7 +75,9 @@ import { … } from "@demlik/tea";
 | [`ErrOf`](#ErrOf) | Type | stable | The DECLARED failure union a def's handler may settle with. |
 | [`ErrorsOf`](#ErrorsOf) | Type | stable | The `E` union one Cmd can settle with; `unknown` for an untyped Cmd. |
 | [`EventSourcedOptions`](#EventSourcedOptions) | Interface | stable | Schemas and namespace for a durable log store. |
-| [`EventSourceFactoryOpts`](#EventSourceFactoryOpts) | Interface | stable | Options for `fromEventSource`: map each server-sent message, error and open event to a Msg, or to `null` to drop it. |
+| [`EventSourceFactoryOpts`](#EventSourceFactoryOpts) | Interface | stable | Options for `fromEventSource`: map each server-sent event, error and open event to a Msg, or to `null` to drop it. |
+| [`EventSourceNamedEvents`](#EventSourceNamedEvents) | Interface | stable | The named server-sent event types a `fromEventSource` Sub listens to, and the one callback that maps each of them to a Msg. |
+| [`EventSourceReadyState`](#EventSourceReadyState) | Type | stable | The connection state of an `EventSource` when its `error` event fired. |
 | [`ExhaustiveTransitions`](#ExhaustiveTransitions) | Type | stable | `Transitions<S, M, C>` with every cell REQUIRED — the opt-in floor for a machine that wants the compiler to force a decision on every (state, message) pair. |
 | [`FencedRead`](#FencedRead) | Interface | stable | What a fenced store's `loadFenced` returns: the raw saved value and the version it was written at. |
 | [`FencedStore`](#FencedStore) | Interface | stable | A `Store<S>` that can refuse a second live writer. |
@@ -184,6 +186,7 @@ import { … } from "@demlik/tea";
 | [`schemaMigrate`](#schemaMigrate) | Function | stable | Build a `Store.migrate` from a schema (job 1) and an optional thin `upcast` (job 2). |
 | [`Seq`](#Seq) | Type | stable | A monotonic, non-negative sequence number tagging one client-predicted command. |
 | [`SeqTagged`](#SeqTagged) | Interface | stable | A command (or `Msg`) tagged with the `seq` the client assigned it. |
+| [`ServerSentEvent`](#ServerSentEvent) | Interface | stable | One named server-sent event as a host receives it: the event's `type` (the SSE `event:` field), its `data` (the `data:` lines joined), and the `lastEventId` the browser holds after this event (the `id:` field, or the last one seen). |
 | [`Settled`](#Settled) | Type | stable | The settled-Msg union a def (or a union of defs) mints: `<name>_ok` carrying `value`, `<name>_err` carrying `error`. |
 | [`SettledErr`](#SettledErr) | Type | stable | The Msg the engine mints when a `Cmd.define`d Cmd's handler fails: `<name>_err`, carrying the Cmd and the tagged error. |
 | [`SettledOk`](#SettledOk) | Type | stable | The Msg the engine mints when a `Cmd.define`d Cmd's handler succeeds: `<name>_ok`, carrying the Cmd and its value. |
@@ -1210,11 +1213,55 @@ interface EventSourcedOptions<S, M, C> {
 ### `EventSourceFactoryOpts`
 
 ```ts
-interface EventSourceFactoryOpts<S, M> {
-  onError?: (event: MinimalEvent, sub: S) => M | null;
-  onMessage: (data: string, sub: S) => M | null;
+interface EventSourceFactoryOpts<S, M, T extends string = string> {
+  /**
+   * The named server-sent event types to receive, and the one callback that
+   * maps type, `data` and `lastEventId` to a Msg.
+   */
+  events?: EventSourceNamedEvents<S, M, T>;
+  /**
+   * The `error` event. It fires both while the browser reconnects and when it
+   * gives up; `readyState` tells the two apart without holding the source:
+   * `"connecting"` means a retry is under way, `"closed"` means the source is
+   * done.
+   */
+  onError?: (event: MinimalEvent, sub: S, readyState: EventSourceReadyState) => M | null;
+  /**
+   * An unnamed server-sent event (no `event:` field, or `event: message`).
+   * Receives the event's `data` string.
+   */
+  onMessage?: (data: string, sub: S) => M | null;
+  /**
+   * The `open` event: the connection's handshake succeeded. Treat it as
+   * best-effort, since not every browser fires it again on reconnect.
+   */
   onOpen?: (sub: S) => M | null;
 }
+```
+
+<a id="EventSourceNamedEvents"></a>
+
+### `EventSourceNamedEvents`
+
+```ts
+interface EventSourceNamedEvents<S, M, T extends string = string> {
+  /** Map one named event to a Msg, or to `null` to drop it. */
+  readonly onEvent: (event: ServerSentEvent<T>, sub: S) => M | null;
+  /**
+   * The SSE `event:` names to listen for. A type the host does not name here
+   * never reaches `onEvent`. Naming `"message"` here as well as passing
+   * `onMessage` delivers an unnamed event to both.
+   */
+  readonly types: readonly T[];
+}
+```
+
+<a id="EventSourceReadyState"></a>
+
+### `EventSourceReadyState`
+
+```ts
+type EventSourceReadyState = "closed" | "connecting" | "open"
 ```
 
 <a id="ExhaustiveTransitions"></a>
@@ -1352,8 +1399,12 @@ function fromBroadcastChannel<S extends Sub<string, BroadcastSubData>, M>(
 ### `fromEventSource`
 
 ```ts
-function fromEventSource<S extends Sub<string, EventSourceSubData>, M>(
-  opts: EventSourceFactoryOpts<S, M>,
+function fromEventSource<
+  S extends Sub<string, EventSourceSubData>,
+  M,
+  T extends string = string,
+>(
+  opts: EventSourceFactoryOpts<S, M, T>,
 ): SubscribeHandler<S, M, unknown>
 ```
 
@@ -2775,6 +2826,18 @@ type Seq = number
 interface SeqTagged<T> {
   readonly seq: number;
   readonly value: T;
+}
+```
+
+<a id="ServerSentEvent"></a>
+
+### `ServerSentEvent`
+
+```ts
+interface ServerSentEvent<T extends string = string> {
+  readonly data: string;
+  readonly lastEventId: string;
+  readonly type: T;
 }
 ```
 
