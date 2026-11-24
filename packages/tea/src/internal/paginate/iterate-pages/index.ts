@@ -1,4 +1,9 @@
-import { initPaginator, type PaginatorPolicy, recordPage, start } from "../paginator";
+import {
+  initPaginator,
+  type PaginatorPolicy,
+  recordPage,
+  start,
+} from "../paginator";
 
 /**
  * The page iterator's config. Generic in `Cursor` (the opaque page handle the
@@ -35,7 +40,10 @@ export interface IteratePagesConfig<Cursor, Page> {
 export async function* iteratePages<Cursor, Page>(
   config: IteratePagesConfig<Cursor, Page>,
 ): AsyncGenerator<Page, void, undefined> {
-  const policy: PaginatorPolicy<Cursor> = { firstCursor: config.firstCursor, highWaterMark: 0 };
+  const policy: PaginatorPolicy<Cursor> = {
+    firstCursor: config.firstCursor,
+    highWaterMark: 0,
+  };
   let walk = start(initPaginator<Cursor>(), policy);
   while (walk.phase === "fetching") {
     const page = await config.fetchPage(walk.cursor);

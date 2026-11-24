@@ -20,7 +20,11 @@ async function collect<T>(pages: AsyncIterable<T>): Promise<T[]> {
 describe("iteratePages", () => {
   it("fetches nothing until the first pull", async () => {
     const fetchPage = pagesAt({ 0: { items: ["a"], next: null } });
-    const pages = iteratePages({ firstCursor: 0, fetchPage, nextCursor: (page) => page.next });
+    const pages = iteratePages({
+      firstCursor: 0,
+      fetchPage,
+      nextCursor: (page) => page.next,
+    });
     expect(fetchPage).not.toHaveBeenCalled();
     await expect(pages.next()).resolves.toEqual({
       done: false,
@@ -34,7 +38,11 @@ describe("iteratePages", () => {
       const terminal = { items: ["a"], next: end };
       const fetchPage = vi.fn(async () => terminal);
       const pages = await collect(
-        iteratePages({ firstCursor: "first", fetchPage, nextCursor: (page) => page.next }),
+        iteratePages({
+          firstCursor: "first",
+          fetchPage,
+          nextCursor: (page) => page.next,
+        }),
       );
       expect(pages).toEqual([terminal]);
       expect(fetchPage).toHaveBeenCalledOnce();
@@ -71,7 +79,10 @@ describe("iteratePages", () => {
   });
 
   it("fetches no page while the consumer is still working on the last one", async () => {
-    const fetchPage = pagesAt({ 0: { items: ["a"], next: 1 }, 1: { items: ["b"], next: null } });
+    const fetchPage = pagesAt({
+      0: { items: ["a"], next: 1 },
+      1: { items: ["b"], next: null },
+    });
     let release = () => {};
     const working = new Promise<void>((resolve) => {
       release = resolve;
@@ -99,7 +110,11 @@ describe("iteratePages", () => {
   it("returns early without reading the continuation", async () => {
     const fetchPage = pagesAt({ 0: { items: ["a"], next: 1 } });
     const nextCursor = vi.fn((page: Page) => page.next);
-    for await (const page of iteratePages({ firstCursor: 0, fetchPage, nextCursor })) {
+    for await (const page of iteratePages({
+      firstCursor: 0,
+      fetchPage,
+      nextCursor,
+    })) {
       expect(page.items).toEqual(["a"]);
       break;
     }
