@@ -18,8 +18,20 @@ export interface Trace<S, M> {
    * The post-init State captured by `onBoot`, used directly as the recorded
    * replay's starting State. No init call is repeated. `null` marks a missing
    * anchor in an older or incomplete trace; `replayTrace` refuses it.
+   *
+   * In a trace recorded with {@link RecorderOptions.window} that has dropped
+   * transitions, it is the State after the last dropped transition, which is
+   * the State before the oldest kept msg, so the kept msgs fold from it.
    */
   readonly loaded: S | null;
+  /**
+   * How many transitions the live run applied before `loaded`: the trace's
+   * first msg is the run's step `skipped + 1`. Absent or `0` for a trace that
+   * kept every transition since boot; a reader takes `trace.skipped ?? 0`.
+   * Set by a recorder with a {@link RecorderOptions.window} once a
+   * transition has fallen out of it, and carried on the JSONL boot line.
+   */
+  readonly skipped?: number;
   /** The ordered, non-null msgs as observed. The replay input sequence. */
   readonly msgs: readonly M[];
   /**
@@ -103,6 +115,27 @@ export interface RecorderOptions {
    * choice is purely "do I also want to inspect intermediate states?".
    */
   readonly captureSteps?: boolean;
+  /**
+   * Keep only the last `window` recorded transitions. Default: keep every
+   * transition since boot.
+   *
+   * When a transition falls out of the window, the trace's `loaded` anchor
+   * moves to the State after it, which is the State before the oldest kept
+   * msg, and {@link Trace.skipped} counts it. So a windowed `dump()` still
+   * replays: `replayTrace` folds the kept msgs from the moved anchor and
+   * reproduces `finalState` exactly as it does for an unbounded trace, and
+   * the same holds after a `toJSONL` / `parseJSONL` round-trip. With
+   * `captureSteps: true`, `steps` holds one entry per kept msg.
+   *
+   * Memory is O(window) msgs and State refs whatever the run length: the
+   * recorder keeps each kept transition's post-State by reference to move
+   * the anchor, with or without `captureSteps`.
+   *
+   * Must be an integer `>= 1`, and cannot be combined with a `sampleRate`
+   * below `1` (a sampled trace is not replay-faithful, so it has no anchor to
+   * move); `recorder` throws a `RangeError` otherwise.
+   */
+  readonly window?: number;
 }
 
 /**
@@ -129,7 +162,8 @@ export interface Recorder<S, M> {
    * Serialize the recording as JSONL (one JSON object per line) — a streamable
    * format that appends cleanly and survives truncation (a partial tail line
    * is the only loss). The first line is the boot header
-   * `{ kind: "boot", state }`; each subsequent line is
+   * `{ kind: "boot", state }`, plus `skipped` when a
+   * {@link RecorderOptions.window} has dropped transitions; each subsequent line is
    * `{ kind: "step", msg, state }` for one recorded transition.
    *
    * Re-hydrate with {@link parseJSONL}.
@@ -171,47 +205,58 @@ export interface Recorder<S, M> {
  *     await runtime.ready;            // boot observe has fired
  *     const trace = rec.dump();       // { loaded, msgs, finalState }
  *
+ * A flight recorder for a long-running machine bounds what it holds with
+ * `window`, and the dumped trace still replays from its moved anchor:
+ *
+ *     const rec = recorder(runtime, { window: 500 });
+ *     // ... thousands of transitions later, the run fails ...
+ *     const trace = rec.dump();       // the last 500 msgs, `skipped` before them
+ *     replayTrace(machine, trace).matches; // true
+ *
  * @param runtime - any `BootingRuntime<S, M>` (a full `Runtime` satisfies it).
  *                  The recorder uses only `observe`, which is total before boot
  *                  — so you attach it to the synchronous `run()` handle to
  *                  capture the boot transition as `loaded`.
  * @param opts    - see {@link RecorderOptions}. Default records everything,
- *                  no step retention.
+ *                  no step retention, no window.
+ * @throws RangeError when `opts.window` is not an integer `>= 1`, or is given
+ *                    with a `sampleRate` below `1`.
  */
 export function recorder<S, M extends { _tag: string }>(
   runtime: BootingRuntime<S, M>,
   opts?: RecorderOptions,
 ): Recorder<S, M> {
-  // Clamp sampleRate into (0, 1]. A non-positive or NaN rate would record
-  // nothing (and break replay anchors); default it to 1 (record all). Rates
-  // above 1 are meaningless — clamp to 1.
   const rawRate = opts?.sampleRate;
   const sampleRate =
     rawRate === undefined || Number.isNaN(rawRate) || rawRate <= 0
       ? 1
       : Math.min(rawRate, 1);
   const captureSteps = opts?.captureSteps ?? false;
+  const window = opts?.window;
+  if (window !== undefined) {
+    if (!Number.isInteger(window) || window < 1) {
+      throw new RangeError(
+        `tea recorder: window must be an integer >= 1, got ${String(window)}.`,
+      );
+    }
+    if (rawRate !== undefined && rawRate < 1) {
+      throw new RangeError(
+        "tea recorder: window cannot be combined with a sampleRate below 1; " +
+          "a sampled trace is not replay-faithful, so it has no anchor to move.",
+      );
+    }
+  }
 
-  // `loaded` is the post-init state captured at the boot observe. `undefined`
-  // sentinel = boot not yet seen; a trace without that anchor cannot replay.
   let loaded: S | undefined;
   let sawBoot = false;
-  // The ordered, recorded msgs. Unbounded (the recorder's whole point vs the
-  // bounded historyTracker).
   const msgs: M[] = [];
-  // Per-step (msg, state) pairs — only populated when captureSteps is on.
   const steps: TraceStep<S, M>[] = [];
-  // The last observed state — boot state until the first step, then advances
-  // with every recorded OR dropped transition (finalState must reflect the
-  // true latest state even under sampling, so it stays a valid replay oracle
-  // for the unsampled case and an honest "where the run ended" marker).
+  const ring: TraceStep<S, M>[] = [];
+  let head = 0;
+  let skipped = 0;
   let finalState: S | undefined;
   let stopped = false;
 
-  // The boot transition — the post-init initial state the old `observe(msg ===
-  // null)` arm captured as `loaded` — now arrives via `onBoot` (#47). Always
-  // captured (boot is the replay anchor). It is also the first `finalState`
-  // until the first applied transition advances it.
   const unboot = runtime.onBoot((state) => {
     finalState = state;
     loaded = state;
@@ -219,19 +264,33 @@ export function recorder<S, M extends { _tag: string }>(
   });
 
   const unobserve = runtime.observe((msg, state, cmds) => {
-    // finalState tracks the latest state regardless of sampling — it is the
-    // run's endpoint, an anchor, not a sample.
     finalState = state;
-
-    // Sampling decision. sampleRate === 1 short-circuits to always-record so
-    // the common (faithful) path pays no RNG cost. Math.random() < rate keeps
-    // a `rate` fraction in expectation.
     if (sampleRate < 1 && Math.random() >= sampleRate) return;
+    const step: TraceStep<S, M> =
+      cmds === undefined ? { msg, state } : { msg, state, cmds };
 
-    msgs.push(msg);
-    if (captureSteps)
-      steps.push(cmds === undefined ? { msg, state } : { msg, state, cmds });
+    if (window === undefined) {
+      msgs.push(msg);
+      if (captureSteps) steps.push(step);
+      return;
+    }
+    if (ring.length < window) {
+      ring.push(step);
+      return;
+    }
+    const evicted = ring[head] as TraceStep<S, M>;
+    loaded = evicted.state;
+    sawBoot = true;
+    skipped += 1;
+    ring[head] = step;
+    head = (head + 1) % window;
   });
+
+  function kept(): readonly TraceStep<S, M>[] {
+    return head === 0
+      ? ring.slice()
+      : [...ring.slice(head), ...ring.slice(0, head)];
+  }
 
   return {
     dump(): Trace<S, M> {
@@ -241,15 +300,22 @@ export function recorder<S, M extends { _tag: string }>(
             "Await `runtime.ready` (boot fires the first observe) before dumping.",
         );
       }
+      const anchor = sawBoot ? (loaded as S) : null;
+      if (window === undefined) {
+        return {
+          loaded: anchor,
+          msgs: msgs.slice(),
+          finalState,
+          ...(captureSteps ? { steps: steps.slice() } : {}),
+        };
+      }
+      const keptSteps = kept();
       return {
-        // sawBoot ⇒ `loaded` is the captured boot state; otherwise the
-        // trace has no replay anchor and replayTrace will refuse it.
-        loaded: sawBoot ? (loaded as S) : null,
-        msgs: msgs.slice(),
+        loaded: anchor,
+        ...(skipped > 0 ? { skipped } : {}),
+        msgs: keptSteps.map((step) => step.msg),
         finalState,
-        // Only attach `steps` when captureSteps was requested — keeps the
-        // dumped Trace shape honest about what was retained.
-        ...(captureSteps ? { steps: steps.slice() } : {}),
+        ...(captureSteps ? { steps: keptSteps } : {}),
       };
     },
     toJSONL(): string {
@@ -279,7 +345,11 @@ export function recorder<S, M extends { _tag: string }>(
 
 /** One line of the JSONL format produced by {@link Recorder.toJSONL}. */
 type JsonlLine<S, M> =
-  | { readonly kind: "boot"; readonly state: S | null }
+  | {
+      readonly kind: "boot";
+      readonly state: S | null;
+      readonly skipped?: number;
+    }
   | {
       readonly kind: "step";
       readonly msg: M;
@@ -294,7 +364,8 @@ type JsonlLine<S, M> =
  *
  * Parsing rules:
  *   - The first non-blank line MUST be the boot header `{ kind: "boot", state }`.
- *     Its `state` becomes `Trace.loaded`.
+ *     Its `state` becomes `Trace.loaded`, and its `skipped`, when present and
+ *     positive, becomes `Trace.skipped` (a boot line without it reads as 0).
  *   - Each `{ kind: "step", msg, state }` line contributes `msg` to
  *     `Trace.msgs` and `(msg, state)` to `Trace.steps`.
  *   - `Trace.finalState` is the `state` of the LAST step line, or the boot
@@ -311,6 +382,7 @@ type JsonlLine<S, M> =
 export function parseJSONL<S, M>(jsonl: string): Trace<S, M> {
   const rawLines = jsonl.split("\n");
   let loaded: S | null = null;
+  let skipped = 0;
   let sawBoot = false;
   const msgs: M[] = [];
   const steps: TraceStep<S, M>[] = [];
@@ -339,6 +411,19 @@ export function parseJSONL<S, M>(jsonl: string): Trace<S, M> {
       }
       sawBoot = true;
       loaded = parsed.state;
+      if (parsed.skipped !== undefined) {
+        if (
+          typeof parsed.skipped !== "number" ||
+          !Number.isInteger(parsed.skipped) ||
+          parsed.skipped < 0
+        ) {
+          throw new Error(
+            `tea recorder: parseJSONL saw an invalid skipped count on line ${i + 1}: ` +
+              `${JSON.stringify(parsed.skipped)}. It must be an integer >= 0.`,
+          );
+        }
+        skipped = parsed.skipped;
+      }
       // The boot state is the finalState until a step supersedes it (boot-only
       // trace case).
       finalState = parsed.state;
@@ -384,9 +469,10 @@ export function parseJSONL<S, M>(jsonl: string): Trace<S, M> {
   // `captureSteps` leaves interior step states null, so its steps are partial:
   // keeping them would misalign `steps[i]` with `msgs[i]`, and a per-step
   // replay would blame the wrong msg. Partial steps are dropped.
+  const head = skipped > 0 ? { loaded, skipped } : { loaded };
   return steps.length === msgs.length
-    ? { loaded, msgs, finalState, steps }
-    : { loaded, msgs, finalState };
+    ? { ...head, msgs, finalState, steps }
+    : { ...head, msgs, finalState };
 }
 
 // ---------------------------------------------------------------------------
@@ -564,7 +650,14 @@ export function breadcrumbsFromTrace<S, M extends { _tag: string }>(
 // ---------------------------------------------------------------------------
 function traceToJSONL<S, M>(trace: Trace<S, M>): string {
   const lines: string[] = [];
-  lines.push(JSON.stringify({ kind: "boot", state: trace.loaded }));
+  const skipped = trace.skipped ?? 0;
+  lines.push(
+    JSON.stringify(
+      skipped > 0
+        ? { kind: "boot", state: trace.loaded, skipped }
+        : { kind: "boot", state: trace.loaded },
+    ),
+  );
 
   const steps = trace.steps;
   for (let i = 0; i < trace.msgs.length; i++) {
