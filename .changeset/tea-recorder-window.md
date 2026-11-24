@@ -2,6 +2,9 @@
 "@demlik/tea": minor
 ---
 
+**Additive (declaration only):** `RecorderOptions` (`@demlik/tea/persistence`, `@demlik/tea/parity`)
+gains an optional `window`, and `Trace` gains an optional `skipped`.
+
 `recorder` takes a `window` option that keeps only the last N transitions, so a flight recorder on
 a long-running machine holds O(window) msgs and State refs, however long the run. When a
 transition falls out of the window, the trace's `loaded` anchor moves to the State after it, so
