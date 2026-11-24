@@ -8,7 +8,7 @@ Tier: `stable`
 import { … } from "@demlik/tea/do";
 ```
 
-## Exports (129)
+## Exports (133)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -116,10 +116,14 @@ import { … } from "@demlik/tea/do";
 | [`runProjection`](#runProjection) | Function | stable | Build a ProjectionRunner for a projection, starting from a stored offset (default 0 = `NoOffset`, a fresh run). |
 | [`runStepLoop`](#runStepLoop) | Function | stable | Drive the pull loop to completion. |
 | [`RunStepLoopConfig`](#RunStepLoopConfig) | Interface | stable | Tuning for runStepLoop. |
+| [`SseFrame`](#SseFrame) | Interface | stable | The SSE fields one event is written as, per the event stream format of the HTML Living Standard ("Server-sent events"). |
+| [`SseFrameError`](#SseFrameError) | Class | stable | Thrown when an SseFrame has a field the event stream cannot carry. |
 | [`sseFromAgentEvents`](#sseFromAgentEvents) | Function | stable | Wire an SseHub to a runtime's semantic AgentEvent stream. |
 | [`sseHub`](#sseHub) | Function | stable | Build an SSE hub for event type `E` (the consumer's domain event shape). |
 | [`SseHub`](#SseHub) | Interface | stable | A set of SSE sinks plus the plumbing to fan an event out to all of them and to open a `text/event-stream` Response wired to a fresh sink. |
+| [`SseHubOptions`](#SseHubOptions) | Interface | stable | Options for sseHub. |
 | [`sseProjection`](#sseProjection) | Function | stable | Express an SseHub as a Projection. |
+| [`SseStreamHub`](#SseStreamHub) | Interface | stable | An SseHub that can also end every stream it has opened. |
 | [`StepCtx`](#StepCtx) | Interface | stable | The minimal `ctx` slice `stepHost` reads — just the alarm-bearing storage. |
 | [`StepEngine`](#StepEngine) | Interface | stable | The run-specific operations `stepHost` orchestrates. |
 | [`stepHost`](#stepHost) | Function | stable | Build the `/step` handler for a DO that drives one or more runs over the pull carrier. |
@@ -1778,6 +1782,30 @@ interface RunStepLoopConfig<R = never, I = never, O = never> {
 }
 ```
 
+<a id="SseFrame"></a>
+
+### `SseFrame`
+
+```ts
+interface SseFrame {
+  readonly data: string;
+  readonly event?: string;
+  readonly id?: string;
+}
+```
+
+<a id="SseFrameError"></a>
+
+### `SseFrameError`
+
+```ts
+class SseFrameError extends Error {
+  constructor(field: "event" | "id", reason: string);
+  /** The field that cannot be written. */
+  readonly field: "event" | "id";
+}
+```
+
 <a id="sseFromAgentEvents"></a>
 
 ### `sseFromAgentEvents`
@@ -1834,7 +1862,7 @@ function sseFromAgentEvents<R, Frame>(
 ### `sseHub`
 
 ```ts
-function sseHub<E>(): SseHub<E>
+function sseHub<E>(options?: SseHubOptions<E>): SseStreamHub<E>
 ```
 
 <a id="SseHub"></a>
@@ -1849,6 +1877,39 @@ interface SseHub<E> {
 }
 ```
 
+<a id="SseHubOptions"></a>
+
+### `SseHubOptions`
+
+```ts
+interface SseHubOptions<E> {
+  /**
+   * Map an event to its SSE fields. Defaults to `{ data: JSON.stringify(event) }`.
+   * A throw from it, or an SseFrameError for the fields it returns,
+   * propagates out of `emit` or `open` to the host; the event is not dropped
+   * silently.
+   */
+  readonly frame?: (event: E) => SseFrame;
+  /**
+   * Write a comment frame (`: keepalive`) to each open stream every
+   * `keepaliveMs` milliseconds, so a proxy does not close an idle stream. The
+   * hub owns one interval per open stream and clears it when that stream is
+   * cancelled or the hub is closed. Off when left out.
+   */
+  readonly keepaliveMs?: number;
+  /**
+   * The events a client that connects now receives before any live event,
+   * asked for each time a stream opens (and each time `register` is called).
+   * Which events it holds is the host's decision; the hub keeps no buffer of
+   * its own. It is called synchronously in the same step that subscribes the
+   * new stream, so every event emitted before `open` belongs in the snapshot
+   * and every event emitted after reaches the stream live. An event emitted
+   * while the snapshot is being taken is delivered live, after the snapshot.
+   */
+  readonly snapshot?: () => Iterable<E>;
+}
+```
+
 <a id="sseProjection"></a>
 
 ### `sseProjection`
@@ -1859,6 +1920,24 @@ function sseProjection<Model, Msg extends { _tag: string }, E>(
   toEvent: (msg: Msg | null, model: Model) => E | null,
   id?: { key?: string; name?: string },
 ): Projection<Model, Msg, E | null>
+```
+
+<a id="SseStreamHub"></a>
+
+### `SseStreamHub`
+
+```ts
+interface SseStreamHub<E> extends SseHub<E> {
+  /** Whether SseStreamHub.close has been called. */
+  readonly closed: boolean;
+  /**
+   * End every open stream and drop every registered sink. After `close`,
+   * `emit` reaches no one, `open` returns a stream that carries the snapshot
+   * and then ends, and `register` hands the sink the snapshot and subscribes
+   * nothing. Calling it again does nothing.
+   */
+  close(): void;
+}
 ```
 
 <a id="StepCtx"></a>

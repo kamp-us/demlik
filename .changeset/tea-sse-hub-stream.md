@@ -1,0 +1,5 @@
+---
+"@demlik/tea": minor
+---
+
+**Additive (declaration only):** `sseHub` (`@demlik/tea/do`) takes optional `SseHubOptions` and returns an `SseStreamHub`, an `SseHub` that adds `close()` and `closed`, so a host serves a whole live stream with no SSE plumbing of its own. `frame` maps an event to its `event:`, `data:` and `id:` fields (`SseFrame`), so a browser `EventSource` can listen by event name, and a field the format cannot carry throws `SseFrameError`. `keepaliveMs` writes a `: keepalive` comment frame to each open stream on an interval the hub clears when that stream is cancelled or the hub closes. `snapshot` is asked for the events a client that connects now receives before any live event, so a late client gets the snapshot and then live events with none lost or sent twice. `close()` ends every open stream, and a stream opened after it receives the snapshot and then ends. `sseHub()` with no options writes the same bytes as before.

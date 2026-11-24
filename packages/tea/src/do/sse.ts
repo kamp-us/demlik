@@ -75,8 +75,9 @@ export class SseFrameError extends Error {
 export interface SseHubOptions<E> {
   /**
    * Map an event to its SSE fields. Defaults to `{ data: JSON.stringify(event) }`.
-   * A throw (or an {@link SseFrameError} from the returned fields) leaves
-   * `emit` or `open` to the host instead of dropping the event.
+   * A throw from it, or an {@link SseFrameError} for the fields it returns,
+   * propagates out of `emit` or `open` to the host; the event is not dropped
+   * silently.
    */
   readonly frame?: (event: E) => SseFrame;
   /**
