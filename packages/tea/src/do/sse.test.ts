@@ -161,12 +161,91 @@ describe("sseHub keepalive", () => {
     expect(client.text()).toBe("");
     vi.advanceTimersByTime(1);
     hub.emit(1);
-    vi.advanceTimersByTime(2_000);
+    await flush();
+    vi.advanceTimersByTime(1_000);
+    await flush();
+    vi.advanceTimersByTime(1_000);
     await flush();
     expect(client.text()).toBe(
       ": keepalive\n\ndata: 1\n\n: keepalive\n\n: keepalive\n\n",
     );
     await client.cancel();
+  });
+
+  it("queues no further comment while the client is not reading", async () => {
+    const hub = sseHub<number>({ keepaliveMs: 10 });
+    const response = hub.open();
+    vi.advanceTimersByTime(10_000);
+    const client = tap(response);
+    await flush();
+    expect(client.text()).toBe(": keepalive\n\n");
+    vi.advanceTimersByTime(10);
+    await flush();
+    vi.advanceTimersByTime(10);
+    await flush();
+    expect(client.text()).toBe(": keepalive\n\n".repeat(3));
+    await client.cancel();
+  });
+
+  it.each([
+    ["closed", 0, (ctl: ReadableStreamDefaultController) => ctl.close()],
+    [
+      "errored",
+      0,
+      (ctl: ReadableStreamDefaultController) => ctl.error(new Error("x")),
+    ],
+    [
+      "errored",
+      1,
+      (ctl: ReadableStreamDefaultController) => ctl.error(new Error("x")),
+    ],
+  ])("clears the interval when the stream was %s under it after %i unread comments", (_, ticks, breakIt) => {
+    let ctl: ReadableStreamDefaultController<Uint8Array> | undefined;
+    const Real = globalThis.ReadableStream;
+    vi.stubGlobal(
+      "ReadableStream",
+      class extends Real<Uint8Array> {
+        constructor(
+          source: UnderlyingDefaultSource<Uint8Array>,
+          strategy?: QueuingStrategy<Uint8Array>,
+        ) {
+          super(
+            {
+              ...source,
+              start: (controller) => {
+                ctl = controller;
+                return source.start?.(controller);
+              },
+            },
+            strategy,
+          );
+        }
+      },
+    );
+    try {
+      const hub = sseHub<number>({ keepaliveMs: 1_000 });
+      hub.open();
+      expect(vi.getTimerCount()).toBe(1);
+      if (ctl === undefined) throw new Error("no controller");
+      vi.advanceTimersByTime(1_000 * ticks);
+      expect(vi.getTimerCount()).toBe(1);
+      breakIt(ctl);
+      vi.advanceTimersByTime(1_000);
+      expect(vi.getTimerCount()).toBe(0);
+      expect(() => hub.emit(1)).not.toThrow();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it.each([
+    0,
+    -1,
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+  ])("refuses keepaliveMs %s with a RangeError", (keepaliveMs) => {
+    expect(() => sseHub<number>({ keepaliveMs })).toThrow(RangeError);
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it("stops after the client cancels", async () => {
@@ -319,6 +398,89 @@ describe("sseHub replay snapshot", () => {
       { kind: "status", status: "running" },
       { kind: "turn", turn: 2 },
     ]);
+  });
+});
+
+describe("sseHub frame throws and emits during open", () => {
+  it("delivers an event whose frame throws to no stream and no sink", async () => {
+    const hub = sseHub<number>({
+      frame: (n) => {
+        if (n === 2) throw new Error("bad");
+        return { data: String(n) };
+      },
+    });
+    const client = tap(hub.open());
+    const seen: number[] = [];
+    hub.register((n) => seen.push(n));
+    hub.emit(1);
+    expect(() => hub.emit(2)).toThrow("bad");
+    hub.emit(3);
+    await flush();
+    expect(seen).toEqual([1, 3]);
+    expect(client.text()).toBe("data: 1\n\ndata: 3\n\n");
+    await client.cancel();
+  });
+
+  it("keeps an emit made from frame while open encodes the snapshot", async () => {
+    let emitFromFrame = true;
+    const hub = sseHub<number>({
+      snapshot: () => [1, 2],
+      frame: (n) => {
+        if (n === 2 && emitFromFrame) {
+          emitFromFrame = false;
+          hub.emit(99);
+        }
+        return { data: String(n) };
+      },
+    });
+    const client = tap(hub.open());
+    hub.emit(100);
+    await flush();
+    expect(client.text()).toBe(
+      "data: 1\n\ndata: 2\n\ndata: 99\n\ndata: 100\n\n",
+    );
+    await client.cancel();
+  });
+
+  it("keeps an emit made from a sink while register replays the snapshot", () => {
+    const hub = sseHub<number>({ snapshot: () => [1, 2] });
+    const seen: number[] = [];
+    let emitFromSink = true;
+    hub.register((n) => {
+      seen.push(n);
+      if (emitFromSink) {
+        emitFromSink = false;
+        hub.emit(99);
+        hub.emit(98);
+      }
+    });
+    hub.emit(100);
+    expect(seen).toEqual([1, 2, 99, 98, 100]);
+  });
+
+  it("keeps a chain of emits made while the pending events drain", async () => {
+    const hub = sseHub<number>({
+      snapshot: () => [1],
+      frame: (n) => {
+        if (n >= 10 && n < 13) hub.emit(n + 1);
+        return { data: String(n) };
+      },
+    });
+    let first = true;
+    const seen: number[] = [];
+    hub.register((n) => {
+      seen.push(n);
+      if (first) {
+        first = false;
+        hub.emit(10);
+      }
+    });
+    expect(seen).toEqual([1, 13, 12, 11, 10]);
+    const client = tap(hub.open());
+    hub.emit(20);
+    await flush();
+    expect(client.text()).toBe("data: 1\n\ndata: 20\n\n");
+    await client.cancel();
   });
 });
 

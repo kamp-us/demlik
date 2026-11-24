@@ -43,8 +43,9 @@ export interface SseHub<E> {
  *   - `event` becomes the `event:` field, so a browser `EventSource` delivers
  *     the frame to `addEventListener(event)` instead of `onmessage`. Leave it
  *     out for an unnamed `message` event.
- *   - `data` becomes one `data:` line per line of the string, so a payload
- *     holding line breaks reaches the client as the same string.
+ *   - `data` becomes one `data:` line per line of the string. The client joins
+ *     those lines with `\n`, so every line break in `data` (`\n`, `\r\n` or
+ *     `\r`) arrives as `\n`.
  *   - `id` becomes the `id:` field, the client's last event ID.
  *
  * `event` and `id` hold no line break, and `id` holds no NUL: a frame that
@@ -76,15 +77,17 @@ export interface SseHubOptions<E> {
   /**
    * Map an event to its SSE fields. Defaults to `{ data: JSON.stringify(event) }`.
    * A throw from it, or an {@link SseFrameError} for the fields it returns,
-   * propagates out of `emit` or `open` to the host; the event is not dropped
-   * silently.
+   * propagates out of `emit` or `open` to the host, and the event reaches no
+   * stream and no registered sink.
    */
   readonly frame?: (event: E) => SseFrame;
   /**
    * Write a comment frame (`: keepalive`) to each open stream every
    * `keepaliveMs` milliseconds, so a proxy does not close an idle stream. The
    * hub owns one interval per open stream and clears it when that stream is
-   * cancelled or the hub is closed. Off when left out.
+   * cancelled or the hub is closed. While a stream's client is not reading,
+   * no further comment is queued for it. Off when left out; anything but a
+   * finite number above 0 makes `sseHub` throw a `RangeError`.
    */
   readonly keepaliveMs?: number;
   /**
@@ -153,7 +156,9 @@ type Stream = {
   readonly end: () => void;
 };
 
-type Opening<E> = { readonly pending: E[] };
+type Delivery<E> = { readonly event: E; readonly bytes: Uint8Array | null };
+
+type Opening<E> = { readonly pending: Delivery<E>[] };
 
 /**
  * Build an SSE hub for event type `E` (the consumer's domain event shape).
@@ -189,59 +194,65 @@ type Opening<E> = { readonly pending: E[] };
  */
 export function sseHub<E>(options: SseHubOptions<E> = {}): SseStreamHub<E> {
   const { frame, keepaliveMs, snapshot } = options;
+  if (
+    keepaliveMs !== undefined &&
+    !(Number.isFinite(keepaliveMs) && keepaliveMs > 0)
+  ) {
+    throw new RangeError(
+      `sseHub keepaliveMs must be a finite number above 0, got ${keepaliveMs}`,
+    );
+  }
   const sinks = new Set<(event: E) => void>();
   const streams = new Set<Stream>();
   const openings = new Set<Opening<E>>();
   const encoder = new TextEncoder();
   let closed = false;
 
-  const encode = (event: E): Uint8Array =>
-    encoder.encode(
-      frame === undefined
-        ? `data: ${JSON.stringify(event)}\n\n`
-        : writeFrame(frame(event)),
-    );
-
-  const takeSnapshot = (): { events: E[]; pending: E[] } => {
-    const opening: Opening<E> = { pending: [] };
-    openings.add(opening);
+  const encode = (event: E): Uint8Array | null => {
+    if (frame !== undefined) return encoder.encode(writeFrame(frame(event)));
     try {
-      return {
-        events: snapshot === undefined ? [] : [...snapshot()],
-        pending: opening.pending,
-      };
-    } finally {
-      openings.delete(opening);
+      return encoder.encode(`data: ${JSON.stringify(event)}\n\n`);
+    } catch {
+      return null;
     }
   };
 
+  const join = (
+    fromSnapshot: (event: E) => void,
+    fromLive: (delivery: Delivery<E>) => void,
+    subscribe: () => void,
+  ): void => {
+    const opening: Opening<E> = { pending: [] };
+    openings.add(opening);
+    try {
+      const events = snapshot === undefined ? [] : [...snapshot()];
+      for (const event of events) fromSnapshot(event);
+      for (
+        let next = opening.pending.shift();
+        next !== undefined;
+        next = opening.pending.shift()
+      ) {
+        fromLive(next);
+      }
+    } finally {
+      openings.delete(opening);
+    }
+    if (!closed) subscribe();
+  };
+
   const fanOut = (event: E): void => {
-    for (const opening of openings) opening.pending.push(event);
+    const bytes =
+      frame !== undefined || streams.size > 0 || openings.size > 0
+        ? encode(event)
+        : null;
+    for (const opening of openings) opening.pending.push({ event, bytes });
     for (const sink of sinks) {
       try {
         sink(event);
-      } catch {
-        /* broken stream — dropped on its cancel */
-      }
+      } catch {}
     }
-    if (streams.size === 0) return;
-    let bytes: Uint8Array;
-    if (frame === undefined) {
-      try {
-        bytes = encode(event);
-      } catch {
-        return;
-      }
-    } else {
-      bytes = encode(event);
-    }
-    for (const stream of streams) {
-      try {
-        stream.write(bytes);
-      } catch {
-        /* broken stream — dropped on its cancel */
-      }
-    }
+    if (bytes === null) return;
+    for (const stream of [...streams]) stream.write(bytes);
   };
 
   return {
@@ -253,52 +264,72 @@ export function sseHub<E>(options: SseHubOptions<E> = {}): SseStreamHub<E> {
       fanOut(event);
     },
     open() {
-      let stream: Stream | undefined;
+      let live: Stream | undefined;
       let timer: ReturnType<typeof setInterval> | undefined;
+      let unread = false;
       const stop = (): void => {
         if (timer !== undefined) clearInterval(timer);
         timer = undefined;
-        if (stream !== undefined) streams.delete(stream);
+        if (live !== undefined) streams.delete(live);
       };
       const body = new ReadableStream<Uint8Array>({
         start: (controller) => {
-          const { events, pending } = takeSnapshot();
-          for (const event of [...events, ...pending]) {
-            controller.enqueue(encode(event));
-          }
-          if (closed) {
-            controller.close();
-            return;
-          }
-          const live: Stream = {
-            write: (chunk) => controller.enqueue(chunk),
-            end: () => {
-              stop();
-              controller.close();
-            },
+          const put = (bytes: Uint8Array | null): void => {
+            if (bytes !== null) controller.enqueue(bytes);
           };
-          stream = live;
-          streams.add(live);
-          if (keepaliveMs !== undefined) {
-            const comment = encoder.encode(KEEPALIVE_FRAME);
-            timer = setInterval(() => {
-              try {
-                controller.enqueue(comment);
-              } catch {
-                stop();
-              }
-            }, keepaliveMs);
-          }
+          join(
+            (event) => put(encode(event)),
+            (delivery) => put(delivery.bytes),
+            () => {
+              live = {
+                write: (chunk) => {
+                  try {
+                    controller.enqueue(chunk);
+                  } catch {
+                    stop();
+                  }
+                },
+                end: () => {
+                  stop();
+                  try {
+                    controller.close();
+                  } catch {}
+                },
+              };
+              streams.add(live);
+              if (keepaliveMs === undefined) return;
+              const comment = encoder.encode(KEEPALIVE_FRAME);
+              timer = setInterval(() => {
+                const room = controller.desiredSize;
+                if (room === null) {
+                  stop();
+                  return;
+                }
+                if (room <= 0 && unread) return;
+                unread = true;
+                try {
+                  controller.enqueue(comment);
+                } catch {
+                  stop();
+                }
+              }, keepaliveMs);
+            },
+          );
+          if (closed) controller.close();
+        },
+        pull: () => {
+          unread = false;
         },
         cancel: stop,
       });
       return new Response(body, { headers: SSE_HEADERS });
     },
     register(sink) {
-      const { events, pending } = takeSnapshot();
-      for (const event of [...events, ...pending]) sink(event);
-      if (closed) return () => {};
-      sinks.add(sink);
+      join(
+        sink,
+        (delivery) => sink(delivery.event),
+        () => sinks.add(sink),
+      );
       return () => {
         sinks.delete(sink);
       };
@@ -307,13 +338,7 @@ export function sseHub<E>(options: SseHubOptions<E> = {}): SseStreamHub<E> {
       if (closed) return;
       closed = true;
       sinks.clear();
-      for (const stream of [...streams]) {
-        try {
-          stream.end();
-        } catch {
-          /* already ended by its reader */
-        }
-      }
+      for (const stream of [...streams]) stream.end();
       streams.clear();
     },
   };

@@ -1886,15 +1886,17 @@ interface SseHubOptions<E> {
   /**
    * Map an event to its SSE fields. Defaults to `{ data: JSON.stringify(event) }`.
    * A throw from it, or an SseFrameError for the fields it returns,
-   * propagates out of `emit` or `open` to the host; the event is not dropped
-   * silently.
+   * propagates out of `emit` or `open` to the host, and the event reaches no
+   * stream and no registered sink.
    */
   readonly frame?: (event: E) => SseFrame;
   /**
    * Write a comment frame (`: keepalive`) to each open stream every
    * `keepaliveMs` milliseconds, so a proxy does not close an idle stream. The
    * hub owns one interval per open stream and clears it when that stream is
-   * cancelled or the hub is closed. Off when left out.
+   * cancelled or the hub is closed. While a stream's client is not reading,
+   * no further comment is queued for it. Off when left out; anything but a
+   * finite number above 0 makes `sseHub` throw a `RangeError`.
    */
   readonly keepaliveMs?: number;
   /**
