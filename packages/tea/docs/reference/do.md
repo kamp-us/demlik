@@ -1130,8 +1130,9 @@ interface EventSourcedStore<S, M> {
    * `restoreRetryLimit` is spent, load throws RestoreInterruptedError
    * before expensive reads. The engine preserves it as StoreRefusedError.cause.
    * A log that holds an oversized marker (`recording.maxRowBytes`) is refused
-   * the same way, with RecordingUnavailableError naming the marker's
-   * seq, before the snapshot or journal is read.
+   * with RecordingUnavailableError naming the marker's seq, read from
+   * the meta cell before any restore attempt is recorded, so every load of it
+   * gives the same refusal and none spends the `restoreRetryLimit` budget.
    */
   readonly store: Store<S>;
   /**
