@@ -5,7 +5,7 @@
  * the replay reproduces the transitions with no second model of the loop.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   parseJSONL,
   type Recorder,
@@ -299,39 +299,23 @@ describe("runStepLoop as a machine", () => {
   });
 
   it("records a deadline that fell due during a step as a Msg, so the replay ends where the drive did", async () => {
-    let clock = 0;
-    let wakeDeadline: (() => void) | undefined;
-    let running: (() => void) | undefined;
-    const stepStarted = new Promise<void>((resolve) => {
-      running = resolve;
-    });
+    vi.useFakeTimers();
     let recording: Recorder<State, Msg> | undefined;
 
     const drive = runStepLoop<string, Input, Output>(
       "token",
       "run-deadline",
       async () => step,
-      () => {
-        running?.();
-        return new Promise<string>(() => {});
-      },
+      () => new Promise<string>(() => {}),
       {
-        deadlineMs: 1_000,
-        now: () => clock,
-        sleep: (ms) =>
-          new Promise<void>((resolve) => {
-            wakeDeadline = () => {
-              clock += ms;
-              resolve();
-            };
-          }),
+        deadlineMs: Date.now() + 1_000,
         attach: (runtime) => {
           recording = recorder(runtime, { captureSteps: true });
         },
       },
     );
-    await stepStarted;
-    wakeDeadline?.();
+    await vi.advanceTimersByTimeAsync(1_000);
+    vi.useRealTimers();
 
     await expect(drive).resolves.toEqual({ kind: "deadline_exceeded" });
     if (recording === undefined) throw new Error("attach was not called");

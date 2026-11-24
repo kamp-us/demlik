@@ -708,19 +708,24 @@ export interface ExecutedSteps<R> {
  */
 export interface RunStepLoopConfig<R = never, I = never, O = never> {
   /**
-   * Absolute wall-clock deadline (ms epoch) on `now()`. The drive ends with
-   * `deadline_exceeded` once it comes due, whatever is in flight then: a
-   * pending POST, a backoff or poll sleep, or a running `execute`. The drive
-   * stops waiting on that work and aborts the `signal` the transport and
-   * `execute` were handed. Between effects the loop also checks `now()` before
-   * each POST. Mirrors the poller's absolute-deadline contract (a resumed loop
-   * honors the SAME moment).
+   * Absolute wall-clock deadline (ms epoch) on `now()`. Before each POST the
+   * loop checks `now() >= deadlineMs` and stops with `deadline_exceeded`. A
+   * deadline that falls due while the drive waits, on a pending POST, a
+   * backoff or poll sleep, or a running `execute`, ends the drive then with
+   * `deadline_exceeded`: the drive stops waiting on that work and aborts the
+   * `signal` the transport, `execute` and `sleep` were handed. Mirrors the
+   * poller's absolute-deadline contract (a resumed loop honors the SAME
+   * moment).
    *
-   * The deadline comes due when `now()`, read after `sleep(deadlineMs -
-   * now())` resolves, has reached it; a sleep that returns early is slept
-   * again for what is left, and a clock that did not move across a sleep is
-   * taken never to reach it. `Infinity` sets no deadline and arms no timer.
-   * Once the drive returns, its timer is cleared.
+   * That in-flight stop is a `setTimeout` the drive owns, armed at the
+   * drive's first clock read for `deadlineMs - now()`. When it fires before
+   * `now()` has reached the deadline, as a `now` that is not the wall clock
+   * may make it, it is armed again for what is left. A wait longer than a
+   * timer can hold is armed in parts. `Infinity` arms none, and a deadline
+   * already passed is left to that first clock read. The timer is cleared
+   * when the drive returns, so it never keeps a process alive, and it calls
+   * neither `sleep` nor `now` until it fires. A `now` that throws when it
+   * fires rejects the drive with that error.
    */
   readonly deadlineMs: number;
   /**
@@ -745,11 +750,13 @@ export interface RunStepLoopConfig<R = never, I = never, O = never> {
   /** Clock, injected for determinism. Defaults to `Date.now`. */
   readonly now?: () => number;
   /**
-   * `(ms, signal) => Promise` sleep, injected for determinism. Defaults to a
-   * `setTimeout` sleep that the signal clears. The drive's deadline timer and
-   * its backoff and poll pauses all sleep through it. `signal` aborts when the
-   * deadline comes due or the drive is over: a sleep that resolves on abort
-   * leaves no timer behind, and one that ignores it still works.
+   * `(ms, signal) => Promise` sleep for the backoff and poll pauses, injected
+   * for determinism. Defaults to a `setTimeout` sleep that `signal` clears.
+   * `signal` aborts when the deadline falls due or the drive is over; the
+   * drive stops waiting on a pause then even if the sleep ignores it. The
+   * deadline itself never sleeps through it (see
+   * {@link RunStepLoopConfig.deadlineMs}), so a virtual-time sleep that moves
+   * an injected clock decides the deadline at the loop's clock reads.
    */
   readonly sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
   /** Backoff jitter RNG, injected for determinism. Defaults to `Math.random`. */
@@ -929,7 +936,7 @@ export function stepLoopMachine<R, I, O>(): Machine<
       deadline_passed: overdue,
       clock_read: (s, m) =>
         late(s, m.at)
-          ? finish({ kind: "deadline_exceeded" })
+          ? overdue()
           : [
               { _tag: "posting", ...carry(s), failures: initRetry() },
               [{ _tag: "post", posted: s.posted }],
@@ -982,7 +989,7 @@ export function stepLoopMachine<R, I, O>(): Machine<
         if (!shouldRetry(failures, s.policy, m.at)) {
           return finish({ kind: "gave_up", error: s.error });
         }
-        if (late(s, m.at)) return finish({ kind: "deadline_exceeded" });
+        if (late(s, m.at)) return overdue();
         return [
           { _tag: "backing_off", ...carry(s), failures },
           [{ _tag: "back_off", retry: failures, policy: s.policy }],
@@ -1000,7 +1007,7 @@ export function stepLoopMachine<R, I, O>(): Machine<
       deadline_passed: overdue,
       clock_read: (s, m) =>
         late(s, m.at)
-          ? finish({ kind: "deadline_exceeded" })
+          ? overdue()
           : [
               { _tag: "waiting", ...carry(s) },
               [
@@ -1129,13 +1136,42 @@ export async function runStepLoop<R, I, O>(
   const stop = new AbortController();
   const { signal } = stop;
   const call = { signal };
+  let armed = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let clockFailure: { readonly error: unknown } | undefined;
+  const armDeadline = (at: number): void => {
+    if (deadlineMs === null || signal.aborted) return;
+    const left = deadlineMs - at;
+    if (!(left > 0)) return;
+    timer = setTimeout(deadlineTimerFired, Math.min(left, maxTimeoutMs));
+  };
+  const deadlineTimerFired = (): void => {
+    timer = undefined;
+    let at: number;
+    try {
+      at = now();
+    } catch (error) {
+      clockFailure = { error };
+      stop.abort();
+      return;
+    }
+    if (deadlineMs !== null && at >= deadlineMs) stop.abort();
+    else armDeadline(at);
+  };
 
   const interpret: Interpret<
     StepLoopMsg<R, I, O>,
     StepLoopCmd<R, I>,
     unknown
   > = {
-    read_clock: async () => ({ _tag: "clock_read", at: now() }),
+    read_clock: async () => {
+      const at = now();
+      if (!armed) {
+        armed = true;
+        armDeadline(at);
+      }
+      return { _tag: "clock_read", at };
+    },
     post: async ({ posted }) => {
       try {
         const response = await untilAborted(
@@ -1165,6 +1201,7 @@ export async function runStepLoop<R, I, O>(
       } catch (error) {
         return { _tag: "store_failed", error };
       }
+      if (signal.aborted) return;
       if (saved === undefined) {
         let result: R | typeof aborted;
         try {
@@ -1198,24 +1235,25 @@ export async function runStepLoop<R, I, O>(
   });
   try {
     config.attach?.(handle);
-    if (deadlineMs !== null) {
-      void abortAtDeadline(deadlineMs, now, sleep, stop);
-    }
     const final = await driveToDone(
       handle,
       { _tag: "start", deadlineMs, policy },
       (state) => state._tag === "finished",
     );
+    if (clockFailure !== undefined) throw clockFailure.error;
     if (final._tag !== "finished") {
       throw new Error(`tea runStepLoop: the drive ended in "${final._tag}"`);
     }
     return final.outcome;
   } finally {
+    clearTimeout(timer);
     stop.abort();
   }
 }
 
 const aborted: unique symbol = Symbol("aborted");
+
+const maxTimeoutMs = 2 ** 31 - 1;
 
 function untilAborted<T>(
   work: Promise<T> | T,
@@ -1256,32 +1294,6 @@ function sleepUnlessAborted(ms: number, signal: AbortSignal): Promise<void> {
     const timer = setTimeout(wake, ms);
     signal.addEventListener("abort", wake, { once: true });
   });
-}
-
-async function abortAtDeadline(
-  deadlineMs: number,
-  now: () => number,
-  sleep: (ms: number, signal: AbortSignal) => Promise<void>,
-  stop: AbortController,
-): Promise<void> {
-  const { signal } = stop;
-  try {
-    let at = now();
-    if (!(at < deadlineMs)) return;
-    for (;;) {
-      await sleep(deadlineMs - at, signal);
-      if (signal.aborted) return;
-      const later = now();
-      if (later >= deadlineMs) {
-        stop.abort();
-        return;
-      }
-      if (!(later > at)) return;
-      at = later;
-    }
-  } catch {
-    return;
-  }
 }
 
 /** The default {@link ExecutedSteps}: lives as long as one drive. */

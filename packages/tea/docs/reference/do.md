@@ -1735,19 +1735,24 @@ function runStepLoop<R, I, O>(
 ```ts
 interface RunStepLoopConfig<R = never, I = never, O = never> {
   /**
-   * Absolute wall-clock deadline (ms epoch) on `now()`. The drive ends with
-   * `deadline_exceeded` once it comes due, whatever is in flight then: a
-   * pending POST, a backoff or poll sleep, or a running `execute`. The drive
-   * stops waiting on that work and aborts the `signal` the transport and
-   * `execute` were handed. Between effects the loop also checks `now()` before
-   * each POST. Mirrors the poller's absolute-deadline contract (a resumed loop
-   * honors the SAME moment).
+   * Absolute wall-clock deadline (ms epoch) on `now()`. Before each POST the
+   * loop checks `now() >= deadlineMs` and stops with `deadline_exceeded`. A
+   * deadline that falls due while the drive waits, on a pending POST, a
+   * backoff or poll sleep, or a running `execute`, ends the drive then with
+   * `deadline_exceeded`: the drive stops waiting on that work and aborts the
+   * `signal` the transport, `execute` and `sleep` were handed. Mirrors the
+   * poller's absolute-deadline contract (a resumed loop honors the SAME
+   * moment).
    *
-   * The deadline comes due when `now()`, read after `sleep(deadlineMs -
-   * now())` resolves, has reached it; a sleep that returns early is slept
-   * again for what is left, and a clock that did not move across a sleep is
-   * taken never to reach it. `Infinity` sets no deadline and arms no timer.
-   * Once the drive returns, its timer is cleared.
+   * That in-flight stop is a `setTimeout` the drive owns, armed at the
+   * drive's first clock read for `deadlineMs - now()`. When it fires before
+   * `now()` has reached the deadline, as a `now` that is not the wall clock
+   * may make it, it is armed again for what is left. A wait longer than a
+   * timer can hold is armed in parts. `Infinity` arms none, and a deadline
+   * already passed is left to that first clock read. The timer is cleared
+   * when the drive returns, so it never keeps a process alive, and it calls
+   * neither `sleep` nor `now` until it fires. A `now` that throws when it
+   * fires rejects the drive with that error.
    */
   readonly deadlineMs: number;
   /**
@@ -1774,11 +1779,13 @@ interface RunStepLoopConfig<R = never, I = never, O = never> {
   /** Backoff jitter RNG, injected for determinism. Defaults to `Math.random`. */
   readonly rng?: Rng;
   /**
-   * `(ms, signal) => Promise` sleep, injected for determinism. Defaults to a
-   * `setTimeout` sleep that the signal clears. The drive's deadline timer and
-   * its backoff and poll pauses all sleep through it. `signal` aborts when the
-   * deadline comes due or the drive is over: a sleep that resolves on abort
-   * leaves no timer behind, and one that ignores it still works.
+   * `(ms, signal) => Promise` sleep for the backoff and poll pauses, injected
+   * for determinism. Defaults to a `setTimeout` sleep that `signal` clears.
+   * `signal` aborts when the deadline falls due or the drive is over; the
+   * drive stops waiting on a pause then even if the sleep ignores it. The
+   * deadline itself never sleeps through it (see
+   * RunStepLoopConfig.deadlineMs), so a virtual-time sleep that moves
+   * an injected clock decides the deadline at the loop's clock reads.
    */
   readonly sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
   /**
