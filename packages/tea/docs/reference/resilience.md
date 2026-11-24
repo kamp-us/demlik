@@ -1302,7 +1302,7 @@ class RetryExhaustedError extends Error {
 function retryToSuccess<R>(
   port: () => Promise<R>,
   policy: RetryPolicy,
-  opts?: RetryToSuccessOptions,
+  opts?: RetryToSuccessOptions<R>,
 ): Promise<R>
 ```
 
@@ -1311,7 +1311,15 @@ function retryToSuccess<R>(
 ### `RetryToSuccessOptions`
 
 ```ts
-interface RetryToSuccessOptions {
+interface RetryToSuccessOptions<R = unknown> {
+  /**
+   * Whether a resolved value is a success. Defaults to `() => true`. A value it
+   * refuses counts as a failure on the same ladder as a retryable throw: it
+   * consumes budget, backs off, and on exhaustion is the
+   * RetryExhaustedError's `lastError`. `retryable` never sees it. An
+   * `accept` that throws rejects with its own throw, at once.
+   */
+  readonly accept?: (value: R) => boolean;
   /**
    * Whether a thrown failure may be retried. Defaults to `() => true`. When it
    * returns `false` the failure is terminal at once: `retryToSuccess` rejects

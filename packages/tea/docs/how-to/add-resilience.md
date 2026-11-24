@@ -280,3 +280,21 @@ the step loop's `runStepLoop` (from `@demlik/tea/do`) take an optional
 `runStepLoop` returns `gave_up` carrying it. `runStepLoop`'s `retry` also takes
 the duration bound of step 5, `maxElapsedMs`, measured on its `now()` from the
 first failed POST of a streak.
+
+Some ports report failure as a returned value rather than a throw: a status
+object with `ok: false`, a result union's error arm. `retryToSuccess` also takes
+`accept: (value) => boolean`, beside `retryable`, which defaults to `() => true`.
+A value it refuses is a failure on the same ladder as a retryable throw: it uses
+budget, backs off, and when the budget runs out it is the `RetryExhaustedError`'s
+`lastError`. `retryable` never sees it. An `accept` that throws rejects at once
+with its own throw.
+
+```ts
+import { retryToSuccess } from "@demlik/tea/resilience";
+
+declare function sendReport(): Promise<{ readonly ok: boolean; readonly status: number }>;
+
+const sent = await retryToSuccess(sendReport, defaultRetryPolicy, {
+  accept: (reply) => reply.ok,
+});
+```

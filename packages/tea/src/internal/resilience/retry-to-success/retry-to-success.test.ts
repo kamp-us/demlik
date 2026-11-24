@@ -165,4 +165,155 @@ describe("retryToSuccess", () => {
     expect(port).toHaveBeenCalledTimes(3);
     expect(delays).toEqual(expectedDelays(2));
   });
+
+  describe("accept", () => {
+    type Reply = { readonly ok: boolean; readonly n: number };
+
+    it("retries refused values on the backoff ladder and resolves the accepted one", async () => {
+      const { delays, sleep } = recordingSleep();
+      let calls = 0;
+      const port = vi.fn(async (): Promise<Reply> => {
+        calls += 1;
+        return { ok: calls >= 3, n: calls };
+      });
+
+      await expect(
+        retryToSuccess(port, policy, { rng, sleep, accept: (v) => v.ok }),
+      ).resolves.toEqual({ ok: true, n: 3 });
+      expect(port).toHaveBeenCalledTimes(3);
+      expect(delays).toEqual(expectedDelays(2));
+    });
+
+    it("rejects with RetryExhaustedError carrying the last refused value", async () => {
+      const { delays, sleep } = recordingSleep();
+      const seen: Reply[] = [];
+      const port = vi.fn(async (): Promise<Reply> => {
+        const reply = { ok: false, n: seen.length + 1 };
+        seen.push(reply);
+        return reply;
+      });
+
+      const rejection = await retryToSuccess(port, policy, {
+        rng,
+        sleep,
+        accept: (v) => v.ok,
+      }).then(
+        () => {
+          throw new Error("expected retryToSuccess to reject at the bound");
+        },
+        (err: unknown) => err,
+      );
+
+      expect(rejection).toBeInstanceOf(RetryExhaustedError);
+      const exhausted = rejection as RetryExhaustedError;
+      expect(exhausted.attempts).toBe(policy.maxAttempts);
+      expect(port).toHaveBeenCalledTimes(policy.maxAttempts);
+      expect(exhausted.lastError).toBe(seen[seen.length - 1]);
+      expect(exhausted.lastError).toEqual({ ok: false, n: policy.maxAttempts });
+      expect(delays).toEqual(expectedDelays(policy.maxAttempts - 1));
+    });
+
+    it("rethrows a throw `retryable` refuses at once, even with `accept` set", async () => {
+      const { delays, sleep } = recordingSleep();
+      const fatal = new Error("401");
+      const accept = vi.fn((v: Reply) => v.ok);
+      const port = vi.fn(async (): Promise<Reply> => {
+        throw fatal;
+      });
+
+      await expect(
+        retryToSuccess(port, policy, {
+          rng,
+          sleep,
+          accept,
+          retryable: () => false,
+        }),
+      ).rejects.toBe(fatal);
+      expect(port).toHaveBeenCalledTimes(1);
+      expect(accept).not.toHaveBeenCalled();
+      expect(delays).toEqual([]);
+    });
+
+    it("counts a refused value and a retryable throw against one budget", async () => {
+      const { delays, sleep } = recordingSleep();
+      const retryable = vi.fn(() => true);
+      const steps: Array<() => Reply> = [
+        () => ({ ok: false, n: 1 }),
+        () => {
+          throw new Error("transient");
+        },
+        () => ({ ok: true, n: 3 }),
+      ];
+      const port = vi.fn(async (): Promise<Reply> => {
+        const step = steps.shift();
+        if (step === undefined) throw new Error("port called too often");
+        return step();
+      });
+
+      await expect(
+        retryToSuccess(port, policy, {
+          rng,
+          sleep,
+          retryable,
+          accept: (v) => v.ok,
+        }),
+      ).resolves.toEqual({ ok: true, n: 3 });
+      expect(port).toHaveBeenCalledTimes(3);
+      expect(retryable).toHaveBeenCalledTimes(1);
+      expect(delays).toEqual(expectedDelays(2));
+
+      const tight: RetryPolicy = { ...policy, maxAttempts: 2 };
+      const again: Array<() => Reply> = [
+        () => ({ ok: false, n: 1 }),
+        () => {
+          throw new Error("transient");
+        },
+        () => ({ ok: true, n: 3 }),
+      ];
+      await expect(
+        retryToSuccess(
+          async (): Promise<Reply> => {
+            const step = again.shift();
+            if (step === undefined) throw new Error("port called too often");
+            return step();
+          },
+          tight,
+          { rng, sleep: async () => {}, accept: (v) => v.ok },
+        ),
+      ).rejects.toBeInstanceOf(RetryExhaustedError);
+    });
+
+    it("rejects with the throw of `accept` on the first call, with no sleep", async () => {
+      const { delays, sleep } = recordingSleep();
+      const broken = new Error("accept broke");
+      const retryable = vi.fn(() => true);
+      const port = vi.fn(async (): Promise<Reply> => ({ ok: false, n: 1 }));
+
+      await expect(
+        retryToSuccess(port, policy, {
+          rng,
+          sleep,
+          retryable,
+          accept: () => {
+            throw broken;
+          },
+        }),
+      ).rejects.toBe(broken);
+      expect(port).toHaveBeenCalledTimes(1);
+      expect(retryable).not.toHaveBeenCalled();
+      expect(delays).toEqual([]);
+    });
+
+    it("returns any resolved value at once when `accept` is left out", async () => {
+      const { delays, sleep } = recordingSleep();
+      const refused = { ok: false, n: 1 };
+      const port = vi.fn(async (): Promise<Reply> => refused);
+
+      await expect(retryToSuccess(port, policy, { rng, sleep })).resolves.toBe(
+        refused,
+      );
+      expect(port).toHaveBeenCalledTimes(1);
+      expect(delays).toEqual([]);
+    });
+  });
 });
