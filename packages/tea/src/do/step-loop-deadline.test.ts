@@ -176,6 +176,34 @@ describe("runStepLoop's deadline", () => {
     await vi.advanceTimersByTimeAsync(1_000);
 
     expect(started).toBe(0);
+    expect(warn).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each([
+    {
+      call: "get",
+      executed: { get: () => never<undefined>(), set: () => {} },
+    },
+    {
+      call: "set",
+      executed: { get: () => undefined, set: () => never<void>() },
+    },
+  ])("ends a drive at its deadline while executed.$call hangs, with no warning and no timer left", async ({
+    executed,
+  }) => {
+    const drive = runStepLoop<string, Input, Output>(
+      "token",
+      "run-hung-store",
+      async () => stepNo(1),
+      (next) => `${next.tool}!`,
+      { deadlineMs: Date.now() + 1_000, executed },
+    );
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    await expect(drive).resolves.toEqual({ kind: "deadline_exceeded" });
+    expect(warn).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it("ends a drive at its deadline inside a backoff sleep, and aborts that sleep's signal", async () => {

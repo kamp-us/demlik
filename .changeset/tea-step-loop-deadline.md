@@ -2,7 +2,7 @@
 "@demlik/tea": minor
 ---
 
-**Breaking (types only):** `StepTransport` and `ExecuteStep` (`@demlik/tea/do`) are now called with a second argument, `{ signal }`, and `RunStepLoopConfig.sleep` with `(ms, signal)`. A function that declares fewer parameters still fits, so implementations compile unchanged. What breaks is code that calls such a value itself, such as a wrapper that forwards to an inner `ExecuteStep` with one argument: it must now pass the second argument. `StepLoopMsg` gains a `deadline_passed` variant, so an exhaustive `switch` over it needs one more case. The injected `now` and `sleep` are called in the same sequence as before.
+**Breaking (call arguments change):** `StepTransport` and `ExecuteStep` (`@demlik/tea/do`) are now called with a second argument, `{ signal }`, and `RunStepLoopConfig.sleep` with `(ms, signal)`. A function that declares fewer parameters still fits, so implementations compile unchanged. Two kinds of code break. Code that calls such a value itself, such as a wrapper that forwards to an inner `ExecuteStep` with one argument, must now pass the second argument. A test double that asserts the exact call, such as `expect(transport).toHaveBeenCalledWith(request)`, now sees two arguments. `StepLoopMsg` gains a `deadline_passed` variant, so an exhaustive `switch` over it needs one more case. The injected `now` and `sleep` are called in the same sequence as before, except when the deadline timer fires.
 
 `runStepLoop` ends a drive with `deadline_exceeded` when `deadlineMs` falls due, even while a `/step` POST, a backoff or poll sleep, or `execute` is still pending.
 

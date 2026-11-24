@@ -75,6 +75,7 @@ import {
   type Sub,
   type Transitions,
 } from "../index";
+import { defaultOnError } from "../internal/engine/loop";
 import { createIntake } from "../internal/idempotency/idempotent-intake/index";
 import { driveToDone, run } from "../promise";
 import {
@@ -88,6 +89,7 @@ import {
   shouldRetry,
   type TimedRetryState,
 } from "../retry-backoff/index";
+import { RuntimeDiscardedError } from "../runtime-types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The `/step` request/response envelope (#92.1).
@@ -1139,6 +1141,7 @@ export async function runStepLoop<R, I, O>(
   let armed = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let clockFailure: { readonly error: unknown } | undefined;
+  let deadlineFell = false;
   const armDeadline = (at: number): void => {
     if (deadlineMs === null || signal.aborted) return;
     const left = deadlineMs - at;
@@ -1152,11 +1155,14 @@ export async function runStepLoop<R, I, O>(
       at = now();
     } catch (error) {
       clockFailure = { error };
+      deadlineFell = true;
       stop.abort();
       return;
     }
-    if (deadlineMs !== null && at >= deadlineMs) stop.abort();
-    else armDeadline(at);
+    if (deadlineMs !== null && at >= deadlineMs) {
+      deadlineFell = true;
+      stop.abort();
+    } else armDeadline(at);
   };
 
   const interpret: Interpret<
@@ -1174,24 +1180,21 @@ export async function runStepLoop<R, I, O>(
     },
     post: async ({ posted }) => {
       try {
-        const response = await untilAborted(
-          transport({ token, runId, posted }, call),
-          signal,
-        );
-        if (response === aborted) return;
-        return { _tag: "responded", response };
+        return {
+          _tag: "responded",
+          response: await transport({ token, runId, posted }, call),
+        };
       } catch (error) {
-        if (signal.aborted) return;
         return { _tag: "post_failed", error, retryable: retryable(error) };
       }
     },
     sleep: async ({ ms }) => {
-      if ((await untilAborted(sleep(ms, signal), signal)) === aborted) return;
+      await sleep(ms, signal);
       return { _tag: "slept", ms };
     },
     back_off: async ({ retry, policy }) => {
       const ms = nextDelayMs(retry, policy, rng);
-      if ((await untilAborted(sleep(ms, signal), signal)) === aborted) return;
+      await sleep(ms, signal);
       return { _tag: "slept", ms };
     },
     run_step: async ({ step }) => {
@@ -1203,15 +1206,7 @@ export async function runStepLoop<R, I, O>(
       }
       if (signal.aborted) return;
       if (saved === undefined) {
-        let result: R | typeof aborted;
-        try {
-          result = await untilAborted(execute(step, call), signal);
-        } catch (error) {
-          if (signal.aborted) return;
-          throw error;
-        }
-        if (result === aborted) return;
-        saved = { result };
+        saved = { result: await execute(step, call) };
         try {
           await executed.set(step.callId, saved);
         } catch (error) {
@@ -1224,6 +1219,12 @@ export async function runStepLoop<R, I, O>(
 
   const handle = run(stepLoopMachine<R, I, O>(), {
     interpret,
+    onError: (error, context) => {
+      const abandoned =
+        error instanceof RuntimeDiscardedError || context.phase === "follow-up";
+      if (deadlineFell && abandoned) return;
+      defaultOnError(error, context);
+    },
     ...(deadlineMs === null
       ? {}
       : {
@@ -1251,34 +1252,7 @@ export async function runStepLoop<R, I, O>(
   }
 }
 
-const aborted: unique symbol = Symbol("aborted");
-
 const maxTimeoutMs = 2 ** 31 - 1;
-
-function untilAborted<T>(
-  work: Promise<T> | T,
-  signal: AbortSignal,
-): Promise<T | typeof aborted> {
-  if (signal.aborted) {
-    Promise.resolve(work).catch(() => {});
-    return Promise.resolve(aborted);
-  }
-  return new Promise<T | typeof aborted>((resolve, reject) => {
-    const onAbort = (): void => resolve(aborted);
-    signal.addEventListener("abort", onAbort, { once: true });
-    Promise.resolve(work).then(
-      (value) => {
-        signal.removeEventListener("abort", onAbort);
-        resolve(value);
-      },
-      (error: unknown) => {
-        signal.removeEventListener("abort", onAbort);
-        if (signal.aborted) resolve(aborted);
-        else reject(error);
-      },
-    );
-  });
-}
 
 function sleepUnlessAborted(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
