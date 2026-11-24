@@ -20,7 +20,7 @@ import type {
 class FakeEventSource implements MinimalEventSource {
   static instances: FakeEventSource[] = [];
   closed = false;
-  readyState: 0 | 1 | 2 = 0;
+  readyState: MinimalEventSource["readyState"] = 0;
   private readonly listeners = new Map<
     string,
     Set<(e: MinimalEvent) => void>
@@ -49,7 +49,7 @@ class FakeEventSource implements MinimalEventSource {
     const event: MinimalServerSentMessageEvent = { type, data, lastEventId };
     for (const l of this.listeners.get(type) ?? []) l(event);
   }
-  fireError(readyState: 0 | 1 | 2 = 0): void {
+  fireError(readyState: MinimalEventSource["readyState"] = 0): void {
     this.readyState = readyState;
     for (const l of this.listeners.get("error") ?? []) l({ type: "error" });
   }

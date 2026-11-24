@@ -1,6 +1,7 @@
 import type { Sub } from "../index";
 import type {
   MinimalEvent,
+  MinimalEventSource,
   MinimalEventSourceCtor,
   MinimalMessageEvent,
   MinimalServerSentMessageEvent,
@@ -34,7 +35,10 @@ const READY_STATES = {
   0: "connecting",
   1: "open",
   2: "closed",
-} as const satisfies Record<0 | 1 | 2, EventSourceReadyState>;
+} as const satisfies Record<
+  MinimalEventSource["readyState"],
+  EventSourceReadyState
+>;
 
 const LIFECYCLE_TYPES: ReadonlySet<string> = new Set<EventSourceLifecycleType>([
   "open",
