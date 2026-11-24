@@ -8,7 +8,7 @@ Tier: `battery`
 import { … } from "@demlik/tea/paginate";
 ```
 
-## Exports (18)
+## Exports (20)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -18,6 +18,8 @@ import { … } from "@demlik/tea/paginate";
 | [`FetchPageCmd`](#FetchPageCmd) | Type | battery | The page-fetch effect this knob emits: the inherited `resilient_run` Cmd from resilient-call, whose `input` is the `Cursor` to fetch and whose `key` is the fixed `PAGE_KEY`. |
 | [`initPaginator`](#initPaginator) | Function | battery | The starting state: idle, nothing seen, no pages recorded. |
 | [`isDone`](#isDone) | Function | battery | Whether the walk has finished (the API returned a null next cursor). |
+| [`iteratePages`](#iteratePages) | Function | battery | Walk a paginated API as a pull-driven async iterator that yields each page unchanged — the shape of the AWS SDK v3 paginators. |
+| [`IteratePagesConfig`](#IteratePagesConfig) | Interface | battery | The page iterator's config. |
 | [`liftWalk`](#liftWalk) | Function | battery | Lift a knob result `[slice, cmds]` into a host `[State, cmds]` where the slice lives at `state.walk`. |
 | [`PAGE_KEY`](#PAGE_KEY) | Variable | battery | The single resilient-call key every page fetch runs under. |
 | [`PageErrMsg`](#PageErrMsg) | Type | battery | The Msg the engine mints when the page-fetch handler fails. |
@@ -258,6 +260,28 @@ function initPaginator<Cursor>(): PaginatorState<Cursor>
 
 ```ts
 function isDone<Cursor>(state: PaginatorState<Cursor>): boolean
+```
+
+<a id="iteratePages"></a>
+
+### `iteratePages`
+
+```ts
+function iteratePages<Cursor, Page>(
+  config: IteratePagesConfig<Cursor, Page>,
+): AsyncGenerator<Page, void, undefined>
+```
+
+<a id="IteratePagesConfig"></a>
+
+### `IteratePagesConfig`
+
+```ts
+interface IteratePagesConfig<Cursor, Page> {
+  readonly fetchPage: (cursor: Cursor) => Promise<Page>;
+  readonly firstCursor: Cursor;
+  readonly nextCursor: (page: Page) => Cursor | null | undefined;
+}
 ```
 
 <a id="liftWalk"></a>

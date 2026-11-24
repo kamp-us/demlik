@@ -16,5 +16,9 @@
  * which may break in a minor provided the changelog for that minor says so.
  */
 
+export {
+  type IteratePagesConfig,
+  iteratePages,
+} from "../internal/paginate/iterate-pages";
 export * from "../internal/paginate/paginated-walk";
 export * from "../internal/paginate/paginator";
