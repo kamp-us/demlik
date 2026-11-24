@@ -48,15 +48,28 @@ export interface MinimalBroadcastChannelCtor {
   new (name: string): MinimalBroadcastChannel;
 }
 
+export interface MinimalServerSentMessageEvent extends MinimalMessageEvent {
+  readonly lastEventId: string;
+}
+
 export interface MinimalEventSource {
+  readonly readyState: number;
   addEventListener(
     type: "message",
     listener: (event: MinimalMessageEvent) => void,
+  ): void;
+  addEventListener(
+    type: string,
+    listener: (event: MinimalServerSentMessageEvent) => void,
   ): void;
   addEventListener(type: string, listener: (event: MinimalEvent) => void): void;
   removeEventListener(
     type: "message",
     listener: (event: MinimalMessageEvent) => void,
+  ): void;
+  removeEventListener(
+    type: string,
+    listener: (event: MinimalServerSentMessageEvent) => void,
   ): void;
   removeEventListener(
     type: string,
