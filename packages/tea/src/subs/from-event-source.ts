@@ -113,13 +113,21 @@ function readyStateOf(state: number): EventSourceReadyState {
  *
  * @example
  * ```ts
- * const subscribe = {
+ * import { fromEventSource, type Sub } from "@demlik/tea";
+ *
+ * type FeedSub = Sub<"feed", { readonly url: string }>;
+ * type Msg =
+ *   | { _tag: "entry_received"; body: string; id: string }
+ *   | { _tag: "feed_reset" }
+ *   | { _tag: "feed_lost" };
+ *
+ * export const subscribe = {
  *   feed: fromEventSource<FeedSub, Msg, "entry" | "reset">({
  *     events: {
  *       types: ["entry", "reset"],
  *       onEvent: (e) =>
  *         e.type === "entry"
- *           ? { _tag: "entry_received", body: JSON.parse(e.data), id: e.lastEventId }
+ *           ? { _tag: "entry_received", body: e.data, id: e.lastEventId }
  *           : { _tag: "feed_reset" },
  *     },
  *     onError: (_e, _sub, readyState) =>
@@ -143,9 +151,7 @@ export function fromEventSource<
         dispatchIfPresent(dispatch, onMessage(event.data as string, sub));
       };
       source.addEventListener("message", messageListener);
-      detach.push(() =>
-        source.removeEventListener("message", messageListener),
-      );
+      detach.push(() => source.removeEventListener("message", messageListener));
     }
 
     const events = opts.events;

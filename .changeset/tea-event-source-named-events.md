@@ -2,7 +2,7 @@
 "@demlik/tea": minor
 ---
 
-`fromEventSource` receives named server-sent events and tells a closed source from a reconnecting one.
+**Additive (declaration only):** `fromEventSource` receives named server-sent events and tells a closed source from a reconnecting one.
 
 - `events: { types, onEvent }` lists the SSE `event:` names a host receives; one `onEvent` maps each event's `type`, `data` and `lastEventId` to a Msg, or to `null` to drop it. A type the host does not list dispatches nothing.
 - `onError` receives a third argument, `readyState` (`"connecting" | "open" | "closed"`), so a host can tell a source the browser gave up on from one that is reconnecting without holding the `EventSource`.
