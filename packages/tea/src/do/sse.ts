@@ -36,49 +36,284 @@ export interface SseHub<E> {
   register(sink: (event: E) => void): () => void;
 }
 
-/** Build an SSE hub for event type `E` (the consumer's domain event shape). */
-export function sseHub<E>(): SseHub<E> {
+/**
+ * The SSE fields one event is written as, per the event stream format of the
+ * HTML Living Standard ("Server-sent events").
+ *
+ *   - `event` becomes the `event:` field, so a browser `EventSource` delivers
+ *     the frame to `addEventListener(event)` instead of `onmessage`. Leave it
+ *     out for an unnamed `message` event.
+ *   - `data` becomes one `data:` line per line of the string, so a payload
+ *     holding line breaks reaches the client as the same string.
+ *   - `id` becomes the `id:` field, the client's last event ID.
+ *
+ * `event` and `id` hold no line break, and `id` holds no NUL: a frame that
+ * breaks either rule throws {@link SseFrameError} out of `emit` or `open`.
+ */
+export interface SseFrame {
+  readonly event?: string;
+  readonly data: string;
+  readonly id?: string;
+}
+
+/** Thrown when an {@link SseFrame} has a field the event stream cannot carry. */
+export class SseFrameError extends Error {
+  /** The field that cannot be written. */
+  readonly field: "event" | "id";
+
+  constructor(field: "event" | "id", reason: string) {
+    super(`SSE frame field "${field}" ${reason}`);
+    this.name = "SseFrameError";
+    this.field = field;
+  }
+}
+
+/**
+ * Options for {@link sseHub}. Every option is optional; with none the hub
+ * writes exactly what it always has: `data: <json>\n\n` per event.
+ */
+export interface SseHubOptions<E> {
+  /**
+   * Map an event to its SSE fields. Defaults to `{ data: JSON.stringify(event) }`.
+   * A throw (or an {@link SseFrameError} from the returned fields) leaves
+   * `emit` or `open` to the host instead of dropping the event.
+   */
+  readonly frame?: (event: E) => SseFrame;
+  /**
+   * Write a comment frame (`: keepalive`) to each open stream every
+   * `keepaliveMs` milliseconds, so a proxy does not close an idle stream. The
+   * hub owns one interval per open stream and clears it when that stream is
+   * cancelled or the hub is closed. Off when left out.
+   */
+  readonly keepaliveMs?: number;
+  /**
+   * The events a client that connects now receives before any live event,
+   * asked for each time a stream opens (and each time `register` is called).
+   * Which events it holds is the host's decision; the hub keeps no buffer of
+   * its own. It is called synchronously in the same step that subscribes the
+   * new stream, so every event emitted before `open` belongs in the snapshot
+   * and every event emitted after reaches the stream live. An event emitted
+   * while the snapshot is being taken is delivered live, after the snapshot.
+   */
+  readonly snapshot?: () => Iterable<E>;
+}
+
+/**
+ * An {@link SseHub} that can also end every stream it has opened. What
+ * {@link sseHub} returns.
+ */
+export interface SseStreamHub<E> extends SseHub<E> {
+  /**
+   * End every open stream and drop every registered sink. After `close`,
+   * `emit` reaches no one, `open` returns a stream that carries the snapshot
+   * and then ends, and `register` hands the sink the snapshot and subscribes
+   * nothing. Calling it again does nothing.
+   */
+  close(): void;
+  /** Whether {@link SseStreamHub.close} has been called. */
+  readonly closed: boolean;
+}
+
+const SSE_HEADERS = {
+  "content-type": "text/event-stream",
+  "cache-control": "no-cache",
+  connection: "keep-alive",
+} as const;
+
+const KEEPALIVE_FRAME = ": keepalive\n\n";
+
+function checkField(field: "event" | "id", value: string): void {
+  if (/[\r\n]/.test(value)) {
+    throw new SseFrameError(field, "must not contain a line break");
+  }
+  if (field === "id" && value.includes("\0")) {
+    throw new SseFrameError(field, "must not contain NUL");
+  }
+}
+
+function writeFrame(frame: SseFrame): string {
+  let text = "";
+  if (frame.event !== undefined) {
+    checkField("event", frame.event);
+    text += `event: ${frame.event}\n`;
+  }
+  if (frame.id !== undefined) {
+    checkField("id", frame.id);
+    text += `id: ${frame.id}\n`;
+  }
+  for (const line of frame.data.split(/\r\n|\r|\n/)) {
+    text += `data: ${line}\n`;
+  }
+  return `${text}\n`;
+}
+
+type Stream = {
+  readonly write: (chunk: Uint8Array) => void;
+  readonly end: () => void;
+};
+
+type Opening<E> = { readonly pending: E[] };
+
+/**
+ * Build an SSE hub for event type `E` (the consumer's domain event shape).
+ *
+ * With no options it writes `data: <json>\n\n` per event, as it always has.
+ * {@link SseHubOptions} adds named frames, a keepalive comment, a replay
+ * snapshot for a late client, and {@link SseStreamHub.close} ends every stream.
+ *
+ * @example
+ * ```ts
+ * import { sseHub } from "@demlik/tea/do";
+ *
+ * type RunEvent =
+ *   | { kind: "turn"; turn: number }
+ *   | { kind: "status"; status: string };
+ *
+ * const turns: RunEvent[] = [];
+ * let status: RunEvent | null = null;
+ * const hub = sseHub<RunEvent>({
+ *   frame: (e) => ({ event: e.kind, data: JSON.stringify(e) }),
+ *   keepaliveMs: 15_000,
+ *   snapshot: () => (status === null ? turns : [...turns, status]),
+ * });
+ * const record = (e: RunEvent): void => {
+ *   if (e.kind === "turn") turns.push(e);
+ *   else status = e;
+ *   hub.emit(e);
+ * };
+ * record({ kind: "turn", turn: 1 });
+ * const sseRoute = (): Response => hub.open();
+ * const onRunEnd = (): void => hub.close();
+ * ```
+ */
+export function sseHub<E>(options: SseHubOptions<E> = {}): SseStreamHub<E> {
+  const { frame, keepaliveMs, snapshot } = options;
   const sinks = new Set<(event: E) => void>();
+  const streams = new Set<Stream>();
+  const openings = new Set<Opening<E>>();
   const encoder = new TextEncoder();
+  let closed = false;
+
+  const encode = (event: E): Uint8Array =>
+    encoder.encode(
+      frame === undefined
+        ? `data: ${JSON.stringify(event)}\n\n`
+        : writeFrame(frame(event)),
+    );
+
+  const takeSnapshot = (): { events: E[]; pending: E[] } => {
+    const opening: Opening<E> = { pending: [] };
+    openings.add(opening);
+    try {
+      return {
+        events: snapshot === undefined ? [] : [...snapshot()],
+        pending: opening.pending,
+      };
+    } finally {
+      openings.delete(opening);
+    }
+  };
+
+  const fanOut = (event: E): void => {
+    for (const opening of openings) opening.pending.push(event);
+    for (const sink of sinks) {
+      try {
+        sink(event);
+      } catch {
+        /* broken stream — dropped on its cancel */
+      }
+    }
+    if (streams.size === 0) return;
+    let bytes: Uint8Array;
+    if (frame === undefined) {
+      try {
+        bytes = encode(event);
+      } catch {
+        return;
+      }
+    } else {
+      bytes = encode(event);
+    }
+    for (const stream of streams) {
+      try {
+        stream.write(bytes);
+      } catch {
+        /* broken stream — dropped on its cancel */
+      }
+    }
+  };
 
   return {
+    get closed() {
+      return closed;
+    },
     emit(event) {
-      for (const sink of sinks) {
-        try {
-          sink(event);
-        } catch {
-          /* broken stream — dropped on its cancel */
-        }
-      }
+      if (closed) return;
+      fanOut(event);
     },
     open() {
-      let sink!: (event: E) => void;
-      const stream = new ReadableStream<Uint8Array>({
+      let stream: Stream | undefined;
+      let timer: ReturnType<typeof setInterval> | undefined;
+      const stop = (): void => {
+        if (timer !== undefined) clearInterval(timer);
+        timer = undefined;
+        if (stream !== undefined) streams.delete(stream);
+      };
+      const body = new ReadableStream<Uint8Array>({
         start: (controller) => {
-          sink = (event) => {
-            controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify(event)}\n\n`),
-            );
+          const { events, pending } = takeSnapshot();
+          for (const event of [...events, ...pending]) {
+            controller.enqueue(encode(event));
+          }
+          if (closed) {
+            controller.close();
+            return;
+          }
+          const live: Stream = {
+            write: (chunk) => controller.enqueue(chunk),
+            end: () => {
+              stop();
+              controller.close();
+            },
           };
-          sinks.add(sink);
+          stream = live;
+          streams.add(live);
+          if (keepaliveMs !== undefined) {
+            const comment = encoder.encode(KEEPALIVE_FRAME);
+            timer = setInterval(() => {
+              try {
+                controller.enqueue(comment);
+              } catch {
+                stop();
+              }
+            }, keepaliveMs);
+          }
         },
-        cancel: () => {
-          sinks.delete(sink);
-        },
+        cancel: stop,
       });
-      return new Response(stream, {
-        headers: {
-          "content-type": "text/event-stream",
-          "cache-control": "no-cache",
-          connection: "keep-alive",
-        },
-      });
+      return new Response(body, { headers: SSE_HEADERS });
     },
     register(sink) {
+      const { events, pending } = takeSnapshot();
+      for (const event of [...events, ...pending]) sink(event);
+      if (closed) return () => {};
       sinks.add(sink);
       return () => {
         sinks.delete(sink);
       };
+    },
+    close() {
+      if (closed) return;
+      closed = true;
+      sinks.clear();
+      for (const stream of [...streams]) {
+        try {
+          stream.end();
+        } catch {
+          /* already ended by its reader */
+        }
+      }
+      streams.clear();
     },
   };
 }
