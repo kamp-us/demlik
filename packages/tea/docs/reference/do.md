@@ -1179,7 +1179,7 @@ interface ExecutedSteps<R> {
 ### `ExecuteStep`
 
 ```ts
-type ExecuteStep<I, R> = (step: NextStep<I>) => Promise<R> | R
+type ExecuteStep<I, R> = (step: NextStep<I>, call: { readonly signal: AbortSignal }) => Promise<R> | R
 ```
 
 <a id="foldApplied"></a>
@@ -1735,9 +1735,19 @@ function runStepLoop<R, I, O>(
 ```ts
 interface RunStepLoopConfig<R = never, I = never, O = never> {
   /**
-   * Absolute wall-clock deadline (ms epoch). The loop stops asking once `now()`
-   * reaches it, surfacing a `deadline_exceeded` outcome. Mirrors the poller's
-   * absolute-deadline contract (a resumed loop honors the SAME moment).
+   * Absolute wall-clock deadline (ms epoch) on `now()`. The drive ends with
+   * `deadline_exceeded` once it comes due, whatever is in flight then: a
+   * pending POST, a backoff or poll sleep, or a running `execute`. The drive
+   * stops waiting on that work and aborts the `signal` the transport and
+   * `execute` were handed. Between effects the loop also checks `now()` before
+   * each POST. Mirrors the poller's absolute-deadline contract (a resumed loop
+   * honors the SAME moment).
+   *
+   * The deadline comes due when `now()`, read after `sleep(deadlineMs -
+   * now())` resolves, has reached it; a sleep that returns early is slept
+   * again for what is left, and a clock that did not move across a sleep is
+   * taken never to reach it. `Infinity` sets no deadline and arms no timer.
+   * Once the drive returns, its timer is cleared.
    */
   readonly deadlineMs: number;
   /**
@@ -1763,8 +1773,14 @@ interface RunStepLoopConfig<R = never, I = never, O = never> {
   readonly retryable?: (error: unknown) => boolean;
   /** Backoff jitter RNG, injected for determinism. Defaults to `Math.random`. */
   readonly rng?: Rng;
-  /** `(ms) => Promise` sleep, injected for determinism. Defaults to real sleep. */
-  readonly sleep?: (ms: number) => Promise<void>;
+  /**
+   * `(ms, signal) => Promise` sleep, injected for determinism. Defaults to a
+   * `setTimeout` sleep that the signal clears. The drive's deadline timer and
+   * its backoff and poll pauses all sleep through it. `signal` aborts when the
+   * deadline comes due or the drive is over: a sleep that resolves on abort
+   * leaves no timer behind, and one that ignores it still works.
+   */
+  readonly sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
   /**
    * Called once with the drive's runtime, before it boots, so the caller can
    * attach to it what attaches to any tea run. `recorder(runtime, {
@@ -2038,6 +2054,7 @@ type StepLoopMsg<R, I, O> =
     readonly _tag: "store_failed";
     readonly error: unknown;
   }
+  | { readonly _tag: "deadline_passed" }
 ```
 
 <a id="StepLoopOutcome"></a>
@@ -2148,7 +2165,10 @@ interface StepResult<R> {
 ### `StepTransport`
 
 ```ts
-type StepTransport<R, I, O> = (request: StepRequest<R>) => Promise<DeferredStepResponse<I, O>>
+type StepTransport<R, I, O> = (
+  request: StepRequest<R>,
+  call: { readonly signal: AbortSignal },
+) => Promise<DeferredStepResponse<I, O>>
 ```
 
 <a id="StepWorking"></a>
