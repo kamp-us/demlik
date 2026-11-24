@@ -18,7 +18,7 @@
  * decision is `./retry-backoff` exactly as `resilient-call`'s `backoff` verb
  * wires it:
  *   - `initRetry()` seeds the per-call attempt counter.
- *   - `recordFailure(retry, error)` folds each thrown failure (attempt++).
+ *   - `recordFailure(retry, error)` folds each failure (attempt++).
  *   - `shouldRetry(retry, policy)` is the terminal-at-`maxAttempts` bound — the
  *     `maxAttempts`-th recorded failure refuses another attempt (attempts
  *     `0 .. maxAttempts-1` run; the port is invoked at most `maxAttempts` times).
@@ -69,7 +69,7 @@ export class RetryExhaustedError extends Error {
   constructor(
     /** How many times the port was invoked before giving up (= `policy.maxAttempts`). */
     public readonly attempts: number,
-    /** The failure the final attempt threw — carried, never interpreted. */
+    /** The failure the final attempt ended in: the error it threw, or the value `accept` refused — carried, never interpreted. */
     public readonly lastError: unknown,
   ) {
     super(
@@ -85,7 +85,7 @@ const defaultSleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
 /** Options for {@link retryToSuccess}. */
-export interface RetryToSuccessOptions {
+export interface RetryToSuccessOptions<R = unknown> {
   /**
    * The `[0, 1)` jitter source threaded into `nextDelayMs`, branded via
    * `asRng` at construction (a raw `() => number` is rejected by the type).
@@ -109,53 +109,67 @@ export interface RetryToSuccessOptions {
    * it was asked about: its throw is what rejects.
    */
   readonly retryable?: (error: unknown) => boolean;
+  /**
+   * Whether a resolved value is a success. Defaults to `() => true`. A value it
+   * refuses counts as a failure on the same ladder as a retryable throw: it
+   * consumes budget, backs off, and on exhaustion is the
+   * {@link RetryExhaustedError}'s `lastError`. `retryable` never sees it. An
+   * `accept` that throws rejects with its own throw, at once.
+   */
+  readonly accept?: (value: R) => boolean;
 }
 
 /**
- * Fire-and-await bounded retry: invoke the fallible `port`, and on each thrown
- * failure fold it through `./retry-backoff` — record it, and if the policy
- * still permits an attempt, back off `nextDelayMs` and retry; otherwise REJECT
- * with {@link RetryExhaustedError}. Resolves with the port's value on the first
+ * Fire-and-await bounded retry: invoke the fallible `port`, and on each failure
+ * (a throw, or a value `accept` refuses) fold it through `./retry-backoff` —
+ * record it, and if the policy still permits an attempt, back off `nextDelayMs`
+ * and retry; otherwise REJECT with {@link RetryExhaustedError}. Resolves with the port's value on the first
  * success.
  *
  * The port is invoked at most `policy.maxAttempts` times (attempts
  * `0 .. maxAttempts-1`); the `maxAttempts`-th failure is terminal. Every failure
  * is either retried or surfaced on the rejection's `lastError` — none is
  * swallowed. A failure `opts.retryable` refuses is rethrown as it is, at once.
+ * A resolved value `opts.accept` refuses is a failure on the same ladder.
  *
- * @param port   the fallible work — throws on failure, resolves with `R` on success.
+ * @param port   the fallible work — throws (or resolves a value `accept`
+ *               refuses) on failure, resolves with `R` on success.
  * @param policy the bounded-retry curve (`baseMs` / `factor` / `capMs` /
  *               `maxAttempts` / `jitter`) from `./retry-backoff`.
- * @param opts   optional injected `rng` (jitter) and `sleep` (the wait) — see
+ * @param opts   optional injected `rng` (jitter) and `sleep` (the wait), and the
+ *               `retryable` / `accept` failure classifiers — see
  *               {@link RetryToSuccessOptions}.
  */
 export async function retryToSuccess<R>(
   port: () => Promise<R>,
   policy: RetryPolicy,
-  opts: RetryToSuccessOptions = {},
+  opts: RetryToSuccessOptions<R> = {},
 ): Promise<R> {
   const rng = opts.rng ?? defaultRng;
   const sleep = opts.sleep ?? defaultSleep;
   const retryable = opts.retryable ?? (() => true);
+  const accept = opts.accept ?? (() => true);
 
   // The retry counter folds over `./retry-backoff` exactly as resilient-call's
   // `backoff` verb does — no local attempt bookkeeping, no local backoff math.
   let retry = initRetry();
+  const backOff = async (failure: unknown): Promise<void> => {
+    retry = recordFailure(retry, failure);
+    if (!shouldRetry(retry, policy)) {
+      throw new RetryExhaustedError(retry.attempt, failure);
+    }
+    await sleep(nextDelayMs(retry, policy, rng));
+  };
   for (;;) {
+    let value: R;
     try {
-      return await port();
+      value = await port();
     } catch (error) {
       if (!retryable(error)) throw error;
-      // Fold the failure first (attempt++), then consult the bound on the
-      // incremented state — same order as resilient-call so the semantics of
-      // `maxAttempts` are identical across both surfaces.
-      retry = recordFailure(retry, error);
-      if (!shouldRetry(retry, policy)) {
-        // Terminal give-up at the bound: reject, never swallow. `retry.attempt`
-        // is the number of failures = the number of port invocations made.
-        throw new RetryExhaustedError(retry.attempt, error);
-      }
-      await sleep(nextDelayMs(retry, policy, rng));
+      await backOff(error);
+      continue;
     }
+    if (accept(value)) return value;
+    await backOff(value);
   }
 }
