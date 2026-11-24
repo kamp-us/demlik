@@ -129,11 +129,14 @@ export interface RecorderOptions {
    *
    * Memory is O(window) msgs and State refs whatever the run length: the
    * recorder keeps each kept transition's post-State by reference to move
-   * the anchor, with or without `captureSteps`.
+   * the anchor, with or without `captureSteps`, and keeps each step's Cmds
+   * only with `captureSteps`.
    *
    * Must be an integer `>= 1`, and cannot be combined with a `sampleRate`
-   * below `1` (a sampled trace is not replay-faithful, so it has no anchor to
-   * move); `recorder` throws a `RangeError` otherwise.
+   * that samples, one in `(0, 1)` (a sampled trace is not replay-faithful,
+   * so it has no anchor to move); `recorder` throws a `RangeError`
+   * otherwise. A `sampleRate` that `recorder` reads as `1` (absent, `>= 1`,
+   * non-positive or `NaN`) records everything and is accepted.
    */
   readonly window?: number;
 }
@@ -220,7 +223,7 @@ export interface Recorder<S, M> {
  * @param opts    - see {@link RecorderOptions}. Default records everything,
  *                  no step retention, no window.
  * @throws RangeError when `opts.window` is not an integer `>= 1`, or is given
- *                    with a `sampleRate` below `1`.
+ *                    with a `sampleRate` in `(0, 1)`.
  */
 export function recorder<S, M extends { _tag: string }>(
   runtime: BootingRuntime<S, M>,
@@ -239,7 +242,7 @@ export function recorder<S, M extends { _tag: string }>(
         `tea recorder: window must be an integer >= 1, got ${String(window)}.`,
       );
     }
-    if (rawRate !== undefined && rawRate < 1) {
+    if (sampleRate < 1) {
       throw new RangeError(
         "tea recorder: window cannot be combined with a sampleRate below 1; " +
           "a sampled trace is not replay-faithful, so it has no anchor to move.",
@@ -266,14 +269,16 @@ export function recorder<S, M extends { _tag: string }>(
   const unobserve = runtime.observe((msg, state, cmds) => {
     finalState = state;
     if (sampleRate < 1 && Math.random() >= sampleRate) return;
-    const step: TraceStep<S, M> =
-      cmds === undefined ? { msg, state } : { msg, state, cmds };
-
     if (window === undefined) {
       msgs.push(msg);
-      if (captureSteps) steps.push(step);
+      if (captureSteps)
+        steps.push(cmds === undefined ? { msg, state } : { msg, state, cmds });
       return;
     }
+    const step: TraceStep<S, M> =
+      captureSteps && cmds !== undefined
+        ? { msg, state, cmds }
+        : { msg, state };
     if (ring.length < window) {
       ring.push(step);
       return;

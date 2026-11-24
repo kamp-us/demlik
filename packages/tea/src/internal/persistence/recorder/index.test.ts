@@ -476,6 +476,30 @@ describe("recorder window", () => {
     ).not.toThrow();
   });
 
+  it.each([
+    1,
+    2,
+    0,
+    -1,
+    Number.NaN,
+  ])("window with a sampleRate %s, which records everything, keeps a replayable window", async (sampleRate) => {
+    const rec = await recordRun(30, { window: 5, sampleRate });
+    const trace = rec.dump();
+    expect(trace.msgs).toHaveLength(5);
+    expect(trace.skipped).toBe(25);
+    expect(replayTrace(counter(), trace).matches).toBe(true);
+  });
+
+  it("a window without captureSteps keeps no Cmds", async () => {
+    const runtime = run(counter(), { ctx: {} });
+    const rec = recorder(runtime, { window: 3 });
+    await runtime.ready;
+    for (let i = 0; i < 6; i++) await runtime.dispatch({ _tag: "inc", by: i });
+    await runtime.stop();
+    expect(rec.dump()).not.toHaveProperty("steps");
+    expect(rec.toJSONL()).not.toContain('"cmds"');
+  });
+
   it("without options the JSONL is unchanged: the boot line carries no skipped", async () => {
     const rec = await recordRun(4);
     const lines = rec.toJSONL().split("\n");

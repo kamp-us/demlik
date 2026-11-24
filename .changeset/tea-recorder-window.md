@@ -12,4 +12,4 @@ transition falls out of the window, the trace's `loaded` anchor moves to the Sta
 `toJSONL` / `parseJSONL`. The new optional `Trace.skipped` counts the transitions before the
 anchor, and the JSONL boot line carries it. A trace or JSONL without it reads as 0, and a recording
 without a `window` writes the same JSONL as before. `window` must be an integer >= 1 and cannot be
-combined with a `sampleRate` below 1; `recorder` throws a `RangeError` otherwise.
+combined with a `sampleRate` between 0 and 1; `recorder` throws a `RangeError` otherwise.

@@ -382,11 +382,14 @@ interface RecorderOptions {
    *
    * Memory is O(window) msgs and State refs whatever the run length: the
    * recorder keeps each kept transition's post-State by reference to move
-   * the anchor, with or without `captureSteps`.
+   * the anchor, with or without `captureSteps`, and keeps each step's Cmds
+   * only with `captureSteps`.
    *
    * Must be an integer `>= 1`, and cannot be combined with a `sampleRate`
-   * below `1` (a sampled trace is not replay-faithful, so it has no anchor to
-   * move); `recorder` throws a `RangeError` otherwise.
+   * that samples, one in `(0, 1)` (a sampled trace is not replay-faithful,
+   * so it has no anchor to move); `recorder` throws a `RangeError`
+   * otherwise. A `sampleRate` that `recorder` reads as `1` (absent, `>= 1`,
+   * non-positive or `NaN`) records everything and is accepted.
    */
   readonly window?: number;
 }

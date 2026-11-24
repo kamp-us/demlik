@@ -113,5 +113,5 @@ kept everything, and the JSONL boot line carries it. A recording without a
 `window` writes the same JSONL it always did.
 
 `window` must be an integer of at least 1, and it cannot be combined with a
-`sampleRate` below 1: a sampled trace is not replay-faithful, so it has no
+`sampleRate` between 0 and 1: a sampled trace is not replay-faithful, so it has no
 anchor to move. `recorder` throws a `RangeError` for either.
