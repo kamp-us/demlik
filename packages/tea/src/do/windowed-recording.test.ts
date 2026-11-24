@@ -687,6 +687,100 @@ function rowLimited(backing: Map<string, string>, limit: number) {
   return { storage: limited, rejected };
 }
 
+describe("loading a log that holds a marker, again and again", () => {
+  const big: Msg = { _tag: "grow", size: 6_000, seed: 7 };
+  const tooBig = () => new Error("string or blob too big: SQLITE_TOOBIG");
+
+  async function measuredStep() {
+    const backing = new Map<string, string>();
+    await liveRun(backing, [inc(1), big, { _tag: "shrink" }], {
+      recording: { provenance: null, maxRowBytes: 2_000 },
+      onRecordingBreak: () => {},
+    });
+    return { backing, seq: 3 };
+  }
+
+  async function measuredAnchor() {
+    const backing = new Map<string, string>();
+    const trace = await recordWindowed(
+      [inc(5), big, { _tag: "shrink" }, inc(1)],
+      2,
+    );
+    await writeTrace(
+      storeOn(backing, {
+        recording: { provenance: null, maxRowBytes: 2_000 },
+        onRecordingBreak: () => {},
+      }).store,
+      trace,
+    );
+    return { backing, seq: 3 };
+  }
+
+  async function rejectedFrame(at: number) {
+    const backing = new Map<string, string>();
+    const fake = fakeDoStorage(backing);
+    let armed = true;
+    fake.failPut((k) => {
+      if (k !== key(at) || !armed) return false;
+      armed = false;
+      return true;
+    }, tooBig());
+    const rt = await run(counter, {
+      store: doEventSourcedStore(fake.storage, counter, ctx, {
+        recording: { provenance: null, maxRowBytes: 8_000_000 },
+        onRecordingBreak: () => {},
+      }).store,
+      onError: () => {},
+      interpret,
+    }).ready;
+    await rt.dispatch(inc(1));
+    await rt.dispatch(inc(2));
+    await rt.stop();
+    return { backing, seq: at };
+  }
+
+  const logs = [
+    ["a step marker from a measured budget", measuredStep],
+    ["an init marker at a moved anchor", measuredAnchor],
+    ["a step marker from SQLITE_TOOBIG", () => rejectedFrame(3)],
+    ["an init marker from SQLITE_TOOBIG", () => rejectedFrame(1)],
+  ] as const;
+
+  it.each(
+    logs,
+  )("refuses %s with its seq on every direct load, spending no restore attempt", async (_name, make) => {
+    const { backing, seq } = await make();
+
+    for (const limit of [1, 1, 1, 0, 0]) {
+      const refused = await storeOn(backing, { restoreRetryLimit: limit })
+        .store.load()
+        .catch((error: unknown) => error);
+      expect(refused).toBeInstanceOf(RecordingUnavailableError);
+      expect(refused).toMatchObject({ seq });
+    }
+    expect(backing.has("@@es/meta/restore-attempt")).toBe(false);
+  });
+
+  it.each(
+    logs,
+  )("refuses %s with its seq on every runtime boot, with restoreRetryLimit 0 too", async (_name, make) => {
+    const { backing, seq } = await make();
+
+    for (const limit of [1, 1, 1, 0, 0]) {
+      const failure = await run(counter, {
+        store: storeOn(backing, { restoreRetryLimit: limit }).store,
+        onError: () => {},
+        interpret,
+      }).ready.catch((error: unknown) => error);
+      expect(failure).toBeInstanceOf(StoreRefusedError);
+      expect((failure as StoreRefusedError).cause).toBeInstanceOf(
+        RecordingUnavailableError,
+      );
+      expect((failure as StoreRefusedError).cause).toMatchObject({ seq });
+    }
+  });
+});
+
 describe("a size rejection that persists on every try", () => {
   const limit = 4_096;
   const huge: Msg = { _tag: "grow", size: 40_000, seed: 3 };

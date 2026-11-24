@@ -378,7 +378,9 @@ logged store in steps 5–6.
    Msg, no snapshot is written beside it, and a later `load()` refuses with
    [`RecordingUnavailableError`](../reference/do.md#RecordingUnavailableError)
    naming the marker's seq (a run's `ready` rejects with it as the
-   `StoreRefusedError`'s cause). The log still takes appends, reads and
+   `StoreRefusedError`'s cause). The marker is read before a restore attempt
+   is recorded, so every load gives that same refusal and none spends the
+   `restoreRetryLimit` budget. The log still takes appends, reads and
    deletion. A Durable Object row holds at most 8 MB, so a budget at or below
    that keeps every frame writable. Without `maxRowBytes` the store writes
    every frame as it encodes. Snapshots are written as they encode either way.

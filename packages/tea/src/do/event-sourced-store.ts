@@ -364,8 +364,9 @@ export interface EventSourcedStore<S, M> {
    * `restoreRetryLimit` is spent, load throws {@link RestoreInterruptedError}
    * before expensive reads. The engine preserves it as StoreRefusedError.cause.
    * A log that holds an oversized marker (`recording.maxRowBytes`) is refused
-   * the same way, with {@link RecordingUnavailableError} naming the marker's
-   * seq, before the snapshot or journal is read.
+   * with {@link RecordingUnavailableError} naming the marker's seq, read from
+   * the meta cell before any restore attempt is recorded, so every load of it
+   * gives the same refusal and none spends the `restoreRetryLimit` budget.
    */
   readonly store: Store<S>;
   /**
@@ -1508,6 +1509,8 @@ export function doEventSourcedStore<
 
   async function load(): Promise<S> {
     fence.takeOver();
+    const committedSeq = await readMeta();
+    if (markedSeq !== null) throw new RecordingUnavailableError(markedSeq);
     const raw = await storage.get<string>(restoreAttemptKey);
     const previous: unknown =
       raw === undefined ? { attempts: 0 } : JSON.parse(raw);
@@ -1524,8 +1527,6 @@ export function doEventSourcedStore<
     const attempt = nextRestoreAttempt(previous.attempts, restoreRetryLimit);
     await storage.put(restoreAttemptKey, JSON.stringify(attempt));
 
-    const committedSeq = await readMeta();
-    if (markedSeq !== null) throw new RecordingUnavailableError(markedSeq);
     const { state: snapshot, seq: snapSeq } = await readSnapshot();
     const initialState = snapshot ?? machine.init(null, ctx)[0];
     const { state, inits } = await readLog(initialState, snapSeq);

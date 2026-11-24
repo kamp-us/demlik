@@ -944,7 +944,9 @@ describe("bounded restore", () => {
       });
     }
     expect(
-      get.mock.calls.every(([key]) => key === "@@es/meta/restore-attempt"),
+      get.mock.calls.every(
+        ([key]) => key === "@@es/meta/restore-attempt" || key === "@@es/meta",
+      ),
     ).toBe(true);
     expect(list).not.toHaveBeenCalled();
   });
