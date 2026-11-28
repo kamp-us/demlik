@@ -1,5 +1,24 @@
 # @demlik/backlog-sweep
 
+## 0.1.10
+
+### Patch Changes
+
+- Updated dependencies [9ded419]
+- Updated dependencies [dc97683]
+- Updated dependencies [73d9879]
+- Updated dependencies [7093240]
+- Updated dependencies [92f3d57]
+- Updated dependencies [5d0fd80]
+- Updated dependencies [7c7f0f4]
+- Updated dependencies [989e798]
+- Updated dependencies [270fd2c]
+- Updated dependencies [7806db1]
+- Updated dependencies [dbba467]
+- Updated dependencies [9187db7]
+- Updated dependencies [92f3d57]
+  - @demlik/tea@0.38.0
+
 ## 0.1.9
 
 ### Patch Changes

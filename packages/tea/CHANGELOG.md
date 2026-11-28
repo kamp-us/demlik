@@ -1,5 +1,90 @@
 # @demlik/tea
 
+## 0.38.0
+
+### Minor Changes
+
+- 9ded419: **Additive (declaration only):** `runToTerminal` (`@demlik/tea/flow`) now accepts `run`'s optional `cancellation: { signal, cancel }` in its seed. The type comes from `PromiseRunOptions`, so a host can stop the machine from outside without patching the declaration. The runtime already passed the field on to `run`. When the signal aborts, the run folds `cancel`'s Msg the same way `run` does, and `runToTerminal` resolves with the State that Msg lands. A seed without `cancellation` behaves as before.
+- dc97683: **Additive (declaration only):** `createAgent` and `defineAgent` (`@demlik/tea/agent`) take an optional `domain: { init, step }` whose pure `step` folds each settled turn, tool outcome, nudge and compaction (the `AgentDomainEvent` union) into a slice the Model keeps at `domain`, so every Store persists it, `replayTrace` replays it, `stopWhen` and `continueWhen` read it as `state.domain`, and a mid-run Model saved without it throws `MissingAgentDomainError`, while `createAgentHost` (`@demlik/tea/do`) and the agent's state types gain a `D` type parameter that defaults to `never`, under which the Model and the reducer are unchanged.
+- 7093240: **Breaking (declaration):** `EventSourceFactoryOpts.onMessage` is now optional, and `EventSourceFactoryOpts.onError` is called with a third argument, `readyState`. A host that only passes these options compiles and runs unchanged. Code that calls the options' own callbacks breaks: `opts.onMessage(...)` on a value typed `EventSourceFactoryOpts` no longer compiles without a check that it is present, and a call to `opts.onError(event, sub)` with two arguments no longer compiles. A wrapper that forwards to such options must check `onMessage` and pass the third argument through.
+
+  **Additive (declaration only):** `fromEventSource` receives named server-sent events and tells a closed source from a reconnecting one.
+
+  - `events: { types, onEvent }` lists the SSE `event:` names a host receives. One `onEvent` maps each event's `type`, `data` and `lastEventId` to a Msg, or to `null` to drop it. A type the host does not list dispatches nothing.
+  - `types` refuses the lifecycle names `"open"` and `"error"` (exported as `EventSourceLifecycleType`): in the type when `T` names them, and with a `TypeError` when `fromEventSource` is called with them as a plain `string`. `onOpen` and `onError` receive those events.
+  - `onError`'s `readyState` (`"connecting" | "open" | "closed"`) lets a host tell a source the browser gave up on from one that is reconnecting, without holding the `EventSource`.
+  - Cleanup removes every listener the runner added and closes the source. With today's options the runner behaves exactly as before.
+  - New exports: `ServerSentEvent`, `EventSourceNamedEvents`, `EventSourceReadyState`, `EventSourceLifecycleType`.
+
+- 92f3d57: **Breaking (`@demlik/tea/do`):** `FrameRefusal` gains `"oversized"`, the refusal a reader gives the marker a store writes in place of a frame too large for its row (`recording.maxRowBytes`). `StoredEventRefusal` and `RecordingBreak["reason"]` include it through `FrameRefusal`. A `switch` that handles every member of any of them and checks it is exhaustive no longer compiles. Add an `"oversized"` case: the frame at that seq was not kept, and a `RecordingBreak` with it carries `seq` and `bytes`.
+- 7c7f0f4: `@demlik/tea/paginate` adds `iteratePages`, which walks a cursor- or keyset-paged API as a pull-driven async iterator that yields each page unchanged:
+
+  ```ts
+  for await (const page of iteratePages({
+    firstCursor,
+    fetchPage,
+    nextCursor,
+  })) {
+    // per-page work
+  }
+  ```
+
+  It interprets the paginator ops (`start`, `recordPage`) with backpressure off. Nothing is fetched before the first pull, the next page is fetched only after the loop body for the current one finishes, and a `break` or `return` ends the walk without reading the continuation. `nextCursor` returning `null` or `undefined` ends the walk; any other value, including `0` and `""`, is fetched next. A `fetchPage` rejection reaches the `for await` unchanged. Additive: no existing export changes.
+
+- 989e798: **Additive (declaration only):** `RecorderOptions` (`@demlik/tea/persistence`, `@demlik/tea/parity`)
+  gains an optional `window`, and `Trace` gains an optional `skipped`.
+
+  `recorder` takes a `window` option that keeps only the last N transitions, so a flight recorder on
+  a long-running machine holds O(window) msgs and State refs, however long the run. When a
+  transition falls out of the window, the trace's `loaded` anchor moves to the State after it, so
+  `replayTrace` still reproduces `finalState` from the kept msgs, directly or after
+  `toJSONL` / `parseJSONL`. The new optional `Trace.skipped` counts the transitions before the
+  anchor, and the JSONL boot line carries it. A trace or JSONL without it reads as 0, and a recording
+  without a `window` writes the same JSONL as before. `window` must be an integer >= 1 and cannot be
+  combined with a `sampleRate` between 0 and 1; `recorder` throws a `RangeError` otherwise.
+
+- 270fd2c: **Breaking (`@demlik/tea/do`):** `StoredEventRefusal` gains `"part"`, and a store or reader whose `keys.eventPrefix` and `keys.parts` prefix each other (for example `eventPrefix: "@@es/"`) now throws at construction, the refusal a reader gives a cell stored in parts whose parts do not reassemble. A `switch` that handles every member and checks it is exhaustive no longer compiles. Add a `"part"` case: the cell's text is not all there, and a restore over it throws.
+
+  **Additive (`@demlik/tea/agent`):** `AgentDomain` takes an optional `retain: { toolResult?, turnProvider? }` (`AgentRetention`). `step` still folds each settled event as it settled; the transcript then keeps the projection. `toolResult` shapes what `conversation.toolRecords` and the batch's fan-out results keep for a success (a failure is kept as it settled), and `turnProvider` shapes the `provider` a settled turn keeps in `conversation.turns`, in the run's `output` and in the brain call's settled result. A settle that folds nothing, such as a late model success after a cancel or a result for an unknown or already-settled call, projects nothing. Without `retain` the agent is unchanged.
+
+  **Behaviour (`@demlik/tea/do`):** every value `doEventSourcedStore` writes is under 1,000,000 bytes of UTF-8. A snapshot or event cell at or over that bound is written as a versioned manifest at its own key and parts under `keys.parts` (default `@@es/part/`), in the same transaction as the meta cell, which also deletes the parts an earlier, longer value of the key left behind. Every read (restore, `readStoredEvents`, `readEvents`, `readFrames`, `readTrace`) reassembles the cell before it parses it. Cells under the bound are written and read exactly as before, so an existing log reads unchanged. A host that reads the raw cells with `storage.list({ prefix: "@@es/evt/" })` now sees a manifest for a cell in parts and must read through `doEventLogReader` instead; a host that deletes the log's keys by prefix must delete the `keys.parts` rows too. `keys.eventPrefix` and `keys.parts` must not prefix each other, or a store or reader built with them throws. A value that starts `@@es/cell:` and is not a version 1 manifest reads as refused (`part`). A log that has a cell in parts does not read on a build of `@demlik/tea` from before this change. `recording.maxRowBytes` stays an opt-in cap on what a recording keeps, not a storage guard.
+
+  **Additive:** `fromTimeout` (`@demlik/tea`) takes an optional `ref` in its Sub's deps. With `ref: false` the pending timer is unreferenced, like `timeout.unref()`, so a Node process with nothing else to do exits without waiting for it, such as a CLI whose timeout only guards a step that may never finish. It defaults to `true`, and a timer that carries no ref, such as a browser's, is left alone.
+
+  **Additive (declaration only):** `runToTerminal` (`@demlik/tea/flow`) accepts `run`'s optional `onError` sink in its seed, beside `cancellation`. The runtime already passed the field on to `run`. A handler still in flight when the run stops is discarded, and the sink decides what that discard does; with no `onError` the default sink warns about a discard and rethrows the rest.
+
+  **Behaviour (`@demlik/tea/do`):** a recording frame is stored as a delta only when the delta is shorter than the evidence bytes it rebuilds (`{"state":…,"cmds":…}`), and its State is deflated only when the frame is stored whole. A frame whose delta is as long as those bytes or longer is stored whole, so a small State's frame can be whole where 0.37.0 stored the delta. A frame whose delta is shorter than those bytes but longer than the deflated whole frame is now stored as the delta, where 0.37.0 stored it whole. Every frame reads back to the same State and Cmds, and a log written by 0.37.0 reads unchanged. Measured over 60 frames of a large, churning State: 2,000 nodes at 5% churn store the same bytes as before, at 30% churn 1.30x, and at 60% churn 2.13x (deltas the old rule would have replaced with a smaller deflated whole frame), so a `maxRowBytes` budget sized near an old cell can now see a marker.
+
+- 7806db1: **Additive (declaration only):** `retryToSuccess` (`@demlik/tea/resilience`) takes an optional
+  `accept: (value) => boolean` that says whether a resolved value is a success, and
+  `RetryToSuccessOptions` gains a type parameter `R` that defaults to `unknown`. A value `accept`
+  refuses is retried on the same backoff ladder as a retryable throw and, when the budget runs out,
+  is the `RetryExhaustedError`'s `lastError`. Leaving `accept` out keeps the old behaviour.
+- dbba467: **Additive (declaration only):** `sseHub` (`@demlik/tea/do`) takes optional `SseHubOptions` and returns an `SseStreamHub`, an `SseHub` that adds `close()` and `closed`, so a host serves a whole live stream with no SSE plumbing of its own. `frame` maps an event to its `event:`, `data:` and `id:` fields (`SseFrame`), so a browser `EventSource` can listen by event name, and a field the format cannot carry throws `SseFrameError`; an event whose `frame` throws reaches no stream and no registered sink. `keepaliveMs` writes a `: keepalive` comment frame to each open stream on an interval the hub clears when that stream is cancelled or the hub closes, queues no further comment while a client is not reading, and must be a number above 0 and at most 2147483647 (`sseHub` throws a `RangeError` otherwise). `snapshot` is asked for the events a client that connects now receives before any live event, so a late client gets the snapshot and then live events with none lost or sent twice. `close()` ends every open stream (called from a registered sink, after the event being delivered has reached every stream), and a stream opened after it receives the snapshot and then ends. `sseHub()` with no options writes the same bytes as before, in the same delivery order across registered sinks and streams.
+- 9187db7: **Breaking (call arguments change):** `StepTransport` and `ExecuteStep` (`@demlik/tea/do`) are now called with a second argument, `{ signal }`, and `RunStepLoopConfig.sleep` with `(ms, signal)`. A function that declares fewer parameters still fits, so implementations compile unchanged. Two kinds of code break. Code that calls such a value itself, such as a wrapper that forwards to an inner `ExecuteStep` with one argument, must now pass the second argument. A test double that asserts the exact call, such as `expect(transport).toHaveBeenCalledWith(request)`, now sees two arguments. `StepLoopMsg` gains a `deadline_passed` variant, so an exhaustive `switch` over it needs one more case. The injected `now` and `sleep` are called in the same sequence as before, except when the deadline timer fires.
+
+  `runStepLoop` ends a drive with `deadline_exceeded` when `deadlineMs` falls due, even while a `/step` POST, a backoff or poll sleep, or `execute` is still pending.
+
+  Before, the loop read the clock only between effects, so a transport that long-polled or a step that hung overran the deadline by the length of that wait. Now the drive runs `stepLoopMachine` with `run`'s `cancellation`. A `setTimeout` owned by the drive, armed at its first clock read for `deadlineMs - now()`, aborts the cancellation's signal. The runtime then folds a new `deadline_passed` Msg to `deadline_exceeded` and stops waiting on the work in flight. That Msg is recorded, so `replayTrace` of such a drive reaches the same final State.
+
+  The `signal` handed to the transport, `execute` and `sleep` aborts at the deadline or when the drive is over. Pass it to `fetch` so the abandoned work stops. The timer is armed again for the remainder when it fires before `now()` reaches the deadline, and in parts for a deadline more than 2^31-1 ms away. It is cleared when the drive returns, so the process can exit as soon as it does. `deadlineMs: Infinity` arms no timer.
+
+- 92f3d57: **Additive (declaration only):** a recording store keeps a windowed trace at its live sequence numbers, and keeps the rest of a recording when one frame is too large for a row.
+
+  - `SaveBoundary`'s `init` case takes an optional `skipped`: the transitions the run applied before a moved anchor. `writeTrace` (`@demlik/tea/persistence`) passes a windowed trace's `Trace.skipped` there. `doEventSourcedStore` (`@demlik/tea/do`) opens an empty log at `skipped + 1`, with a snapshot of the anchor's State there, so each later step keeps the number the live run gave it and a restore folds only the steps after the anchor. The anchor frame is not a restored boot. A log written as bare messages takes the same offset with no frame. The store refuses, before writing anything, a negative or fractional `skipped`, one given to a log that already has frames, and any seq past `Number.MAX_SAFE_INTEGER`; `writeTrace` refuses a trace whose last step would pass it. `readHead` and the store find the first stored frame wherever the log starts.
+  - The `recording` option takes an optional `maxRowBytes`. A frame whose key and encoded cell measure more UTF-8 bytes than that, or whose put the storage rejects with `SQLITE_TOOBIG`, is replaced by a small refusal marker at the same seq, and the next frame is written whole. A rejection of any other cell, and every other storage failure, still rejects the save. `onRecordingBreak` hears each marker with its `seq` and `bytes`, two new optional fields on `RecordingBreak`, and a hook that throws stops no later frame. A log with a marker is kept to be read, not resumed: no snapshot is written beside a marker, the meta cell names the first marker's seq, and `load()` refuses with the new `RecordingUnavailableError` naming it (a run's `ready` rejects with it as `StoreRefusedError.cause`). The log still takes appends, reads and deletion. Snapshots are written exactly as before. A refused `StoredEvent` carries the measured `bytes`, and `StoredFrame`'s `init` frame carries `skipped` at a moved anchor.
+  - New `readTrace(reader, range)` reads a recording back as the `Trace` it was written from, `skipped` included, for `replayTrace`. It checks every seq up to the committed head and answers `{ _tag: "unavailable", seq, reason }` for a gap, a missing tail, a marker or any frame it cannot rebuild, never a prefix. New types: `RecordedTrace` and `TraceUnavailableReason`.
+
+  Without `skipped` and without `maxRowBytes`, the store writes the same bytes as before.
+
+### Patch Changes
+
+- 73d9879: A defined agent's compaction settle is stamped by the run's clock. `agent.run({ clock })` now stamps the `compact_ok` Msg with the injected clock, as `DefinedAgentRunOptions.clock` documents, where it used wall time before. `machine(input)` is unchanged: a raw kernel run of it still stamps that settle with `Date.now`.
+- 5d0fd80: Dev-mode `deepFreeze` returns a value that is already frozen without walking it again, the way
+  Immer's `freeze` does. A machine whose state keeps earlier frozen states no longer re-walks the
+  whole state on every transition, which cost hundreds of milliseconds per run in development and
+  test builds. A value frozen only at its top level by caller code is no longer frozen below it.
+
 ## 0.37.0
 
 ### Minor Changes
