@@ -8,12 +8,12 @@
  * the shape of the writes, not Cloudflare's limit.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { fakeDoStorage as fakeStorage } from "../__fixtures__/do-storage";
 import { defineMachine, type Reducer } from "../index";
 import { run } from "../promise";
 import { doEventLogReader, doEventSourcedStore, readTrace } from "./index";
-import { STORED_VALUE_BYTES, storedRows } from "./stored-cell";
+import { putStoredRows, STORED_VALUE_BYTES, storedRows } from "./stored-cell";
 
 interface State {
   readonly text: string;
@@ -68,6 +68,38 @@ async function collect<T>(source: AsyncIterable<T>): Promise<T[]> {
   const all: T[] = [];
   for await (const item of source) all.push(item);
   return all;
+}
+
+/**
+ * Write `text` at `key` as a manifest and `parts` equal parts, by hand. A real
+ * split into more than 128 parts is over 128 MB, so a test of the 128-key
+ * batching writes the same layout with parts of a few bytes. `text` is ASCII
+ * and its length a multiple of `parts`.
+ */
+function splitBy(
+  backing: Map<string, string>,
+  key: string,
+  text: string,
+  parts: number,
+): void {
+  expect(text.length % parts).toBe(0);
+  const size = text.length / parts;
+  backing.set(
+    key,
+    `@@es/cell:1:${JSON.stringify({ parts, bytes: text.length })}`,
+  );
+  for (let index = 0; index < parts; index += 1) {
+    backing.set(
+      `${PARTS}${key}/${String(index).padStart(6, "0")}`,
+      text.slice(index * size, (index + 1) * size),
+    );
+  }
+}
+
+/** The JSON of a `set` Msg padded to exactly `length` characters. */
+function setJson(length: number): string {
+  const pad = length - JSON.stringify({ _tag: "set", text: "" }).length;
+  return JSON.stringify({ _tag: "set", text: "x".repeat(pad) });
 }
 
 /** A loaded store over `backing`, ready to save. */
@@ -129,7 +161,68 @@ describe("storedRows", () => {
   });
 });
 
+describe("storedRows — the edges of the bound", () => {
+  it("keeps a U+FEFF that starts a part", () => {
+    const value = `${"a".repeat(STORED_VALUE_BYTES - 1)}\uFEFF${"b".repeat(10)}`;
+    const write = storedRows(PARTS, "k", value);
+    const parts = write.rows.slice(1).map(([, text]) => text);
+    expect(write.rows[0]?.[1]).toBe(
+      `@@es/cell:1:${JSON.stringify({ parts: 2, bytes: bytesOf(value) })}`,
+    );
+    expect(parts[1]?.startsWith("\uFEFF")).toBe(true);
+    expect(parts.reduce((total, part) => total + bytesOf(part), 0)).toBe(
+      bytesOf(value),
+    );
+    expect(parts.join("")).toBe(value);
+  });
+
+  it("measures a value only when it can reach the bound", () => {
+    // 3 bytes a unit: 333,333 units are 999,999 bytes, 333,334 are over.
+    const under = "€".repeat(333_333);
+    expect(storedRows(PARTS, "k", under).parts).toBe(0);
+    const over = "€".repeat(333_334);
+    expect(storedRows(PARTS, "k", over).parts).toBe(2);
+  });
+});
+
+describe("putStoredRows", () => {
+  it("reads a key's earlier value only for a key that is written again", async () => {
+    const txn = {
+      get: vi.fn(async () => undefined),
+      put: vi.fn(async () => undefined),
+      delete: vi.fn(async () => true),
+    } as unknown as DurableObjectTransaction;
+    const write = storedRows(PARTS, "k", "small");
+
+    await putStoredRows(txn, PARTS, write, false);
+    expect(txn.get).not.toHaveBeenCalled();
+    expect(txn.put).toHaveBeenCalledWith("k", "small");
+
+    await putStoredRows(txn, PARTS, write, true);
+    expect(txn.get).toHaveBeenCalledWith("k");
+  });
+});
+
 describe("doEventSourcedStore — a cell over the value bound", () => {
+  it("restores an event whose second part starts with U+FEFF", async () => {
+    const backing = new Map<string, string>();
+    const { es } = await loaded(backing, 1_000);
+    // The event's JSON is `{"_tag":"set","text":"` and the text: cut it so the
+    // part boundary falls right before the U+FEFF.
+    const head = bytesOf(JSON.stringify({ _tag: "set", text: "" })) - 2;
+    const text = `${"a".repeat(STORED_VALUE_BYTES - 1 - head)}\uFEFF${"b".repeat(10)}`;
+    await es.store.save({ text }, { _tag: "set", text });
+
+    expect(backing.get(`${PARTS}${evt(1)}/000001`)?.startsWith("\uFEFF")).toBe(
+      true,
+    );
+    expect(await restored(backing)).toEqual({ text });
+    const reader = doEventLogReader<Msg>(fakeStorage(backing).storage);
+    expect((await collect(reader.readEvents())).map((e) => e.event)).toEqual([
+      { _tag: "set", text },
+    ]);
+  });
+
   it("is written in parts and restores, reads and exports as the one cell it was", async () => {
     const backing = new Map<string, string>();
     const text = textOf(2_500_000);
@@ -345,6 +438,172 @@ describe("doEventSourcedStore — a cell whose parts do not reassemble", () => {
     await expect(again.store.load()).rejects.toThrow(
       "persisted snapshot's parts are missing",
     );
+  });
+});
+
+describe("doEventSourcedStore — a cell whose parts are missing, read through each reader", () => {
+  async function written(snapshotEvery: number): Promise<Map<string, string>> {
+    const backing = new Map<string, string>();
+    const { es } = await loaded(backing, snapshotEvery);
+    const text = textOf(2_500_000);
+    await es.store.save({ text }, { _tag: "set", text });
+    return backing;
+  }
+
+  it("throws from readEvents, which refuses where it cannot decode", async () => {
+    const backing = await written(1_000);
+    backing.delete(`${PARTS}${evt(1)}/000001`);
+
+    const reader = doEventLogReader<Msg>(fakeStorage(backing).storage);
+    await expect(collect(reader.readEvents())).rejects.toThrow(
+      "@demlik/tea/do: a stored event's parts are missing",
+    );
+  });
+
+  it("is not read as a log of bare messages when it is the first cell", async () => {
+    // The snapshot covers event 1, so a restore never folds it: only the
+    // first cell's format tells what the log is, and its parts are gone.
+    const backing = await written(1);
+    backing.delete(`${PARTS}${evt(1)}/000001`);
+
+    const reader = doEventLogReader<Msg>(fakeStorage(backing).storage);
+    await expect(reader.readHead()).rejects.toThrow(
+      "@demlik/tea/do: a stored event's parts are missing",
+    );
+    const es = doEventSourcedStore(
+      fakeStorage(backing).storage,
+      textMachine(),
+      ctx,
+    );
+    await expect(es.store.load()).rejects.toThrow(
+      "@demlik/tea/do: a stored event's parts are missing",
+    );
+  });
+
+  it("reads a manifest of a version this build does not know as refused, not as text", async () => {
+    const backing = new Map<string, string>([
+      [evt(1), '@@es/cell:2:{"parts":2,"bytes":9}'],
+      [evt(2), "@@es/cell:1:{"],
+      [META, JSON.stringify({ lastSeq: 2 })],
+    ]);
+    const reader = doEventLogReader<Msg>(fakeStorage(backing).storage);
+    expect(await collect(reader.readStoredEvents())).toEqual([
+      {
+        _tag: "refused",
+        key: evt(1),
+        seq: 1,
+        serializedBytes: 0,
+        reason: "part",
+      },
+      {
+        _tag: "refused",
+        key: evt(2),
+        seq: 2,
+        serializedBytes: 0,
+        reason: "part",
+      },
+    ]);
+    const es = doEventSourcedStore(
+      fakeStorage(backing).storage,
+      textMachine(),
+      ctx,
+    );
+    await expect(es.store.load()).rejects.toThrow(
+      "a stored event's parts are missing",
+    );
+
+    backing.delete(evt(1));
+    backing.delete(evt(2));
+    backing.set(SNAPSHOT, '@@es/cell:2:{"parts":2,"bytes":9}');
+    const again = doEventSourcedStore(
+      fakeStorage(backing).storage,
+      textMachine(),
+      ctx,
+    );
+    await expect(again.store.load()).rejects.toThrow(
+      "persisted snapshot's parts are missing",
+    );
+  });
+});
+
+describe("doEventSourcedStore — more parts than one storage call takes", () => {
+  it("reads a page of cells whose parts are over 128 in all", async () => {
+    // Three events of 50 parts: 150 part keys in one page, so one `get` of
+    // them all would be refused by the storage.
+    const backing = new Map<string, string>([
+      [META, JSON.stringify({ lastSeq: 3 })],
+    ]);
+    for (const seq of [1, 2, 3]) splitBy(backing, evt(seq), setJson(150), 50);
+
+    const reader = doEventLogReader<Msg>(fakeStorage(backing).storage);
+    expect(
+      (await collect(reader.readEvents())).map((e) => [e.seq, e.event._tag]),
+    ).toEqual([
+      [1, "set"],
+      [2, "set"],
+      [3, "set"],
+    ]);
+    expect(await restored(backing)).toEqual({ text: "x".repeat(150 - 24) });
+  });
+
+  it("reads one cell of 300 parts", async () => {
+    const backing = new Map<string, string>([
+      [META, JSON.stringify({ lastSeq: 1 })],
+    ]);
+    splitBy(backing, evt(1), setJson(300), 300);
+    expect(await restored(backing)).toEqual({ text: "x".repeat(300 - 24) });
+  });
+
+  it("deletes the stale parts of a cell of 300 parts in calls of at most 128 keys", async () => {
+    const backing = new Map<string, string>();
+    const head = '{"seq":0,"state":{"text":"';
+    const tail = '"}}';
+    splitBy(
+      backing,
+      SNAPSHOT,
+      `${head}${"y".repeat(300 - head.length - tail.length)}${tail}`,
+      300,
+    );
+    expect(partsOf(backing, SNAPSHOT)).toHaveLength(300);
+
+    const { es } = await loaded(backing);
+    await es.store.save({ text: "small" }, { _tag: "set", text: "small" });
+    expect(partsOf(backing, SNAPSHOT)).toEqual([]);
+    expect(await restored(backing)).toEqual({ text: "small" });
+  });
+});
+
+describe("log keys — the event prefix and the parts prefix", () => {
+  const { storage } = fakeStorage(new Map());
+
+  it.each([
+    [
+      "the parts prefix starts with the event prefix",
+      "@@es/evt/",
+      "@@es/evt/part/",
+    ],
+    [
+      "the event prefix starts with the parts prefix",
+      "@@es/part/evt/",
+      "@@es/part/",
+    ],
+    ["the two are the same", "@@es/x/", "@@es/x/"],
+    ["the parts prefix is empty", "@@es/evt/", ""],
+  ])("refuses a store and a reader when %s", (_name, eventPrefix, parts) => {
+    const keys = { eventPrefix, parts };
+    expect(() =>
+      doEventSourcedStore(storage, textMachine(), ctx, { keys }),
+    ).toThrow("keys.eventPrefix and keys.parts must not prefix each other");
+    expect(() => doEventLogReader<Msg>(storage, { keys })).toThrow(
+      "keys.eventPrefix and keys.parts must not prefix each other",
+    );
+  });
+
+  it("takes two prefixes that sit side by side", () => {
+    const keys = { eventPrefix: "@@x/evt/", parts: "@@x/part/" };
+    expect(() =>
+      doEventSourcedStore(storage, textMachine(), ctx, { keys }),
+    ).not.toThrow();
   });
 });
 

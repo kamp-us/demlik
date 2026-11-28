@@ -102,6 +102,10 @@ import {
   storedRows,
 } from "./stored-cell";
 
+/** What a read throws for an event cell whose parts do not reassemble. */
+const EVENT_PARTS_MISSING =
+  "@demlik/tea/do: a stored event's parts are missing";
+
 /** Default cell prefixes. Chosen to sort log keys lexicographically by seq. */
 const DEFAULT_SNAPSHOT_KEY = "@@es/snapshot";
 const DEFAULT_META_KEY = "@@es/meta";
@@ -201,7 +205,13 @@ export interface EventLogReaderOptions<M> {
     readonly snapshot?: string;
     readonly meta?: string;
     readonly eventPrefix?: string;
-    /** Prefix of the parts a cell over the value bound is stored in; the cell's key follows it. */
+    /**
+     * Prefix of the parts a cell over the value bound is stored in; the cell's
+     * key follows it. It and `eventPrefix` must not prefix each other, or a
+     * part would list as an event; a store or reader built with two that do
+     * throws. A host that deletes the log's keys by prefix deletes this prefix
+     * too, or the parts stay behind.
+     */
     readonly parts?: string;
   };
 }
@@ -214,14 +224,25 @@ interface LogKeys {
   readonly parts: string;
 }
 
-/** The log's cell keys, each override falling back to its default. */
+/**
+ * The log's cell keys, each override falling back to its default. The event
+ * and part prefixes must not prefix each other: a part row under the event
+ * prefix would list as an event.
+ */
 function logKeys(keys: EventLogReaderOptions<never>["keys"] = {}): LogKeys {
-  return {
+  const resolved = {
     snapshot: keys.snapshot ?? DEFAULT_SNAPSHOT_KEY,
     meta: keys.meta ?? DEFAULT_META_KEY,
     eventPrefix: keys.eventPrefix ?? DEFAULT_EVENT_PREFIX,
     parts: keys.parts ?? DEFAULT_PART_PREFIX,
   };
+  const { eventPrefix, parts } = resolved;
+  if (eventPrefix.startsWith(parts) || parts.startsWith(eventPrefix)) {
+    throw new Error(
+      `@demlik/tea/do: keys.eventPrefix and keys.parts must not prefix each other, got ${JSON.stringify(eventPrefix)} and ${JSON.stringify(parts)}`,
+    );
+  }
+  return resolved;
 }
 
 /**
@@ -297,10 +318,13 @@ export interface EventSourcedOptions<S, M> extends EventLogReaderOptions<M> {
      * marker's seq, and `load()` refuses with {@link RecordingUnavailableError}
      * naming it. The log still takes appends, reads and deletion, `readFrames`
      * refuses the marker as `oversized`, and `readTrace` reports the recording
-     * unavailable. Markers apply to a log written as a recording only, and
-     * snapshots are written as they encode, with no budget. Must be a positive
-     * safe integer. A Durable Object row holds at most 8 MB. Default: no
-     * budget; every frame is written as it encodes.
+     * unavailable. Markers apply to a log written as a recording only, and a
+     * snapshot has no budget. Must be a positive safe integer.
+     *
+     * This is an opt-in cap on what a recording keeps, not a guard for the
+     * storage: a frame, like any cell, over 1,000,000 bytes of UTF-8 is written
+     * in parts (see {@link doEventSourcedStore}) and fits a Durable Object row
+     * whatever its size. Default: no cap; every frame is written whole.
      */
     readonly maxRowBytes?: number;
   };
@@ -426,7 +450,8 @@ export interface EventSourcedStore<S, M> {
    * `seq`, so a consumer can resume from a known offset (`{ fromSeq }`) or read
    * a window (`{ fromSeq, toSeq }`). An empty (or fully out-of-range) log yields
    * nothing. Events whose `parseEvent` returns `null` (a retired Msg variant)
-   * are dropped, identical to the recovery fold.
+   * are dropped, identical to the recovery fold; a cell stored in parts that
+   * do not reassemble throws.
    * Bounds are applied in storage queries, in pages of at most 128 rows.
    *
    * Read-only: it never appends, snapshots, or mutates store state, so streaming
@@ -622,7 +647,11 @@ export interface FrameReadOptions {
  * cell, sets an alarm, or loads the agent.
  */
 export interface EventLogReader<M> {
-  /** The log's head, or `null` when neither meta nor snapshot cell exists. */
+  /**
+   * The log's head, or `null` when neither meta nor snapshot cell exists.
+   * Throws when the first cell is stored in parts that do not reassemble: its
+   * format cannot be told.
+   */
   readHead(): Promise<EventLogHead | null>;
   /** Highest committed append sequence from the meta cell, or 0 when absent. */
   readCommittedSeq(): Promise<number>;
@@ -634,7 +663,8 @@ export interface EventLogReader<M> {
   /**
    * Decoded events in range, in `seq` order, exactly as the store's
    * {@link EventSourcedStore.readEvents}: events `parseEvent` refuses are
-   * dropped, and text that is not JSON throws.
+   * dropped, and text that is not JSON, or a cell whose parts do not
+   * reassemble, throws.
    */
   readEvents(range?: EventLogRange): AsyncIterable<PersistedEvent<M>>;
   /**
@@ -733,6 +763,11 @@ function jsonBytes(value: unknown): number {
   return utf8.encode(JSON.stringify(value)).byteLength;
 }
 
+/**
+ * The log's first cell, reassembled, or `undefined` when it has none. Throws
+ * when the cell is stored in parts that do not reassemble: its format is then
+ * unknown, and reading it as bare messages would be a guess.
+ */
 async function firstCell(
   storage: DurableObjectStorage,
   keys: LogKeys,
@@ -746,15 +781,23 @@ async function firstCell(
       ? atOne
       : await storage.get<unknown>(oneKey, noCache ? { noCache } : {});
   if (one !== undefined && one !== null)
-    return readStoredCell(storage, parts, oneKey, one, noCache);
+    return wholeCell(
+      await readStoredCell(storage, parts, oneKey, one, noCache),
+    );
   const rows = await storage.list<unknown>({
     prefix: eventPrefix,
     limit: 1,
     ...(noCache ? { noCache } : {}),
   });
   for (const [key, value] of rows)
-    return readStoredCell(storage, parts, key, value, noCache);
+    return wholeCell(await readStoredCell(storage, parts, key, value, noCache));
   return undefined;
+}
+
+/** `cell`, or a throw when it is a cell whose parts do not reassemble. */
+function wholeCell(cell: unknown): unknown {
+  if (cell instanceof MissingParts) throw new Error(EVENT_PARTS_MISSING);
+  return cell;
 }
 
 function rowSize(key: string, value: string): number {
@@ -999,12 +1042,14 @@ function openLogReader<M extends { _tag: string }>(
     const snapshot = cells.get(snapshotKey);
     const first =
       meta === undefined || meta === null
-        ? await readStoredCell(
-            storage,
-            parts,
-            firstKey,
-            cells.get(firstKey),
-            true,
+        ? wholeCell(
+            await readStoredCell(
+              storage,
+              parts,
+              firstKey,
+              cells.get(firstKey),
+              true,
+            ),
           )
         : await firstCell(storage, keys, true, cells.get(firstKey) ?? null);
     const absent = (
@@ -1208,6 +1253,7 @@ function openLogReader<M extends { _tag: string }>(
         continue;
       }
       if (stored.reason === "json") throw stored.cause;
+      if (stored.reason === "part") throw new Error(EVENT_PARTS_MISSING);
     }
   }
 
@@ -1332,14 +1378,23 @@ export async function readTrace<S, M extends { _tag: string }>(
  * init used to establish the event log's starting State. Live resume commands
  * belong to the runtime's subsequent init over the recovered State.
  *
- * Every value the store writes is under 1,000,000 bytes of UTF-8. A snapshot or
- * an event cell at or over that bound is written as a versioned manifest at its
- * own key and parts under the `parts` key prefix (default `@@es/part/`), in the
- * same transaction as the meta cell, which also drops the parts an earlier,
- * longer value of that key left behind. Reads reassemble the cell before they
- * parse it, so a restore, `readFrames` and `readTrace` see the one cell it was,
- * and its `serializedBytes` is the size of its whole text. A cell whose parts do
- * not reassemble reads as refused (`part`) and refuses a restore.
+ * Every value the store writes is under 1,000,000 bytes of UTF-8, so a Durable
+ * Object row (at most 8 MB) always holds it. A snapshot or an event cell at or
+ * over that bound is written as a versioned manifest at its own key and parts
+ * under the `keys.parts` prefix (default `@@es/part/`; the cell's key follows
+ * it), in the same transaction as the meta cell, which also drops the parts an
+ * earlier, longer value of that key left behind. Reads reassemble the cell
+ * before they parse it, so a restore, `readFrames` and `readTrace` see the one
+ * cell it was, and its `serializedBytes` is the size of its whole text. A cell
+ * whose parts do not reassemble reads as refused (`part`) and refuses a
+ * restore.
+ *
+ * Only the store's own reads reassemble. A host that lists the event prefix
+ * with `storage.list` sees a manifest, not the event, for a cell in parts: read
+ * the log through {@link doEventLogReader}. A host that deletes the log's keys
+ * by prefix leaves the part rows behind unless it deletes `keys.parts` rows
+ * too. A log with a cell in parts does not read on a build of this package that
+ * predates parts.
  */
 // Cmd/Sub are INFERRED type params (`C`/`U`) that DEFAULT to the substrate's
 // base unions, not pinned to them. The fold itself only ever touches `init` +
@@ -1470,9 +1525,12 @@ export function doEventSourcedStore<
     if (raw instanceof MissingParts) {
       throw new Error("@demlik/tea/do: persisted snapshot's parts are missing");
     }
+    if (typeof raw !== "string") {
+      throw new Error("@demlik/tea/do: persisted snapshot was refused");
+    }
     // Structural JSON malformation throws here, as in doStore — infra error,
     // not a schema mismatch.
-    const cell = JSON.parse(raw as string) as SnapshotCell<unknown>;
+    const cell = JSON.parse(raw) as SnapshotCell<unknown>;
     const parsed = parse(cell.state);
     if (parsed === null)
       throw new Error("@demlik/tea/do: persisted snapshot was refused");
@@ -1516,9 +1574,7 @@ export function doEventSourcedStore<
         if (cell.reason === "oversized") {
           throw new RecordingUnavailableError(cell.seq ?? 0);
         }
-        if (cell.reason === "part") {
-          throw new Error("@demlik/tea/do: a stored event's parts are missing");
-        }
+        if (cell.reason === "part") throw new Error(EVENT_PARTS_MISSING);
         continue;
       }
       state = foldMsgs(machine, state, [cell.event]);
@@ -1816,7 +1872,7 @@ export function doEventSourcedStore<
       admit();
       for (const write of writes) {
         if (rejected !== undefined) rejected.key = write.key;
-        await putStoredRows(txn, parts, write);
+        await putStoredRows(txn, parts, write, write.key === snapshotKey);
       }
       if (rejected !== undefined) rejected.key = null;
     });

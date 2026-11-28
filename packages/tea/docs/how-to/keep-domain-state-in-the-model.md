@@ -121,7 +121,10 @@ shapes the `provider` a settled turn keeps in `conversation.turns`, in the
 run's `output` and in the brain call's settled result. Every later prompt and
 resilient input is rendered from the kept transcript, so keep only what the
 model must read again. A settle that folds nothing, such as a late result for
-a call that already settled, projects nothing.
+a call that already settled, projects nothing. The `TurnSettled` and
+`ToolSettled` events carry the turn and result whole, as they settled, so a
+`transcript` collected live holds the whole ones, and one seeded from a resumed
+model holds the projections.
 
 ## Saves made before you added `domain`
 

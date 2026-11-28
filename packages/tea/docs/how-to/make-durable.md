@@ -381,9 +381,32 @@ logged store in steps 5–6.
    `StoreRefusedError`'s cause). The marker is read before a restore attempt
    is recorded, so every load gives that same refusal and none spends the
    `restoreRetryLimit` budget. The log still takes appends, reads and
-   deletion. A Durable Object row holds at most 8 MB, so a budget at or below
-   that keeps every frame writable. Without `maxRowBytes` the store writes
-   every frame as it encodes. Snapshots are written as they encode either way.
+   deletion. `maxRowBytes` is an opt-in cap on what a recording keeps, not a
+   guard for the storage: a frame over 1,000,000 bytes is written in parts
+   (item 7 below) whether or not there is a cap. Without it the store writes
+   every frame whole. A snapshot has no budget.
+
+7. Every value the store writes is under 1,000,000 bytes of UTF-8, so a
+   Durable Object row (at most 8 MB) always holds it. A snapshot or an event
+   cell at or over that bound is written as a manifest at its own key
+   (`@@es/cell:1:{"parts":N,"bytes":B}`) and N parts under the `keys.parts`
+   prefix (default `@@es/part/`; the cell's key follows it), in the same
+   transaction as the meta cell. Rewriting a snapshot in fewer parts deletes the
+   parts it no longer uses. Restore, `readEvents`, `readStoredEvents`,
+   `readFrames` and `readTrace` reassemble a cell before they parse it, so
+   nothing above the store sees a manifest. A cell whose parts do not
+   reassemble (a part missing, bytes that do not add up, or a manifest of a
+   version this build does not know) is refused as `part` by `readStoredEvents`
+   and `readFrames`, and makes `readEvents`, `readHead` and a restore throw;
+   it is never read as a shorter value.
+   `keys.eventPrefix` and `keys.parts` must not prefix each other, or a part
+   would list as an event: a store or reader built with two that do throws.
+8. Read the log only through the store or
+   [`doEventLogReader`](../reference/do.md#doEventLogReader). A host that lists
+   the event prefix with `storage.list` sees a manifest, not the event, for a
+   cell in parts. A host that deletes the log's keys by prefix leaves the part
+   rows behind unless it deletes the `keys.parts` rows with them. A log that has
+   a cell in parts does not read on a build of `@demlik/tea` from before parts.
 
 A host that reads an agent's log without loading it — its head, committed
 sequence or events in a range — uses
@@ -401,8 +424,9 @@ range that starts in the middle of a run of deltas reads one bounded page of
 earlier frames to find its basis. A frame that cannot be rebuilt comes back
 `refused` with its reason (`frame`, `basis` or `checksum`), and a delta after it
 is refused `basis`. A marker written in place of an oversized frame is refused
-`oversized`, with the `bytes` measured. `readStoredEvents` and `readEvents`
-still yield Msgs only, whichever format the log has.
+`oversized`, with the `bytes` measured. A cell stored in parts that do not
+reassemble is refused `part`. `readStoredEvents` and `readEvents` still yield
+Msgs only, whichever format the log has.
 
 [`readTrace(reader, range)`](../reference/do.md#readTrace) reads a recording
 back as the `Trace` it was written from, for `replayTrace`: the range's first
@@ -419,5 +443,6 @@ boot after a restart, start the range at that boot's `init` frame.
 See [`EventSourcedOptions`](../reference/do.md#EventSourcedOptions) for the
 restore-attempt key override and parsing options, and
 [`EventLogReaderOptions`](../reference/do.md#EventLogReaderOptions) for the
-event parse option. Storage values remain JSON
-text; command handlers and host recovery actions stay outside the replay fold.
+event parse option. A cell is JSON text, in one
+value under 1,000,000 bytes or, over that, in a manifest and parts (item 7);
+command handlers and host recovery actions stay outside the replay fold.

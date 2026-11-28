@@ -938,6 +938,11 @@ export interface AgentDomain<D, R> {
  *                      projected: its `reason` and payload are the model's and
  *                      the program's channel.
  *
+ * The kept turn and result are what the Model holds. The `TurnSettled` and
+ * `ToolSettled` events a run emits carry them whole, as they settled, so a
+ * `transcript` collected live holds the whole ones and one seeded from a
+ * resumed Model holds the projections.
+ *
  * Both rows must be PURE, like `step`. A turn or tool settle that folds
  * nothing (a stale turn, an unknown or already-settled call) projects nothing.
  * Because a later brain call renders its prompt from the kept transcript, a

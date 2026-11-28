@@ -5,6 +5,9 @@
  * `transaction`. The backing Map is the retained storage: a second storage over
  * the same Map is a new activation that finds what the last one left.
  *
+ * `get` and `delete` refuse more than 128 keys in one call, as the platform
+ * does, so a caller that does not batch fails here too.
+ *
  * A value is structured-cloned on the way in and out, as the platform does. A
  * `transaction` that throws puts back every key it touched, so a write that
  * fails half way leaves the bytes it started with. `failPut` makes a chosen key
@@ -22,6 +25,17 @@ export interface FakeDoStorage<V> {
   healPut(): void;
   /** Keys written by each `put`, in order, including writes later rolled back. */
   readonly writes: string[];
+}
+
+/** The most keys the platform takes in one `get` or `delete` call. */
+const MAX_KEYS_PER_CALL = 128;
+
+function checkKeyCount(call: string, keys: readonly string[]): void {
+  if (keys.length > MAX_KEYS_PER_CALL) {
+    throw new Error(
+      `${call}() accepts at most ${MAX_KEYS_PER_CALL} keys, got ${keys.length}`,
+    );
+  }
 }
 
 export function fakeDoStorage<V = string>(
@@ -45,6 +59,7 @@ export function fakeDoStorage<V = string>(
       if (typeof key === "string") {
         return structuredClone(backing.get(key)) as T | undefined;
       }
+      checkKeyCount("get", key);
       const found = new Map<string, T>();
       for (const k of key) {
         if (backing.has(k)) found.set(k, structuredClone(backing.get(k)) as T);
@@ -64,6 +79,7 @@ export function fakeDoStorage<V = string>(
       }
     },
     async delete(keys: string | readonly string[]): Promise<boolean> {
+      if (typeof keys !== "string") checkKeyCount("delete", keys);
       let deleted = false;
       for (const key of typeof keys === "string" ? [keys] : keys) {
         deleted = backing.delete(key) || deleted;

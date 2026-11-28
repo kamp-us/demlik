@@ -17,27 +17,44 @@
  *
  * A read reassembles a manifest from its parts before anything parses it. A
  * part that is missing, or parts whose bytes do not add up to the manifest's,
- * read as {@link MissingParts} instead of a value, never as a shorter text.
+ * read as {@link MissingParts} instead of a value, never as a shorter text. So
+ * does a value that starts `@@es/cell:` and is not a version 1 manifest: a
+ * layout this build does not know, or a damaged manifest, is refused, never
+ * read as an ordinary value (an ordinary cell is JSON text and starts `{`).
+ *
+ * Why the bound is 1,000,000 bytes. A Durable Object row holds at most 8 MB
+ * (https://developers.cloudflare.com/durable-objects/platform/limits/:
+ * "Maximum string, BLOB or table row size | 8 MB"). A JS string is stored at
+ * one byte per UTF-16 unit when every unit is at most U+00FF, and at two bytes
+ * per unit as soon as one is above it. A string never has more UTF-16 units
+ * than UTF-8 bytes (each unit takes at least one byte of UTF-8), so a part of
+ * under 1,000,000 bytes of UTF-8 has under 1,000,000 units and is stored in at
+ * most about 2.0 MB, under the 8 MB row, whatever characters it holds.
  */
 
 /** Every value the store writes is strictly under this many bytes of UTF-8. */
 export const STORED_VALUE_BYTES = 1_000_000;
 /** Default key prefix of the parts; the cell's key follows it. */
 export const DEFAULT_PART_PREFIX = "@@es/part/";
-/** The manifest's prefix, versioned so a later layout can be told apart. */
-const MANIFEST_PREFIX = "@@es/cell:1:";
+/** Every manifest's prefix, whatever its version: no ordinary cell starts with it. */
+const MANIFEST_FAMILY = "@@es/cell:";
+/** The manifest this build writes and reads, versioned so a later layout can be told apart. */
+const MANIFEST_PREFIX = `${MANIFEST_FAMILY}1:`;
 /** Zero-pad part indexes so a part's key sorts by index. */
 const PART_INDEX_WIDTH = 6;
 /** Keys per `get` / `delete` call; the storage API takes at most 128. */
 const GET_BATCH = 128;
 
 const utf8 = new TextEncoder();
-const fromUtf8 = new TextDecoder();
+// `ignoreBOM`: the default decoder drops a leading U+FEFF, which would make a
+// part whose cut lands right before one 3 bytes short of what was written.
+const fromUtf8 = new TextDecoder("utf-8", { ignoreBOM: true });
 
 /**
  * A cell stored in parts whose parts do not reassemble. `serializedBytes` is
  * the size of the parts read before the first missing one, or of all of them
- * when their total does not match the manifest.
+ * when their total does not match the manifest, or 0 for a manifest this build
+ * cannot read.
  */
 export class MissingParts {
   constructor(
@@ -63,17 +80,22 @@ function partKey(partPrefix: string, key: string, index: number): string {
   return `${partPrefix}${key}/${String(index).padStart(PART_INDEX_WIDTH, "0")}`;
 }
 
-/** The manifest a stored value is, or `null` for an ordinary value. PURE. */
-function manifestOf(value: unknown): Manifest | null {
-  if (typeof value !== "string" || !value.startsWith(MANIFEST_PREFIX))
+/**
+ * What a stored value is: an ordinary value (`null`), a manifest this build
+ * reads, or a value that starts like a manifest and is not one it reads
+ * (`"unreadable"`). PURE.
+ */
+function manifestOf(value: unknown): Manifest | "unreadable" | null {
+  if (typeof value !== "string" || !value.startsWith(MANIFEST_FAMILY))
     return null;
+  if (!value.startsWith(MANIFEST_PREFIX)) return "unreadable";
   let raw: unknown;
   try {
     raw = JSON.parse(value.slice(MANIFEST_PREFIX.length));
   } catch {
-    return null;
+    return "unreadable";
   }
-  if (raw === null || typeof raw !== "object") return null;
+  if (raw === null || typeof raw !== "object") return "unreadable";
   const { parts, bytes } = raw as { parts?: unknown; bytes?: unknown };
   return typeof parts === "number" &&
     Number.isSafeInteger(parts) &&
@@ -82,7 +104,7 @@ function manifestOf(value: unknown): Manifest | null {
     Number.isSafeInteger(bytes) &&
     bytes >= 0
     ? { parts, bytes }
-    : null;
+    : "unreadable";
 }
 
 const isContinuation = (byte: number | undefined): boolean =>
@@ -111,6 +133,10 @@ export function storedRows(
   key: string,
   value: string,
 ): StoredWrite {
+  // A UTF-16 unit takes at most 3 bytes of UTF-8, so a value of under a third
+  // of the bound in units is under the bound in bytes: it needs no measuring.
+  if (value.length * 3 < STORED_VALUE_BYTES)
+    return { key, rows: [[key, value]], parts: 0 };
   const bytes = utf8.encode(value);
   if (bytes.byteLength < STORED_VALUE_BYTES)
     return { key, rows: [[key, value]], parts: 0 };
@@ -129,16 +155,28 @@ export function storedRows(
 }
 
 /**
- * Write one cell's rows inside `txn`, first deleting the parts an earlier
- * value of the key had past the new value's count.
+ * Write one cell's rows inside `txn`. When `replacing`, first delete the parts
+ * an earlier value of the key had past the new value's count.
+ *
+ * `replacing` is true for a key that is written again with a new value: the
+ * snapshot's. An event cell is written once, at a sequence the meta cell has
+ * not yet counted, and the meta cell is never near the bound, so neither has an
+ * earlier manifest to clean up and neither is read first.
  */
 export async function putStoredRows(
   txn: DurableObjectTransaction,
   partPrefix: string,
   write: StoredWrite,
+  replacing: boolean,
 ): Promise<void> {
-  const before = manifestOf(await txn.get<unknown>(write.key));
-  if (before !== null && before.parts > write.parts) {
+  const before = replacing
+    ? manifestOf(await txn.get<unknown>(write.key))
+    : null;
+  if (
+    before !== null &&
+    before !== "unreadable" &&
+    before.parts > write.parts
+  ) {
     const stale: string[] = [];
     for (let index = write.parts; index < before.parts; index += 1)
       stale.push(partKey(partPrefix, write.key, index));
@@ -159,12 +197,13 @@ export async function readStoredCells(
   cells: ReadonlyMap<string, unknown>,
   noCache: boolean,
 ): Promise<Map<string, unknown>> {
-  const manifests = new Map<string, Manifest>();
+  const manifests = new Map<string, Manifest | "unreadable">();
   const wanted: string[] = [];
   for (const [key, value] of cells) {
     const manifest = manifestOf(value);
     if (manifest === null) continue;
     manifests.set(key, manifest);
+    if (manifest === "unreadable") continue;
     for (let index = 0; index < manifest.parts; index += 1)
       wanted.push(partKey(partPrefix, key, index));
   }
@@ -180,10 +219,9 @@ export async function readStoredCells(
   const read = new Map<string, unknown>();
   for (const [key, value] of cells) {
     const manifest = manifests.get(key);
-    read.set(
-      key,
-      manifest === undefined ? value : joined(partPrefix, key, manifest, parts),
-    );
+    if (manifest === undefined) read.set(key, value);
+    else if (manifest === "unreadable") read.set(key, new MissingParts(key, 0));
+    else read.set(key, joined(partPrefix, key, manifest, parts));
   }
   return read;
 }

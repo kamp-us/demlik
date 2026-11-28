@@ -946,7 +946,8 @@ interface EventLogReader<M> {
   /**
    * Decoded events in range, in `seq` order, exactly as the store's
    * EventSourcedStore.readEvents: events `parseEvent` refuses are
-   * dropped, and text that is not JSON throws.
+   * dropped, and text that is not JSON, or a cell whose parts do not
+   * reassemble, throws.
    */
   readEvents(range?: EventLogRange): AsyncIterable<PersistedEvent<M>>;
   /**
@@ -960,7 +961,11 @@ interface EventLogReader<M> {
     range?: StoredEventRange,
     options?: FrameReadOptions,
   ): AsyncIterable<StoredFrame<M>>;
-  /** The log's head, or `null` when neither meta nor snapshot cell exists. */
+  /**
+   * The log's head, or `null` when neither meta nor snapshot cell exists.
+   * Throws when the first cell is stored in parts that do not reassemble: its
+   * format cannot be told.
+   */
   readHead(): Promise<EventLogHead | null>;
   /**
    * Every stored event cell in range, in `seq` order, with refusals reported
@@ -980,7 +985,13 @@ interface EventLogReaderOptions<M> {
   readonly keys?: {
     readonly eventPrefix?: string;
     readonly meta?: string;
-    /** Prefix of the parts a cell over the value bound is stored in; the cell's key follows it. */
+    /**
+     * Prefix of the parts a cell over the value bound is stored in; the cell's
+     * key follows it. It and `eventPrefix` must not prefix each other, or a
+     * part would list as an event; a store or reader built with two that do
+     * throws. A host that deletes the log's keys by prefix deletes this prefix
+     * too, or the parts stay behind.
+     */
     readonly parts?: string;
     readonly snapshot?: string;
   };
@@ -1004,7 +1015,13 @@ interface EventSourcedOptions<S, M> extends EventLogReaderOptions<M> {
   readonly keys?: {
     readonly eventPrefix?: string;
     readonly meta?: string;
-    /** Prefix of the parts a cell over the value bound is stored in; the cell's key follows it. */
+    /**
+     * Prefix of the parts a cell over the value bound is stored in; the cell's
+     * key follows it. It and `eventPrefix` must not prefix each other, or a
+     * part would list as an event; a store or reader built with two that do
+     * throws. A host that deletes the log's keys by prefix deletes this prefix
+     * too, or the parts stay behind.
+     */
     readonly parts?: string;
     readonly snapshot?: string;
   } & {
@@ -1075,10 +1092,13 @@ interface EventSourcedOptions<S, M> extends EventLogReaderOptions<M> {
      * marker's seq, and `load()` refuses with RecordingUnavailableError
      * naming it. The log still takes appends, reads and deletion, `readFrames`
      * refuses the marker as `oversized`, and `readTrace` reports the recording
-     * unavailable. Markers apply to a log written as a recording only, and
-     * snapshots are written as they encode, with no budget. Must be a positive
-     * safe integer. A Durable Object row holds at most 8 MB. Default: no
-     * budget; every frame is written as it encodes.
+     * unavailable. Markers apply to a log written as a recording only, and a
+     * snapshot has no budget. Must be a positive safe integer.
+     *
+     * This is an opt-in cap on what a recording keeps, not a guard for the
+     * storage: a frame, like any cell, over 1,000,000 bytes of UTF-8 is written
+     * in parts (see doEventSourcedStore) and fits a Durable Object row
+     * whatever its size. Default: no cap; every frame is written whole.
      */
     readonly maxRowBytes?: number;
     /** JSON written into every `init` frame, unread by the store. */
@@ -1159,7 +1179,8 @@ interface EventSourcedStore<S, M> {
    * `seq`, so a consumer can resume from a known offset (`{ fromSeq }`) or read
    * a window (`{ fromSeq, toSeq }`). An empty (or fully out-of-range) log yields
    * nothing. Events whose `parseEvent` returns `null` (a retired Msg variant)
-   * are dropped, identical to the recovery fold.
+   * are dropped, identical to the recovery fold; a cell stored in parts that
+   * do not reassemble throws.
    * Bounds are applied in storage queries, in pages of at most 128 rows.
    *
    * Read-only: it never appends, snapshots, or mutates store state, so streaming
