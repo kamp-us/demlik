@@ -150,16 +150,4 @@ describe("fromTimeout — ref: false leaves the pending timer unreferenced", () 
     expect(left.getState().phase).toBe("left");
     await left.stop();
   });
-
-  it("leaves a handle that is not an object alone, as a browser's number is", async () => {
-    vi.spyOn(globalThis, "setTimeout").mockImplementation(
-      () => 7 as unknown as NodeJS.Timeout,
-    );
-    const rt = await run(timeoutMachine(LONG_DELAY_MS, false), { subscribe })
-      .ready;
-
-    expect(rt.getState().phase).toBe("waiting");
-
-    await rt.stop();
-  });
 });

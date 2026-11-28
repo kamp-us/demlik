@@ -273,6 +273,28 @@ describe("a frame written whole", () => {
   });
 });
 
+describe("a cell an earlier build wrote", () => {
+  it("reads its whole init cell, then its small-State delta against it", async () => {
+    const whole =
+      '{"tea":"recording/1","frame":"init","restored":false,"provenance":{"run":"r"},"evidence":{"full":"q1bKU7Iy0FHKLEnNLVayilZKVNJRSlKKrQUA","cmds":"RgpGOlt7Il90YWciOiJnbyJ9XWhWNHNsOw=="}}';
+    const delta =
+      '{"tea":"recording/1","frame":"step","msg":{"_tag":"inc","by":1},"evidence":{"delta":"aQpGOnsic3RhdGUiOnsibiI6MVNARiwyOl19MmxfYzg1Ow=="}}';
+
+    const first = await rebuilt(1, (await frameOf(whole)).evidence, null);
+    expect(readEvidence(first.bytes)).toEqual({
+      state: { n: 0, items: ["a", "b"] },
+      cmds: [{ _tag: "go" }],
+    });
+
+    const second = await rebuilt(2, (await frameOf(delta)).evidence, first);
+    expect(readEvidence(second.bytes)).toEqual({
+      state: { n: 1, items: ["a", "b"] },
+      cmds: [],
+    });
+    expect([second.seq, second.chain]).toEqual([2, 1]);
+  });
+});
+
 describe("a frame that cannot be rebuilt", () => {
   async function deltaFrame() {
     const [first, second] = await writeChain([
