@@ -144,7 +144,7 @@ import { … } from "@demlik/tea/do";
 | [`StepWorking`](#StepWorking) | Interface | stable | The NOT-READY arm — the run is computing OUT-OF-BAND under a defer-resume host (a production incident: a non-blocking pull carrier must answer a pull with an explicit "computing, poll again" instead of holding the request across a multi-second step). |
 | [`StoredEvent`](#StoredEvent) | Type | stable | One stored event cell as read, decoded or refused. |
 | [`StoredEventRange`](#StoredEventRange) | Interface | stable | An EventLogRange with an optional cap on how many stored cells are read. |
-| [`StoredEventRefusal`](#StoredEventRefusal) | Type | stable | Why a stored event cell did not decode: its value is not text (`not-text`), its key carries no integer sequence (`key`), its text is not JSON (`json`), `parseEvent` returned `null` (`event`), or it is a recording cell that does not decode as a frame, lacks the frame its delta needs, or fails its checksum (FrameRefusal). |
+| [`StoredEventRefusal`](#StoredEventRefusal) | Type | stable | Why a stored event cell did not decode: its value is not text (`not-text`), its key carries no integer sequence (`key`), its text is not JSON (`json`), `parseEvent` returned `null` (`event`), it is a cell stored in parts whose parts do not reassemble (`part`), or it is a recording cell that does not decode as a frame, lacks the frame its delta needs, or fails its checksum (FrameRefusal). |
 | [`StoredFrame`](#StoredFrame) | Type | stable | One stored cell read as a frame of the log. |
 | [`survivingEffects`](#survivingEffects) | Function | stable | RE-EMIT ON ACTIVATION. |
 | [`TraceUnavailableReason`](#TraceUnavailableReason) | Type | stable | Why readTrace has no trace to give: the log or range is empty (`empty`), it is written as bare messages (`messages`), its first frame is not an `init` frame (`anchor`), a second `init` frame opens another boot (`boot`), a seq inside the range has no cell (`gap`), the cells stop before the committed head (`tail`), or a frame is refused, with the refusal `readFrames` gives it, `oversized` among them. |
@@ -946,7 +946,8 @@ interface EventLogReader<M> {
   /**
    * Decoded events in range, in `seq` order, exactly as the store's
    * EventSourcedStore.readEvents: events `parseEvent` refuses are
-   * dropped, and text that is not JSON throws.
+   * dropped, and text that is not JSON, or a cell whose parts do not
+   * reassemble, throws.
    */
   readEvents(range?: EventLogRange): AsyncIterable<PersistedEvent<M>>;
   /**
@@ -960,7 +961,11 @@ interface EventLogReader<M> {
     range?: StoredEventRange,
     options?: FrameReadOptions,
   ): AsyncIterable<StoredFrame<M>>;
-  /** The log's head, or `null` when neither meta nor snapshot cell exists. */
+  /**
+   * The log's head, or `null` when neither meta nor snapshot cell exists.
+   * Throws when the first cell is stored in parts that do not reassemble: its
+   * format cannot be told.
+   */
   readHead(): Promise<EventLogHead | null>;
   /**
    * Every stored event cell in range, in `seq` order, with refusals reported
@@ -980,6 +985,14 @@ interface EventLogReaderOptions<M> {
   readonly keys?: {
     readonly eventPrefix?: string;
     readonly meta?: string;
+    /**
+     * Prefix of the parts a cell over the value bound is stored in; the cell's
+     * key follows it. It and `eventPrefix` must not prefix each other, or a
+     * part would list as an event; a store or reader built with two that do
+     * throws. A host that deletes the log's keys by prefix deletes this prefix
+     * too, or the parts stay behind.
+     */
+    readonly parts?: string;
     readonly snapshot?: string;
   };
   /**
@@ -1002,6 +1015,14 @@ interface EventSourcedOptions<S, M> extends EventLogReaderOptions<M> {
   readonly keys?: {
     readonly eventPrefix?: string;
     readonly meta?: string;
+    /**
+     * Prefix of the parts a cell over the value bound is stored in; the cell's
+     * key follows it. It and `eventPrefix` must not prefix each other, or a
+     * part would list as an event; a store or reader built with two that do
+     * throws. A host that deletes the log's keys by prefix deletes this prefix
+     * too, or the parts stay behind.
+     */
+    readonly parts?: string;
     readonly snapshot?: string;
   } & {
     /** Restore-attempt cell. Default: `${meta}/restore-attempt`. */
@@ -1071,10 +1092,13 @@ interface EventSourcedOptions<S, M> extends EventLogReaderOptions<M> {
      * marker's seq, and `load()` refuses with RecordingUnavailableError
      * naming it. The log still takes appends, reads and deletion, `readFrames`
      * refuses the marker as `oversized`, and `readTrace` reports the recording
-     * unavailable. Markers apply to a log written as a recording only, and
-     * snapshots are written as they encode, with no budget. Must be a positive
-     * safe integer. A Durable Object row holds at most 8 MB. Default: no
-     * budget; every frame is written as it encodes.
+     * unavailable. Markers apply to a log written as a recording only, and a
+     * snapshot has no budget. Must be a positive safe integer.
+     *
+     * This is an opt-in cap on what a recording keeps, not a guard for the
+     * storage: a frame, like any cell, over 1,000,000 bytes of UTF-8 is written
+     * in parts (see doEventSourcedStore) and fits a Durable Object row
+     * whatever its size. Default: no cap; every frame is written whole.
      */
     readonly maxRowBytes?: number;
     /** JSON written into every `init` frame, unread by the store. */
@@ -1155,7 +1179,8 @@ interface EventSourcedStore<S, M> {
    * `seq`, so a consumer can resume from a known offset (`{ fromSeq }`) or read
    * a window (`{ fromSeq, toSeq }`). An empty (or fully out-of-range) log yields
    * nothing. Events whose `parseEvent` returns `null` (a retired Msg variant)
-   * are dropped, identical to the recovery fold.
+   * are dropped, identical to the recovery fold; a cell stored in parts that
+   * do not reassemble throws.
    * Bounds are applied in storage queries, in pages of at most 128 rows.
    *
    * Read-only: it never appends, snapshots, or mutates store state, so streaming
@@ -2405,7 +2430,7 @@ interface StoredEventRange extends EventLogRange {
 ### `StoredEventRefusal`
 
 ```ts
-type StoredEventRefusal = "not-text" | "key" | "json" | "event" | FrameRefusal
+type StoredEventRefusal = "not-text" | "key" | "json" | "event" | "part" | FrameRefusal
 ```
 
 <a id="StoredFrame"></a>

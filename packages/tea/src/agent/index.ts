@@ -422,6 +422,36 @@ export function createAgent<
     return { ...s, domain: domain.step(slice, event) };
   }
 
+  /**
+   * The turn the transcript keeps once `step` has folded the original: its
+   * `provider` projected by `retain.turnProvider`, everything else as it
+   * settled. A turn without a `provider`, or a domain without the row, is kept
+   * as it is. PURE.
+   */
+  function keptTurn<T extends AgentTurn>(turn: T, at: number): T {
+    const project = config.domain?.retain?.turnProvider;
+    if (project === undefined || turn.provider === undefined) return turn;
+    return { ...turn, provider: project({ _tag: "turn", at, turn }) };
+  }
+
+  /**
+   * The outcome the transcript and the fan-out keep for a settled call: a
+   * success's `result` projected by `retain.toolResult`, a failure as it
+   * settled. PURE.
+   */
+  function keptOutcome(
+    call: ToolCall,
+    outcome: ToolOutcome<R>,
+    at: number,
+  ): ToolOutcome<R> {
+    const project = config.domain?.retain?.toolResult;
+    if (project === undefined || outcome.kind !== "ok") return outcome;
+    return {
+      kind: "ok",
+      result: project({ _tag: "tool", at, call, outcome }),
+    };
+  }
+
   function runIdOf(s: State): string | null {
     return s.run.phase === "idle" ? null : s.run.runId;
   }
@@ -619,6 +649,7 @@ export function createAgent<
     s: State,
     result: AgentTurn,
     at: number,
+    projected?: AgentTurn,
   ): readonly [State, readonly AgentCmd<P, TC>[]] {
     const conv = requireAwaiting(s, "llm");
     if (conv === null) return [s, []];
@@ -626,19 +657,21 @@ export function createAgent<
     // The turn's reported usage (#332) joins the run's total and becomes the
     // latest context size — both read off the settled turn, never estimated.
     const [usage, measured] = withTurnUsage(s, conv, result);
-    const withTurn: Conversation<R> = {
-      ...measured,
-      turns: [...conv.turns, result],
-    };
+    // `step` folds the turn as it settled; the transcript keeps the projection.
     const counted: State = stepDomain(
       { ...s, usage },
       { _tag: "turn", at, turn: result },
     );
+    const kept = projected ?? keptTurn(result, at);
+    const withTurn: Conversation<R> = {
+      ...measured,
+      turns: [...conv.turns, kept],
+    };
 
     if (result.toolCalls.length === 0) {
       const answered: State = { ...counted, conversation: withTurn };
       const text = config.continueWhen?.(answered) ?? null;
-      if (text === null) return advanceStage(answered, result, at);
+      if (text === null) return advanceStage(answered, kept, at);
       const nudge = { turn: withTurn.turns.length - 1, text };
       return nextTurn(
         stepDomain(noted(answered, { kind: "nudge_recorded", text, at }), {
@@ -865,10 +898,13 @@ export function createAgent<
     const call = prev.tools.running.find((c) => c.callId === callId);
     if (call === undefined) return [prev, []];
 
+    // `step` folds the outcome as it settled; the fan-out results and the
+    // tool record keep the projection.
+    const kept = keptOutcome(call, outcome, at);
     const [tools] =
-      outcome.kind === "ok"
-        ? fan.itemOk(prev.tools, callId, outcome)
-        : fan.itemErr(prev.tools, callId, outcome);
+      kept.kind === "ok"
+        ? fan.itemOk(prev.tools, callId, kept)
+        : fan.itemErr(prev.tools, callId, kept);
     // The freed slot backfills from the queue — those launches are armed exactly
     // like the batch's first ones, so a queued tool gets its timeout too.
     const [toolResilience, launchCmds, launched] = armLaunch(
@@ -902,7 +938,7 @@ export function createAgent<
       ...conv,
       toolRecords: [
         ...conv.toolRecords,
-        { call, outcome, turn: conv.turns.length - 1 },
+        { call, outcome: kept, turn: conv.turns.length - 1 },
       ],
     };
 
@@ -1065,15 +1101,27 @@ export function createAgent<
     msg: AgentLlmOkMsg<P, O>,
     at: number,
   ): readonly [State, readonly AgentCmd<P, TC>[]] {
-    // 1) Advance the retry layer — resets retry[key], closes the breaker.
-    const [resilience, retryCmds] = llm.succeed(s.resilience, msg);
+    // A settle the conversation is not awaiting (a late result after cancel,
+    // or for a turn that already settled) folds nothing, so it projects
+    // nothing: the resilient slice settles the call with the message as sent.
+    if (requireAwaiting(s, "llm") === null) {
+      const [resilience, retryCmds] = llm.succeed(s.resilience, msg);
+      return [{ ...s, resilience }, retryCmds];
+    }
+    // 1) Advance the retry layer — resets retry[key], closes the breaker — with
+    //    the kept turn as the call's settled result.
+    const kept = keptTurn(msg.value.output, at);
+    const [resilience, retryCmds] = llm.succeed(s.resilience, {
+      ...msg,
+      value: { ...msg.value, output: kept },
+    });
     const settled: State = { ...s, resilience };
     // 2) Fold the parsed turn into the loop (scatter tools / advance the stage).
     //    `msg.value.output` is `O[P]`, and the `O extends Record<P, AgentTurn>`
     //    bound pins every purpose's output to an `AgentTurn` — so it feeds `turn`
     //    with NO cast. The rule lives in the type (invariant 8: no `as` past the
     //    boundary), not in a doc-comment the compiler cannot enforce.
-    const [withTurn, turnCmds] = turn(settled, msg.value.output, at);
+    const [withTurn, turnCmds] = turn(settled, msg.value.output, at, kept);
     return [withTurn, [...retryCmds, ...turnCmds]];
   }
 

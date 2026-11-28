@@ -95,6 +95,37 @@ uninterrupted run ends on. `replayTrace` rebuilds it from the recorded Msgs,
 and a changed `step` shows up as a divergence whose path starts at
 `state.domain`.
 
+## Keep a fact once when the slice owns it
+
+When a tool result or a turn's `provider` carries a fact the slice takes over,
+such as the latest screen read, the transcript would keep a second copy of it
+on every settle. Name a `retain` row and the agent keeps the projection
+instead. `step` always folds the event as it settled; the row runs after it:
+
+```ts
+const domain: AgentDomain<Screen, Read> = {
+  init: () => ({ screen: null }),
+  step: (slice, event) =>
+    event._tag === "tool" && event.outcome.kind === "ok"
+      ? { screen: event.outcome.result.screen }
+      : slice,
+  retain: {
+    toolResult: ({ outcome }) => ({ ...outcome.result, screen: undefined }),
+  },
+};
+```
+
+`toolResult` shapes what `conversation.toolRecords` and the batch's fan-out
+results keep for a success; a failure is kept as it settled. `turnProvider`
+shapes the `provider` a settled turn keeps in `conversation.turns`, in the
+run's `output` and in the brain call's settled result. Every later prompt and
+resilient input is rendered from the kept transcript, so keep only what the
+model must read again. A settle that folds nothing, such as a late result for
+a call that already settled, projects nothing. The `TurnSettled` and
+`ToolSettled` events carry the turn and result whole, as they settled, so a
+`transcript` collected live holds the whole ones, and one seeded from a resumed
+model holds the projections.
+
 ## Saves made before you added `domain`
 
 A Model saved before the agent had a `domain` has no slice. The next

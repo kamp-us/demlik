@@ -8,7 +8,10 @@ import { fromTimeout } from "./from-timeout";
 // reconcile-out before the delay elapses cancels the pending dispatch — the
 // "cancel on state exit" pattern the factory's docblock pins.
 
-type ExpireSub = Sub<"expire", { readonly delayMs: number }>;
+type ExpireSub = Sub<
+  "expire",
+  { readonly delayMs: number; readonly ref?: boolean }
+>;
 type State = { readonly phase: "waiting" | "expired" | "left" };
 type Msg = { readonly _tag: "expired" } | { readonly _tag: "leave" };
 
@@ -20,7 +23,7 @@ const update: Reducer<State, Msg, never> = {
   leave: () => [{ phase: "left" }, []],
 };
 
-function timeoutMachine(delayMs: number) {
+function timeoutMachine(delayMs: number, ref?: boolean) {
   return defineMachine({
     types: {
       model: {} as State,
@@ -33,7 +36,10 @@ function timeoutMachine(delayMs: number) {
     subs: [
       {
         _tag: "expire",
-        deps: (s) => (s.phase === "waiting" ? { delayMs } : null),
+        deps: (s) =>
+          s.phase === "waiting"
+            ? { delayMs, ...(ref === undefined ? {} : { ref }) }
+            : null,
       },
     ],
   });
@@ -89,5 +95,59 @@ describe("fromTimeout — subscribe → deliver → cleanup against a real runti
     await rt.stop();
     await vi.advanceTimersByTimeAsync(10_000);
     expect(rt.getState().phase).toBe("waiting"); // the Msg never fired
+  });
+});
+
+// `ref: false` is `timeout.unref()` on the Sub's own timer: a Node process with
+// nothing else pending exits without waiting for it. Real timers, because a
+// fake handle cannot say whether Node still counts it.
+describe("fromTimeout — ref: false leaves the pending timer unreferenced", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const LONG_DELAY_MS = 60_000;
+
+  /** Boot a run whose timeout is pending; return the handle `setTimeout` gave it. */
+  async function armed(ref?: boolean) {
+    const timers = vi.spyOn(globalThis, "setTimeout");
+    const rt = await run(timeoutMachine(LONG_DELAY_MS, ref), { subscribe })
+      .ready;
+    const at = timers.mock.calls.findIndex(([, ms]) => ms === LONG_DELAY_MS);
+    return { rt, handle: timers.mock.results[at]?.value as NodeJS.Timeout };
+  }
+
+  it("unrefs the timer when the deps say ref: false", async () => {
+    const { rt, handle } = await armed(false);
+
+    expect(handle.hasRef()).toBe(false);
+
+    await rt.stop();
+  });
+
+  it("keeps the timer referenced by default, and when the deps say ref: true", async () => {
+    for (const ref of [undefined, true]) {
+      const { rt, handle } = await armed(ref);
+
+      expect(handle.hasRef()).toBe(true);
+
+      await rt.stop();
+    }
+  });
+
+  it("still fires the Msg, and cancels on state exit", async () => {
+    const dispatched: Msg[] = [];
+    const rt = await run(timeoutMachine(20, false), { subscribe }).ready;
+    rt.observe((msg) => dispatched.push(msg));
+
+    await vi.waitFor(() => expect(rt.getState().phase).toBe("expired"));
+    expect(dispatched).toEqual([{ _tag: "expired" }]);
+    await rt.stop();
+
+    const left = await run(timeoutMachine(20, false), { subscribe }).ready;
+    await left.dispatch({ _tag: "leave" });
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(left.getState().phase).toBe("left");
+    await left.stop();
   });
 });

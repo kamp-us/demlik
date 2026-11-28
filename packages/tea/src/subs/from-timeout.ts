@@ -19,16 +19,30 @@
 //      state where the timeout should be armed. When the state leaves it,
 //      `deps` goes null, the engine stops the Sub, and the factory's
 //      cleanup fires before the timer does.
+//
+// A pending timer keeps a Node process alive. A Sub whose deps say
+// `ref: false` leaves it unreferenced, so a process that has nothing else to
+// do exits without waiting for the timeout to fire (a CLI whose timeout only
+// guards a step that may never finish). Where a timer carries no ref — the
+// handle is a number in a browser or a Worker — the flag has nothing to act on.
 // ---------------------------------------------------------------------------
 
 import type { Sub } from "../index";
 import type { SubscribeHandler } from "./types";
 
-type TimeoutSubData = { readonly delayMs: number };
+type TimeoutSubData = {
+  readonly delayMs: number;
+  /**
+   * `false` lets a Node process exit while only this timer is pending, like
+   * `timeout.unref()`. Defaults to `true`; ignored where timers carry no ref.
+   */
+  readonly ref?: boolean;
+};
 
 /**
  * Build a Sub runner that dispatches `msgFn(sub)` once, `sub.deps.delayMs`
  * milliseconds after the Sub turns on. Turning the Sub off first cancels it.
+ * `sub.deps.ref: false` leaves the pending timer unreferenced on Node.
  */
 export function fromTimeout<S extends Sub<string, TimeoutSubData>, M>(
   msgFn: (sub: S) => M,
@@ -37,6 +51,7 @@ export function fromTimeout<S extends Sub<string, TimeoutSubData>, M>(
     const handle = setTimeout(() => {
       dispatch(msgFn(sub));
     }, sub.deps.delayMs);
+    if (sub.deps.ref === false && typeof handle === "object") handle.unref?.();
     return () => {
       clearTimeout(handle);
     };

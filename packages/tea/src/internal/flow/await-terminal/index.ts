@@ -163,10 +163,14 @@ export function awaitTerminal<
  * are dispatched. `cancel` must land a State `isTerminal` accepts, or the await
  * runs on until `timeoutMs`.
  *
+ * The seed may also carry `run`'s `onError` sink. A handler still in flight when
+ * the run stops is discarded, and the sink decides what that discard does; with
+ * no `onError` the default sink warns about a discard and rethrows the rest.
+ *
  * @param machine    the machine to boot.
- * @param seed       `{ ctx?, interpret, subscribe?, cancellation?, msgs }` — the
- *                   boot context, the handlers, the optional external stop, and
- *                   the seed messages.
+ * @param seed       `{ ctx?, interpret, subscribe?, cancellation?, onError?, msgs }` —
+ *                   the boot context, the handlers, the optional external stop,
+ *                   the optional error sink, and the seed messages.
  * @param isTerminal caller-supplied terminal predicate over the machine's state.
  * @param opts       optional bounded `timeoutMs` deadline (see {@link AwaitTerminalOptions}).
  */
@@ -180,7 +184,12 @@ export async function runToTerminal<
   machine: Machine<S, M, C, U, Ctx>,
   seed: CtxArg<Ctx> &
     NoInfer<RunHandlers<M, C, U, Ctx>> &
-    NoInfer<Pick<PromiseRunOptions<S, M, C, U, Ctx, never>, "cancellation">> & {
+    NoInfer<
+      Pick<
+        PromiseRunOptions<S, M, C, U, Ctx, never>,
+        "cancellation" | "onError"
+      >
+    > & {
       readonly msgs: readonly M[];
     },
   isTerminal: (state: S) => boolean,

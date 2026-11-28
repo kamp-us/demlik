@@ -28,6 +28,11 @@
  * {@link transcript} the Model the `Store` handed back and it starts from that
  * Model's live conversation, so the resumed collector reads as the whole run
  * rather than its last leg.
+ *
+ * Under an `AgentDomain.retain` row the two halves differ: a seed holds the
+ * turns and results the Model kept, which are the projections, while the live
+ * `TurnSettled` and `ToolSettled` events carry the turn and result whole, as
+ * they settled.
  */
 
 import type { AgentEvent } from "./machine";
