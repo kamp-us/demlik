@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { defineMachine, type NoCtx } from "../../../index";
+import {
+  DrainTimeoutNotice,
+  defineMachine,
+  type NoCtx,
+  RuntimeDiscardedError,
+  type RuntimeErrorContext,
+} from "../../../index";
 import { run } from "../../../promise";
 import { awaitTerminal, runToTerminal, TerminalTimeoutError } from "./index";
 
@@ -203,6 +209,50 @@ describe("runToTerminal", () => {
       // The teardown it started finishes on its own, at stop()'s limit.
       await vi.advanceTimersByTimeAsync(5_000);
       expect(vi.getTimerCount()).toBe(0);
+      warn.mockRestore();
+    });
+
+    it("hands a seed's onError the discard its teardown reports, where the default sink would warn", async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const heard: { error: unknown; context: RuntimeErrorContext }[] = [];
+      type StuckMsg = { readonly _tag: "start" };
+      type StuckCmd = { readonly _tag: "hang" };
+      const stuck = defineMachine({
+        types: {
+          model: {} as JobState,
+          msg: {} as StuckMsg,
+          cmd: {} as StuckCmd,
+          ctx: {} as NoCtx,
+        },
+        init: () => [{ phase: "idle" }, []],
+        update: { start: () => [{ phase: "working" }, [{ _tag: "hang" }]] },
+      });
+      const outcome = runToTerminal(
+        stuck,
+        {
+          interpret: { hang: () => new Promise<void>(() => {}) },
+          onError: (error, context) => void heard.push({ error, context }),
+          msgs: [{ _tag: "start" }],
+        },
+        isDone,
+        { timeoutMs: 100 },
+      ).catch((error: unknown) => error);
+
+      await vi.advanceTimersByTimeAsync(100);
+      expect(await outcome).toBeInstanceOf(TerminalTimeoutError);
+
+      // The run stopped with the handler in flight: the sink hears the discard,
+      // and so does it hear stop() giving up on that handler at its limit.
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(heard.map(({ error }) => error)).toEqual([
+        expect.any(RuntimeDiscardedError),
+        expect.any(DrainTimeoutNotice),
+      ]);
+      expect(heard.map(({ context }) => context)).toEqual([
+        { phase: "discard" },
+        { phase: "discard" },
+      ]);
+      expect(warn).not.toHaveBeenCalled();
       warn.mockRestore();
     });
   });

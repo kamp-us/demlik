@@ -360,7 +360,8 @@ logged store in steps 5–6.
    since its missing evidence is never invented. A recording stays a recording
    without the option, and gets no `init` frame. Restore folds the step frames
    and skips the init frames, and `snapshotEvery` counts Msgs only. Evidence is
-   stored as a delta against the frame before it, so a restart reads the last
+   stored as a delta against the frame before it, when that delta is shorter
+   than the evidence it rebuilds and whole otherwise, so a restart reads the last
    frames to continue the chain. Evidence is not State: if those frames cannot be
    rebuilt, restore still succeeds, because the Msgs and the snapshot rebuild the
    State, and the next frame is written whole as a new basis. The store tells

@@ -7,8 +7,10 @@
  *
  * The evidence is stored whole (the State's deflated JSON, the Cmds' JSON as a
  * delta against it) or as a delta against the previous frame's evidence bytes,
- * `{"state":…,"cmds":…}`. Every {@link FULL_FRAME_EVERY}th frame is whole, so a
- * chain of deltas is bounded. Deltas are Fossil's; a read verifies each checksum.
+ * `{"state":…,"cmds":…}`. A delta is kept only when it is shorter than those
+ * bytes, so a delta longer than the evidence it rebuilds is never stored. Every
+ * {@link FULL_FRAME_EVERY}th frame is whole, so a chain of deltas is bounded.
+ * Deltas are Fossil's; a read verifies each checksum.
  */
 
 import { applyDelta, createDelta } from "fossil-delta";
@@ -241,9 +243,52 @@ function evidenceBytes(stateJson: string, cmdsJson: string | null): Uint8Array {
 }
 
 /**
+ * A frame's whole evidence: its State deflated, and its Cmds as a delta against
+ * the State's JSON.
+ */
+async function wholeEvidence(
+  stateJson: string,
+  cmdsJson: string | null,
+): Promise<string> {
+  const stateBytes = utf8.encode(stateJson);
+  const state = toBase64(
+    await through(stateBytes, new CompressionStream("deflate-raw")),
+  );
+  return cmdsJson === null
+    ? `{"full":"${state}"}`
+    : `{"full":"${state}","cmds":"${toBase64(createDelta(stateBytes, utf8.encode(cmdsJson)))}"}`;
+}
+
+/**
+ * `target` as a delta against `basis`, and the length of the chain it makes, or
+ * `null` when it cannot be stored as one: `basis` is not the frame just before
+ * it, the chain is long enough to need a whole frame, or the delta is not
+ * shorter than `target`.
+ */
+function shorterDelta(
+  seq: number,
+  basis: Basis | null,
+  target: Uint8Array,
+): { readonly delta: string; readonly chain: number } | null {
+  if (
+    basis === null ||
+    basis.seq !== seq - 1 ||
+    basis.chain >= FULL_FRAME_EVERY - 1
+  ) {
+    return null;
+  }
+  const delta = toBase64(createDelta(basis.bytes, target));
+  return delta.length < target.length
+    ? { delta, chain: basis.chain + 1 }
+    : null;
+}
+
+/**
  * Write one frame at `seq`. A frame is a delta against `basis` when `basis` is
- * the frame just before it, the chain is not too long and the delta is smaller;
- * otherwise it is whole. Returns the cell's text and the basis for the next frame.
+ * the frame just before it, the chain is not too long and the delta is shorter
+ * than the evidence it rebuilds; otherwise it is whole, so a delta longer than
+ * the evidence is never stored. The whole form is built only for a frame that
+ * is whole. Returns the cell's text and the basis for the next frame.
  */
 export async function encodeFrame(
   seq: number,
@@ -255,27 +300,12 @@ export async function encodeFrame(
   const cmdsJson =
     evidence.cmds === null ? null : JSON.stringify(evidence.cmds);
   const target = evidenceBytes(stateJson, cmdsJson);
-  const stateBytes = utf8.encode(stateJson);
-  const state = toBase64(
-    await through(stateBytes, new CompressionStream("deflate-raw")),
-  );
-  const full =
-    cmdsJson === null
-      ? `{"full":"${state}"}`
-      : `{"full":"${state}","cmds":"${toBase64(createDelta(stateBytes, utf8.encode(cmdsJson)))}"}`;
-  let stored = full;
-  let chain = 0;
-  if (
-    basis !== null &&
-    basis.seq === seq - 1 &&
-    basis.chain < FULL_FRAME_EVERY - 1
-  ) {
-    const delta = toBase64(createDelta(basis.bytes, target));
-    if (delta.length + 2 < full.length) {
-      stored = `{"delta":"${delta}"}`;
-      chain = basis.chain + 1;
-    }
-  }
+  const kept = shorterDelta(seq, basis, target);
+  const stored =
+    kept === null
+      ? await wholeEvidence(stateJson, cmdsJson)
+      : `{"delta":"${kept.delta}"}`;
+  const chain = kept === null ? 0 : kept.chain;
   const json =
     head.frame === "init"
       ? `{"tea":"${RECORDING_FORMAT}","frame":"init","restored":${head.restored},${(head.skipped ?? 0) > 0 ? `"skipped":${head.skipped},` : ""}"provenance":${JSON.stringify(head.provenance) ?? "null"},"evidence":${stored}}`

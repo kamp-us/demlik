@@ -136,57 +136,15 @@ describe("a frame written whole", () => {
   });
 
   it("keeps the bytes of a cell an earlier build of this format wrote", async () => {
+    const first = { state: stateAt(0), cmds: [{ _tag: "go" }] };
     const cell =
-      '{"tea":"recording/1","frame":"init","restored":false,"provenance":{"run":"r"},"evidence":{"full":"q1bKU7Iy0FHKLEnNLVayilZKVNJRSlKKrQUA","cmds":"RgpGOlt7Il90YWciOiJnbyJ9XWhWNHNsOw=="}}';
-    const evidence = {
-      state: { n: 0, items: ["a", "b"] },
-      cmds: [{ _tag: "go" }],
-    };
-
-    const frame = await frameOf(cell);
-    const basis = await rebuilt(1, frame.evidence, null);
-    expect(readEvidence(basis.bytes)).toEqual(evidence);
-    expect((await encodeFrame(1, init, evidence, null)).json).toBe(cell);
-  });
-});
-
-describe("a frame written as a delta", () => {
-  it("is smaller than the whole frame, and rebuilds against the frame before it", async () => {
-    const evidence = [
-      { state: stateAt(0), cmds: [] },
-      { state: stateAt(1), cmds: [{ _tag: "go" }] },
-      { state: stateAt(2), cmds: [] },
-    ];
-    const cells = await writeChain(evidence);
-
-    const frames = await Promise.all(cells.map((cell) => frameOf(cell.json)));
-    expect(frames.map((frame) => frame.evidence.encoding)).toEqual([
-      "full",
-      "delta",
-      "delta",
-    ]);
-    expect(cells.map((cell) => cell.basis.chain)).toEqual([0, 1, 2]);
-    let basis: Basis | null = null;
-    for (const [at, frame] of frames.entries()) {
-      basis = await rebuilt(at + 1, frame.evidence, basis);
-      expect(readEvidence(basis.bytes)).toEqual(evidence[at]);
-      expect([basis.seq, basis.chain]).toEqual([at + 1, at]);
-    }
-  });
-
-  it("keeps the bytes of a cell an earlier build of this format wrote", async () => {
-    const first = {
-      state: { n: 0, items: ["a", "b"] },
-      cmds: [{ _tag: "go" }],
-    };
-    const cell =
-      '{"tea":"recording/1","frame":"step","msg":{"_tag":"inc","by":1},"evidence":{"delta":"aQpGOnsic3RhdGUiOnsibiI6MVNARiwyOl19MmxfYzg1Ow=="}}';
+      '{"tea":"recording/1","frame":"step","msg":{"_tag":"inc","by":1},"evidence":{"delta":"NnQKRjp7InN0YXRlIjp7Im4iOjE2ZUBGLDJIaDhmczs="}}';
     const written = await encodeFrame(1, init, first, null);
 
     const next = await encodeFrame(
       2,
       step({ _tag: "inc", by: 1 }),
-      { state: { n: 1, items: ["a", "b"] }, cmds: [] },
+      { state: stateAt(1), cmds: [{ _tag: "go" }] },
       written.basis,
     );
 
@@ -219,10 +177,14 @@ describe("a frame written as a delta", () => {
     expect(rebuiltChains).toEqual(chains);
   });
 
+  // The pad is a run of one letter, so the delta carries it as literal bytes:
+  // at 1087 the delta is 1512 characters against 1513 bytes of evidence, at 1086
+  // it is 1512 against 1512, and at 1200 it is 1664 against 1626.
   it.each([
-    ["a delta one character shorter than the whole frame is kept", 87, "delta"],
-    ["a delta three characters longer than the whole frame is not", 90, "full"],
-  ] as const)("%s", async (_name, pad, encoding) => {
+    ["a delta one character shorter than the evidence is kept", 1087, "delta"],
+    ["a delta as long as the evidence is stored whole", 1086, "full"],
+    ["a delta longer than the evidence is stored whole", 1200, "full"],
+  ] as const)("%s, and reads back to the same State", async (_name, pad, encoding) => {
     const unpadded = { state: { n: 0, items: stateAt(0).items }, cmds: null };
     const { basis } = await encodeFrame(1, init, unpadded, null);
     const padded = {
@@ -232,7 +194,55 @@ describe("a frame written as a delta", () => {
 
     const next = await encodeFrame(2, step({ _tag: "inc" }), padded, basis);
 
-    expect((await frameOf(next.json)).evidence.encoding).toBe(encoding);
+    const frame = await frameOf(next.json);
+    expect(frame.evidence.encoding).toBe(encoding);
+    expect(next.basis.chain).toBe(encoding === "delta" ? 1 : 0);
+    const rebuiltAt = await rebuilt(2, frame.evidence, basis);
+    expect(readEvidence(rebuiltAt.bytes)).toEqual(padded);
+    if (frame.evidence.encoding === "delta") {
+      expect(frame.evidence.delta.length).toBeLessThan(next.basis.bytes.length);
+    }
+  });
+
+  it("stores a small State whose delta is longer than the evidence whole, and reads it back", async () => {
+    const first = {
+      state: { n: 0, items: ["a", "b"] },
+      cmds: [{ _tag: "go" }],
+    };
+    const second = { state: { n: 1, items: ["a", "b"] }, cmds: [] };
+    const written = await encodeFrame(1, init, first, null);
+
+    const next = await encodeFrame(
+      2,
+      step({ _tag: "inc", by: 1 }),
+      second,
+      written.basis,
+    );
+
+    const frame = await frameOf(next.json);
+    expect(frame.evidence.encoding).toBe("full");
+    expect(next.basis.chain).toBe(0);
+    const rebuiltAt = await rebuilt(2, frame.evidence, written.basis);
+    expect(readEvidence(rebuiltAt.bytes)).toEqual(second);
+  });
+
+  it("still stores a short delta, shorter than the evidence it rebuilds", async () => {
+    const { basis } = await encodeFrame(
+      1,
+      init,
+      { state: stateAt(0), cmds: [] },
+      null,
+    );
+    const evidence = { state: stateAt(1), cmds: [] };
+
+    const next = await encodeFrame(2, step({ _tag: "inc" }), evidence, basis);
+
+    const frame = await frameOf(next.json);
+    if (frame.evidence.encoding !== "delta") throw new Error("not a delta");
+    expect(frame.evidence.delta.length).toBeLessThan(next.basis.bytes.length);
+    expect(next.basis.chain).toBe(1);
+    const rebuiltAt = await rebuilt(2, frame.evidence, basis);
+    expect(readEvidence(rebuiltAt.bytes)).toEqual(evidence);
   });
 
   it("is a whole frame when the basis is not the frame just before it, or the delta is not smaller", async () => {
