@@ -112,8 +112,9 @@ narrower:
   anchor, `skipped + 1`, with a snapshot of the anchor's State there, so its
   steps keep their live numbers and a restore folds only the steps after the
   anchor. The store refuses an offset into a log that already has frames.
-- **Size.** With `maxRowBytes`, a frame too large for its row, or one whose put
-  storage rejects with `SQLITE_TOOBIG`, is not written. A small marker naming
+- **Size.** A frame over 1,000,000 bytes is written in parts. With `maxRowBytes`,
+  a frame over the budget, or one whose put storage rejects with `SQLITE_TOOBIG`,
+  is not written. A small marker naming
   its seq and measured bytes stands in its place, and every frame after it is
   still kept. Any other storage failure still fails the save.
 - **Read, not resumed.** A marker keeps neither its frame's evidence nor its

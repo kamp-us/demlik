@@ -366,8 +366,10 @@ logged store in steps 5–6.
    State, and the next frame is written whole as a new basis. The store tells
    `onRecordingBreak` (default: a `console.warn`) which frames are broken, as
    `{ fromSeq, toSeq, reason }`; `readFrames` still refuses them.
-6. To keep one large frame from failing the write, give the recording a row
-   budget: `recording: { provenance, maxRowBytes }`. A frame whose key and cell
+6. To cap how much one frame keeps, give the recording a row budget:
+   `recording: { provenance, maxRowBytes }`. A frame over 1,000,000 bytes is
+   already written in parts, so the budget trades a recording frame for space,
+   not for a write that would fail. A frame whose key and cell
    measure more UTF-8 bytes than that, or whose put storage rejects with
    `SQLITE_TOOBIG`, is replaced by a small marker at the same seq. The next
    frame is written whole and the run goes on; a rejection of any other cell,

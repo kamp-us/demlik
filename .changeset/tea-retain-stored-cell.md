@@ -2,7 +2,7 @@
 "@demlik/tea": minor
 ---
 
-**Breaking (`@demlik/tea/do`):** `StoredEventRefusal` gains `"part"`, the refusal a reader gives a cell stored in parts whose parts do not reassemble. A `switch` that handles every member and checks it is exhaustive no longer compiles. Add a `"part"` case: the cell's text is not all there, and a restore over it throws.
+**Breaking (`@demlik/tea/do`):** `StoredEventRefusal` gains `"part"`, and a store or reader whose `keys.eventPrefix` and `keys.parts` prefix each other (for example `eventPrefix: "@@es/"`) now throws at construction, the refusal a reader gives a cell stored in parts whose parts do not reassemble. A `switch` that handles every member and checks it is exhaustive no longer compiles. Add a `"part"` case: the cell's text is not all there, and a restore over it throws.
 
 **Additive (`@demlik/tea/agent`):** `AgentDomain` takes an optional `retain: { toolResult?, turnProvider? }` (`AgentRetention`). `step` still folds each settled event as it settled; the transcript then keeps the projection. `toolResult` shapes what `conversation.toolRecords` and the batch's fan-out results keep for a success (a failure is kept as it settled), and `turnProvider` shapes the `provider` a settled turn keeps in `conversation.turns`, in the run's `output` and in the brain call's settled result. A settle that folds nothing, such as a late model success after a cancel or a result for an unknown or already-settled call, projects nothing. Without `retain` the agent is unchanged.
 
