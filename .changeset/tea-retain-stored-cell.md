@@ -1,0 +1,9 @@
+---
+"@demlik/tea": minor
+---
+
+**Breaking (`@demlik/tea/do`):** `StoredEventRefusal` gains `"part"`, the refusal a reader gives a cell stored in parts whose parts do not reassemble. A `switch` that handles every member and checks it is exhaustive no longer compiles. Add a `"part"` case: the cell's text is not all there, and a restore over it throws.
+
+**Additive (`@demlik/tea/agent`):** `AgentDomain` takes an optional `retain: { toolResult?, turnProvider? }` (`AgentRetention`). `step` still folds each settled event as it settled; the transcript then keeps the projection. `toolResult` shapes what `conversation.toolRecords` and the batch's fan-out results keep for a success (a failure is kept as it settled), and `turnProvider` shapes the `provider` a settled turn keeps in `conversation.turns`, in the run's `output` and in the brain call's settled result. A settle that folds nothing, such as a late model success after a cancel or a result for an unknown or already-settled call, projects nothing. Without `retain` the agent is unchanged.
+
+**Behaviour (`@demlik/tea/do`):** every value `doEventSourcedStore` writes is under 1,000,000 bytes of UTF-8. A snapshot or event cell at or over that bound is written as a versioned manifest at its own key and parts under `keys.parts` (default `@@es/part/`), in the same transaction as the meta cell, which also deletes the parts an earlier, longer value of the key left behind. Every read (restore, `readStoredEvents`, `readEvents`, `readFrames`, `readTrace`) reassembles the cell before it parses it. Cells under the bound are written and read exactly as before, so an existing log reads unchanged.

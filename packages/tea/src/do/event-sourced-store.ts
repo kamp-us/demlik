@@ -93,6 +93,14 @@ import {
   rebuildEvidence,
 } from "./recording-frames";
 import { saveFence } from "./save-fence";
+import {
+  DEFAULT_PART_PREFIX,
+  MissingParts,
+  putStoredRows,
+  readStoredCell,
+  readStoredCells,
+  storedRows,
+} from "./stored-cell";
 
 /** Default cell prefixes. Chosen to sort log keys lexicographically by seq. */
 const DEFAULT_SNAPSHOT_KEY = "@@es/snapshot";
@@ -193,19 +201,26 @@ export interface EventLogReaderOptions<M> {
     readonly snapshot?: string;
     readonly meta?: string;
     readonly eventPrefix?: string;
+    /** Prefix of the parts a cell over the value bound is stored in; the cell's key follows it. */
+    readonly parts?: string;
   };
 }
 
-/** The log's cell keys, each override falling back to its default. */
-function logKeys(keys: EventLogReaderOptions<never>["keys"] = {}): {
+/** The log's cell keys as resolved, one per cell family. */
+interface LogKeys {
   readonly snapshot: string;
   readonly meta: string;
   readonly eventPrefix: string;
-} {
+  readonly parts: string;
+}
+
+/** The log's cell keys, each override falling back to its default. */
+function logKeys(keys: EventLogReaderOptions<never>["keys"] = {}): LogKeys {
   return {
     snapshot: keys.snapshot ?? DEFAULT_SNAPSHOT_KEY,
     meta: keys.meta ?? DEFAULT_META_KEY,
     eventPrefix: keys.eventPrefix ?? DEFAULT_EVENT_PREFIX,
+    parts: keys.parts ?? DEFAULT_PART_PREFIX,
   };
 }
 
@@ -455,8 +470,9 @@ export interface StoredEventRange extends EventLogRange {
 /**
  * Why a stored event cell did not decode: its value is not text (`not-text`),
  * its key carries no integer sequence (`key`), its text is not JSON (`json`),
- * `parseEvent` returned `null` (`event`), or it is a recording cell that does
- * not decode as a frame, lacks the frame its delta needs, or fails its checksum
+ * `parseEvent` returned `null` (`event`), it is a cell stored in parts whose
+ * parts do not reassemble (`part`), or it is a recording cell that does not
+ * decode as a frame, lacks the frame its delta needs, or fails its checksum
  * ({@link FrameRefusal}).
  */
 export type StoredEventRefusal =
@@ -464,11 +480,13 @@ export type StoredEventRefusal =
   | "key"
   | "json"
   | "event"
+  | "part"
   | FrameRefusal;
 
 /**
  * One stored event cell as read, decoded or refused. `serializedBytes` is the
- * UTF-8 size of the stored text (0 when the value is not text); for a step
+ * UTF-8 size of the stored text (0 when the value is not text), whether it is
+ * stored in one value or, past the value bound, in parts; for a step
  * frame of a recording it is the size of the Msg JSON inside it. A cell refused
  * as `oversized` is the marker written in place of a frame too large for its
  * row; its `bytes` is the size measured for the frame that was not written.
@@ -663,6 +681,15 @@ function decodeStoredEvent<M>(
 ): StoredEvent<M> {
   const seq = Number(key.slice(eventPrefix.length));
   const position = Number.isSafeInteger(seq) ? seq : null;
+  if (value instanceof MissingParts) {
+    return {
+      _tag: "refused",
+      key,
+      seq: position,
+      serializedBytes: value.serializedBytes,
+      reason: "part",
+    };
+  }
   if (typeof value !== "string") {
     return {
       _tag: "refused",
@@ -708,24 +735,25 @@ function jsonBytes(value: unknown): number {
 
 async function firstCell(
   storage: DurableObjectStorage,
-  eventPrefix: string,
+  keys: LogKeys,
   noCache: boolean,
   atOne?: unknown,
 ): Promise<unknown> {
+  const { eventPrefix, parts } = keys;
+  const oneKey = eventKey(eventPrefix, 1);
   const one =
     atOne !== undefined
       ? atOne
-      : await storage.get<unknown>(
-          eventKey(eventPrefix, 1),
-          noCache ? { noCache } : {},
-        );
-  if (one !== undefined && one !== null) return one;
+      : await storage.get<unknown>(oneKey, noCache ? { noCache } : {});
+  if (one !== undefined && one !== null)
+    return readStoredCell(storage, parts, oneKey, one, noCache);
   const rows = await storage.list<unknown>({
     prefix: eventPrefix,
     limit: 1,
     ...(noCache ? { noCache } : {}),
   });
-  for (const [, value] of rows) return value;
+  for (const [key, value] of rows)
+    return readStoredCell(storage, parts, key, value, noCache);
   return undefined;
 }
 
@@ -953,11 +981,8 @@ function openLogReader<M extends { _tag: string }>(
   foldCells(afterSeq: number): AsyncGenerator<FoldCell<M>>;
 } {
   const parseEvent = opts.parseEvent ?? defaultParseEvent<M>;
-  const {
-    snapshot: snapshotKey,
-    meta: metaKey,
-    eventPrefix,
-  } = logKeys(opts.keys);
+  const keys = logKeys(opts.keys);
+  const { snapshot: snapshotKey, meta: metaKey, eventPrefix, parts } = keys;
 
   async function readCommittedSeq(): Promise<number> {
     const raw = await storage.get<string>(metaKey, { noCache: true });
@@ -974,13 +999,14 @@ function openLogReader<M extends { _tag: string }>(
     const snapshot = cells.get(snapshotKey);
     const first =
       meta === undefined || meta === null
-        ? cells.get(firstKey)
-        : await firstCell(
+        ? await readStoredCell(
             storage,
-            eventPrefix,
+            parts,
+            firstKey,
+            cells.get(firstKey),
             true,
-            cells.get(firstKey) ?? null,
-          );
+          )
+        : await firstCell(storage, keys, true, cells.get(firstKey) ?? null);
     const absent = (
       cell: string | undefined | null,
     ): cell is undefined | null => cell === undefined || cell === null;
@@ -1024,7 +1050,8 @@ function openLogReader<M extends { _tag: string }>(
         limit: Math.min(EVENT_PAGE_SIZE, limit - yielded),
         noCache: true,
       });
-      for (const [key, value] of rows) {
+      const cells = await readStoredCells(storage, parts, rows, true);
+      for (const [key, value] of cells) {
         if (reverse) endBefore = key;
         else startAfter = key;
         yielded += 1;
@@ -1044,13 +1071,18 @@ function openLogReader<M extends { _tag: string }>(
       basis: null,
       broken: { fromSeq, toSeq, reason },
     });
-    const rows = await storage.list<unknown>({
-      prefix: eventPrefix,
-      end: eventKey(eventPrefix, seq),
-      reverse: true,
-      limit: FULL_FRAME_EVERY,
-      noCache: true,
-    });
+    const rows = await readStoredCells(
+      storage,
+      parts,
+      await storage.list<unknown>({
+        prefix: eventPrefix,
+        end: eventKey(eventPrefix, seq),
+        reverse: true,
+        limit: FULL_FRAME_EVERY,
+        noCache: true,
+      }),
+      true,
+    );
     // Walk back to the last whole frame, then rebuild forward from it.
     const chain: (readonly [number, EncodedFrame])[] = [];
     let expected = toSeq;
@@ -1299,6 +1331,15 @@ export async function readTrace<S, M extends { _tag: string }>(
  * not initialize that State again. With no snapshot, `ctx` supplies the fresh
  * init used to establish the event log's starting State. Live resume commands
  * belong to the runtime's subsequent init over the recovered State.
+ *
+ * Every value the store writes is under 1,000,000 bytes of UTF-8. A snapshot or
+ * an event cell at or over that bound is written as a versioned manifest at its
+ * own key and parts under the `parts` key prefix (default `@@es/part/`), in the
+ * same transaction as the meta cell, which also drops the parts an earlier,
+ * longer value of that key left behind. Reads reassemble the cell before they
+ * parse it, so a restore, `readFrames` and `readTrace` see the one cell it was,
+ * and its `serializedBytes` is the size of its whole text. A cell whose parts do
+ * not reassemble reads as refused (`part`) and refuses a restore.
  */
 // Cmd/Sub are INFERRED type params (`C`/`U`) that DEFAULT to the substrate's
 // base unions, not pinned to them. The fold itself only ever touches `init` +
@@ -1348,11 +1389,8 @@ export function doEventSourcedStore<
     );
   }
   const parse = opts.parse ?? defaultParse;
-  const {
-    snapshot: snapshotKey,
-    meta: metaKey,
-    eventPrefix,
-  } = logKeys(opts.keys);
+  const keys = logKeys(opts.keys);
+  const { snapshot: snapshotKey, meta: metaKey, eventPrefix, parts } = keys;
   const restoreAttemptKey =
     opts.keys?.restoreAttempt ?? `${metaKey}/restore-attempt`;
 
@@ -1420,11 +1458,21 @@ export function doEventSourcedStore<
    * An unrecognized snapshot refuses instead of replaying its preceding events.
    */
   async function readSnapshot(): Promise<{ state: S | null; seq: number }> {
-    const raw = await storage.get<string>(snapshotKey);
-    if (raw === undefined || raw === null) return { state: null, seq: 0 };
+    const stored = await storage.get<unknown>(snapshotKey);
+    if (stored === undefined || stored === null) return { state: null, seq: 0 };
+    const raw = await readStoredCell(
+      storage,
+      parts,
+      snapshotKey,
+      stored,
+      false,
+    );
+    if (raw instanceof MissingParts) {
+      throw new Error("@demlik/tea/do: persisted snapshot's parts are missing");
+    }
     // Structural JSON malformation throws here, as in doStore — infra error,
     // not a schema mismatch.
-    const cell = JSON.parse(raw) as SnapshotCell<unknown>;
+    const cell = JSON.parse(raw as string) as SnapshotCell<unknown>;
     const parsed = parse(cell.state);
     if (parsed === null)
       throw new Error("@demlik/tea/do: persisted snapshot was refused");
@@ -1468,6 +1516,9 @@ export function doEventSourcedStore<
         if (cell.reason === "oversized") {
           throw new RecordingUnavailableError(cell.seq ?? 0);
         }
+        if (cell.reason === "part") {
+          throw new Error("@demlik/tea/do: a stored event's parts are missing");
+        }
         continue;
       }
       state = foldMsgs(machine, state, [cell.event]);
@@ -1478,7 +1529,7 @@ export function doEventSourcedStore<
   /** The format this log is written in: its first cell's, or `recording`'s when it has none. */
   async function ensureFormat(): Promise<LogFormat> {
     if (format !== null) return format;
-    const first = await firstCell(storage, eventPrefix, false);
+    const first = await firstCell(storage, keys, false);
     format =
       first === undefined || first === null
         ? opts.recording === undefined
@@ -1760,11 +1811,12 @@ export function doEventSourcedStore<
       const cell: SnapshotCell<S> = write.snapshot;
       cells.push([snapshotKey, JSON.stringify(cell)]);
     }
+    const writes = cells.map(([key, value]) => storedRows(parts, key, value));
     await storage.transaction(async (txn) => {
       admit();
-      for (const [key, value] of cells) {
-        if (rejected !== undefined) rejected.key = key;
-        await txn.put(key, value);
+      for (const write of writes) {
+        if (rejected !== undefined) rejected.key = write.key;
+        await putStoredRows(txn, parts, write);
       }
       if (rejected !== undefined) rejected.key = null;
     });

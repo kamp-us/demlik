@@ -21,7 +21,7 @@ These are the ones to read first:
 | [`DefinedAgentState`](#DefinedAgentState) | Type the Model a defined agent persists — what a `Store` reads and writes. |
 | [`createAgent`](#createAgent) | Drop below the lid, once you need to walk a stage pipeline `defineAgent` does not express. |
 
-## Exports (165)
+## Exports (166)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -52,6 +52,7 @@ These are the ones to read first:
 | [`AgentMachineMsg`](#AgentMachineMsg) | Type | experimental | The agent machine's Msg union — one variant per reducer entry point. |
 | [`AgentMessage`](#AgentMessage) | Type | experimental | One message a `defineAgent` `model` receives. |
 | [`AgentPrompt`](#AgentPrompt) | Interface | experimental | The brain-call payload `defineAgent` builds from the durable state — everything `messagesOf` renders, so the prompt is a pure function of the Model and the resilient slice carries exactly what was sent. |
+| [`AgentRetention`](#AgentRetention) | Interface | experimental | The pure projections from a settled event to what the agent keeps of it, for a domain slice that already owns part of that event. |
 | [`AgentSnapshotConfig`](#AgentSnapshotConfig) | Type | experimental | The snapshotting discriminant. |
 | [`AgentState`](#AgentState) | Interface | experimental | The agent slice — every composed wrapper's slice plus the loop's conversation and the agent-specific failure annotation. |
 | [`AgentStateOf`](#AgentStateOf) | Type | experimental | The agent's Model with its domain slice: AgentState when no domain is configured (`D = never`), and AgentState plus `domain: D` otherwise. |
@@ -484,6 +485,11 @@ interface AgentConfigCore<
 ```ts
 interface AgentDomain<D, R> {
   readonly init: () => D;
+  /**
+   * What a settled event keeps once `step` has folded it. Omit → the
+   * transcript keeps every event as it settled. See AgentRetention.
+   */
+  readonly retain?: AgentRetention<R>;
   readonly step: (slice: D, event: AgentDomainEvent<R>) => D;
 }
 ```
@@ -814,6 +820,32 @@ interface AgentPrompt<R> {
   readonly conversation: Conversation<R>;
   readonly input: string | null;
   readonly instructions: string | null;
+}
+```
+
+<a id="AgentRetention"></a>
+
+### `AgentRetention`
+
+```ts
+interface AgentRetention<R> {
+  readonly toolResult?: (
+    event: {
+      readonly _tag: "tool";
+      readonly at: number;
+      readonly call: ToolCall;
+      readonly outcome: ToolOutcome<R>;
+    } & {
+      readonly outcome: { readonly kind: "ok"; readonly result: R };
+    },
+  ) => R;
+  readonly turnProvider?: (
+    event: {
+      readonly _tag: "turn";
+      readonly at: number;
+      readonly turn: AgentTurn;
+    },
+  ) => unknown;
 }
 ```
 

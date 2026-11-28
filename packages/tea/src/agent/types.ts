@@ -915,6 +915,46 @@ export type AgentDomainEvent<R> =
 export interface AgentDomain<D, R> {
   readonly init: () => D;
   readonly step: (slice: D, event: AgentDomainEvent<R>) => D;
+  /**
+   * What a settled event keeps once `step` has folded it. Omit → the
+   * transcript keeps every event as it settled. See {@link AgentRetention}.
+   */
+  readonly retain?: AgentRetention<R>;
+}
+
+/**
+ * The pure projections from a settled event to what the agent keeps of it,
+ * for a domain slice that already owns part of that event. Each row runs once,
+ * right after {@link AgentDomain.step} folded the ORIGINAL event, so the slice
+ * reads the whole event and the transcript holds only the projection:
+ *
+ *   - `turnProvider` — the `provider` a settled model turn keeps. The kept turn
+ *                      is the one in `conversation.turns`, in the run's
+ *                      `output`, and in the brain call's settled result. Its
+ *                      `content`, `toolCalls` and `usage` are never projected.
+ *   - `toolResult`   — the result a successful tool call keeps. The kept
+ *                      outcome is the one in `conversation.toolRecords` and in
+ *                      the batch's fan-out results. A failure is never
+ *                      projected: its `reason` and payload are the model's and
+ *                      the program's channel.
+ *
+ * Both rows must be PURE, like `step`. A turn or tool settle that folds
+ * nothing (a stale turn, an unknown or already-settled call) projects nothing.
+ * Because a later brain call renders its prompt from the kept transcript, a
+ * projection also shrinks every prompt and resilient input built after it:
+ * keep only what the model must read again.
+ *
+ * @typeParam R - the agent's tool result type.
+ */
+export interface AgentRetention<R> {
+  readonly turnProvider?: (
+    event: Extract<AgentDomainEvent<R>, { readonly _tag: "turn" }>,
+  ) => unknown;
+  readonly toolResult?: (
+    event: Extract<AgentDomainEvent<R>, { readonly _tag: "tool" }> & {
+      readonly outcome: { readonly kind: "ok"; readonly result: R };
+    },
+  ) => R;
 }
 
 /**

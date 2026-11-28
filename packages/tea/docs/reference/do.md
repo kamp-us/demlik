@@ -144,7 +144,7 @@ import { … } from "@demlik/tea/do";
 | [`StepWorking`](#StepWorking) | Interface | stable | The NOT-READY arm — the run is computing OUT-OF-BAND under a defer-resume host (a production incident: a non-blocking pull carrier must answer a pull with an explicit "computing, poll again" instead of holding the request across a multi-second step). |
 | [`StoredEvent`](#StoredEvent) | Type | stable | One stored event cell as read, decoded or refused. |
 | [`StoredEventRange`](#StoredEventRange) | Interface | stable | An EventLogRange with an optional cap on how many stored cells are read. |
-| [`StoredEventRefusal`](#StoredEventRefusal) | Type | stable | Why a stored event cell did not decode: its value is not text (`not-text`), its key carries no integer sequence (`key`), its text is not JSON (`json`), `parseEvent` returned `null` (`event`), or it is a recording cell that does not decode as a frame, lacks the frame its delta needs, or fails its checksum (FrameRefusal). |
+| [`StoredEventRefusal`](#StoredEventRefusal) | Type | stable | Why a stored event cell did not decode: its value is not text (`not-text`), its key carries no integer sequence (`key`), its text is not JSON (`json`), `parseEvent` returned `null` (`event`), it is a cell stored in parts whose parts do not reassemble (`part`), or it is a recording cell that does not decode as a frame, lacks the frame its delta needs, or fails its checksum (FrameRefusal). |
 | [`StoredFrame`](#StoredFrame) | Type | stable | One stored cell read as a frame of the log. |
 | [`survivingEffects`](#survivingEffects) | Function | stable | RE-EMIT ON ACTIVATION. |
 | [`TraceUnavailableReason`](#TraceUnavailableReason) | Type | stable | Why readTrace has no trace to give: the log or range is empty (`empty`), it is written as bare messages (`messages`), its first frame is not an `init` frame (`anchor`), a second `init` frame opens another boot (`boot`), a seq inside the range has no cell (`gap`), the cells stop before the committed head (`tail`), or a frame is refused, with the refusal `readFrames` gives it, `oversized` among them. |
@@ -980,6 +980,8 @@ interface EventLogReaderOptions<M> {
   readonly keys?: {
     readonly eventPrefix?: string;
     readonly meta?: string;
+    /** Prefix of the parts a cell over the value bound is stored in; the cell's key follows it. */
+    readonly parts?: string;
     readonly snapshot?: string;
   };
   /**
@@ -1002,6 +1004,8 @@ interface EventSourcedOptions<S, M> extends EventLogReaderOptions<M> {
   readonly keys?: {
     readonly eventPrefix?: string;
     readonly meta?: string;
+    /** Prefix of the parts a cell over the value bound is stored in; the cell's key follows it. */
+    readonly parts?: string;
     readonly snapshot?: string;
   } & {
     /** Restore-attempt cell. Default: `${meta}/restore-attempt`. */
@@ -2405,7 +2409,7 @@ interface StoredEventRange extends EventLogRange {
 ### `StoredEventRefusal`
 
 ```ts
-type StoredEventRefusal = "not-text" | "key" | "json" | "event" | FrameRefusal
+type StoredEventRefusal = "not-text" | "key" | "json" | "event" | "part" | FrameRefusal
 ```
 
 <a id="StoredFrame"></a>
